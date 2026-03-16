@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Live climate anomaly dashboard powered by an end-to-end MLOps pipeline: Open-Meteo ERA5 → Apache Airflow → Chart.js"
+    />
+    <title>Lithuania Climate Dashboard</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <div>
+          <h1>Lithuania Climate Anomaly Dashboard</h1>
+          <p class="tagline">
+            End-to-end MLOps pipeline: ERA5 reanalysis&nbsp;→&nbsp;Apache
+            Airflow orchestration&nbsp;→&nbsp;live anomaly charts.
+            Early-warning signal for agri, energy, and logistics clients
+            exposed to temperature risk.
+          </p>
+        </div>
+        <div class="header-meta">
+          <span class="badge" id="generated-badge">Loading…</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- KPI strip -->
+      <div class="kpi-row" id="kpi-row"></div>
+
+      <!-- Vilnius March 30-year anomaly chart -->
+      <section class="card" id="march-section">
+        <div class="section-header">
+          <div>
+            <h2>Vilnius — March Temperature Anomaly (30 years)</h2>
+            <p class="section-desc">
+              Daily mean temperature vs. 30-year baseline, March
+              1–<span id="cutoff-day">16</span> each year.
+              Red&nbsp;= warmer than baseline · Blue&nbsp;= cooler ·
+              <strong>Outlined bar</strong>&nbsp;= current year.
+            </p>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="marchChart"></canvas>
+        </div>
+      </section>
+
+      <!-- Lithuania YTD city comparison -->
+      <section class="card" id="ytd-section">
+        <div class="section-header">
+          <div>
+            <h2>Lithuania YTD — City Anomaly Comparison</h2>
+            <p class="section-desc">
+              Year-to-date z-scores vs. 1991–2020 climatology, period
+              <span id="ytd-period"></span>.
+              A z-score of −1.5 means ~15th percentile of historical years.
+            </p>
+          </div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-wrap chart-wrap--half">
+            <canvas id="cityTempChart"></canvas>
+          </div>
+          <div class="chart-wrap chart-wrap--half">
+            <canvas id="cityPrecipChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- ML model metrics -->
+      <section class="card" id="ml-section">
+        <h2>ML Model — Regression Performance</h2>
+        <p class="section-desc">
+          PyTorch feed-forward network trained via Airflow + MLflow on
+          weather-derived features. Metrics from held-out test set.
+        </p>
+        <div class="kpi-row" id="ml-kpi-row"></div>
+      </section>
+
+      <!-- Pipeline architecture -->
+      <section class="card" id="pipeline-section">
+        <h2>Pipeline Architecture</h2>
+        <p class="section-desc">
+          Three Airflow DAGs, each following a
+          fetch&nbsp;→&nbsp;analyze&nbsp;→&nbsp;plot&nbsp;→&nbsp;quality-gate
+          pattern.
+        </p>
+        <div class="pipeline-grid" id="pipeline-grid"></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <p>
+          Data:&nbsp;<a
+            href="https://open-meteo.com"
+            target="_blank"
+            rel="noreferrer"
+            >Open-Meteo ERA5</a
+          >&ensp;·&ensp;Orchestration:&nbsp;Apache Airflow
+          2.10&ensp;·&ensp;Experiment tracking:&nbsp;MLflow&ensp;·&ensp;Frontend:&nbsp;Vite
+          + Chart.js
+        </p>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

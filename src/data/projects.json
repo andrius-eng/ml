@@ -1,0 +1,16 @@
+[
+  {
+    "title": "Example Project One",
+    "description": "A short summary of the project, the problem it solves, and why it matters.",
+    "tags": ["JavaScript", "UI", "API"],
+    "live": "https://example.com",
+    "repo": "https://github.com/your-handle/example-project"
+  },
+  {
+    "title": "Example Project Two",
+    "description": "Describe a second project here (client work, open source, tooling, etc.).",
+    "tags": ["Python", "ML", "Automation"],
+    "live": "",
+    "repo": "https://github.com/your-handle/another-project"
+  }
+]
