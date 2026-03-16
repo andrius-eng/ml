@@ -49,7 +49,7 @@ cooler than average — useful for seasonal risk assessments.
 ### 1 — Python environment
 
 ```bash
-cd /Users/andrius/Development/ml
+cd ml
 uv sync                  # creates .venv and installs all deps
 uv run pytest            # 17 tests — should all pass
 ```
@@ -61,7 +61,7 @@ uv run pytest            # 17 tests — should all pass
 Run in its own terminal. Keep it running while you trigger DAGs.
 
 ```bash
-cd /Users/andrius/Development/ml/airflow
+cd ml/airflow
 
 export AIRFLOW_HOME="$PWD/.airflow"
 export AIRFLOW__CORE__DAGS_FOLDER="$PWD/dags"
@@ -77,7 +77,7 @@ Open **http://localhost:8080** — username `admin`, password printed in the ter
 To trigger a DAG manually (in a second terminal):
 
 ```bash
-cd /Users/andrius/Development/ml/airflow
+cd ml/airflow
 
 env -u VIRTUAL_ENV \
   AIRFLOW_HOME="$PWD/.airflow" \
@@ -85,7 +85,7 @@ env -u VIRTUAL_ENV \
   AIRFLOW__CORE__LOAD_EXAMPLES=False \
   ML_PROJECT_ROOT="$PWD/.." \
   TRAIN_PYTHON_BIN="$PWD/../.venv/bin/python" \
-  /Users/andrius/Development/ml/airflow/.venv/bin/airflow dags trigger lithuania_weather_analysis
+  ./.venv/bin/airflow dags trigger lithuania_weather_analysis
 ```
 
 Available DAG ids:
@@ -100,7 +100,7 @@ Available DAG ids:
 Run in its own terminal. Re-run the export step any time a DAG completes.
 
 ```bash
-cd /Users/andrius/Development/ml
+cd ml
 
 # Pull latest pipeline outputs into the dashboard JSON
 env -u VIRTUAL_ENV uv run python python/export_frontend_data.py
@@ -124,7 +124,7 @@ npm run build    # output in dist/
 Requires Docker Desktop running.
 
 ```bash
-cd /Users/andrius/Development/ml/airflow
+cd ml/airflow
 
 docker compose up airflow-init   # first time only — migrates DB + creates admin
 docker compose up -d             # starts webserver + scheduler + postgres
