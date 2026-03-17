@@ -268,6 +268,65 @@ function renderPipeline() {
   });
 }
 
+// ── live updates via WebSocket ──────────────────────────────────────────────
+
+function connectWebSocket() {
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const token = import.meta.env.VITE_DASHBOARD_WS_TOKEN;
+  const qs = token ? `?token=${encodeURIComponent(token)}` : '';
+  const wsUrl = `${wsProtocol}://${window.location.hostname}:3000${qs}`;
+  console.log(`[Dashboard] Connecting to ${wsUrl}...`);
+
+  const ws = new WebSocket(wsUrl);
+
+  ws.addEventListener('open', () => {
+    console.log('[Dashboard] WebSocket connected');
+    document.body.classList.add('ws-connected');
+  });
+
+  ws.addEventListener('message', async (event) => {
+    const msg = JSON.parse(event.data);
+    console.log(`[Dashboard] Update received:`, msg);
+
+    try {
+      // Re-fetch the latest dashboard data
+      const response = await fetch('/data/dashboard.json');
+      const newData = await response.json();
+
+      // Re-render with new data
+      renderHeader(newData);
+      renderKPIs(newData);
+      renderMarchChart(newData);
+      renderCityCharts(newData);
+      renderMLMetrics(newData);
+
+      // Flash update indicator
+      const badge = document.getElementById('generated-badge');
+      badge.style.transition = 'all 0.3s ease';
+      badge.style.backgroundColor = '#4CAF50';
+      badge.style.color = '#fff';
+      setTimeout(() => {
+        badge.style.backgroundColor = '';
+        badge.style.color = '';
+      }, 2000);
+
+      console.log('[Dashboard] UI refreshed with new data');
+    } catch (err) {
+      console.error('[Dashboard] Failed to refresh UI:', err);
+    }
+  });
+
+  ws.addEventListener('close', () => {
+    console.log('[Dashboard] WebSocket disconnected, reconnecting in 5s...');
+    document.body.classList.remove('ws-connected');
+    setTimeout(connectWebSocket, 5000);
+  });
+
+  ws.addEventListener('error', (err) => {
+    console.error('[Dashboard] WebSocket error:', err);
+  });
+}
+
 // ── boot ─────────────────────────────────────────────────────────────────────
 
 function init() {
@@ -277,6 +336,13 @@ function init() {
   renderCityCharts(data);
   renderMLMetrics(data);
   renderPipeline();
+
+  // Attempt to connect to live update server
+  try {
+    connectWebSocket();
+  } catch (err) {
+    console.warn('[Dashboard] WebSocket unavailable, dashboard will be static:', err.message);
+  }
 }
 
 init();

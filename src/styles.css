@@ -257,3 +257,14 @@ a:hover {
   color: var(--muted);
   font-size: 0.85rem;
 }
+
+/* ── WebSocket connection indicator ────────────────────────── */
+body.ws-connected #generated-badge::after {
+  content: ' · 🔄 live';
+  color: #4CAF50;
+  font-weight: 600;
+}
+
+#generated-badge {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}

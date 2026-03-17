@@ -1,0 +1,14 @@
+{
+  "name": "dashboard-ws-server",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "WebSocket server for live dashboard updates",
+  "main": "dashboard-ws.js",
+  "scripts": {
+    "start": "node dashboard-ws.js"
+  },
+  "keywords": ["dashboard", "websocket", "updates"],
+  "dependencies": {
+    "ws": "^8.14.2"
+  }
+}
