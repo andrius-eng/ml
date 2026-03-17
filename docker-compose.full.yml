@@ -17,17 +17,18 @@
 services:
   ws-server:
     build:
-      context: .
+      context: ..
       dockerfile: docker/ws-server/Dockerfile
     ports:
       - "3000:3000"
     environment:
       PROJECT_ROOT: /project
+      DASHBOARD_WS_HOST: 0.0.0.0
       DASHBOARD_WS_TOKEN: "${DASHBOARD_WS_TOKEN:-}"
       POLL_INTERVAL_MS: "${POLL_INTERVAL_MS:-3600000}"
     volumes:
       # Mount project so export_frontend_data.py can read pipeline outputs
-      - .:/project:ro
+      - ..:/project:ro
       # Shared volume for dashboard.json written by ws-server, served by frontend
       - dashboard-data:/project/src/data
     depends_on:
@@ -38,7 +39,7 @@ services:
 
   frontend:
     build:
-      context: .
+      context: ..
       dockerfile: docker/frontend/Dockerfile
     ports:
       - "5173:80"

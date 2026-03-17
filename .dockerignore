@@ -8,6 +8,7 @@ airflow/.venv
 airflow/.airflow
 airflow/logs
 airflow/plugins
+airflow/gunicorn.ctl
 mlruns
 python/mlruns
 python/__pycache__

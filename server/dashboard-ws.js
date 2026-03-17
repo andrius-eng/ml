@@ -15,7 +15,7 @@ const __dirname = path.dirname(__filename);
 // In local dev it falls back to the parent of the server/ directory.
 const projectRoot = process.env.PROJECT_ROOT || path.resolve(__dirname, '..');
 
-const WS_HOST = '127.0.0.1';
+const WS_HOST = process.env.DASHBOARD_WS_HOST || '127.0.0.1';
 const WS_PORT = 3000;
 const POLL_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const RATE_WINDOW_MS = 10_000;
@@ -93,13 +93,12 @@ async function refreshDashboard() {
   console.log(`[Dashboard WS] Refreshing dashboard data...`);
 
   return new Promise((resolve, reject) => {
-    const pythonEnv = path.join(projectRoot, '.venv', 'bin', 'activate');
+    const pythonBin = path.join(projectRoot, '.venv', 'bin', 'python');
     const scriptPath = path.join(projectRoot, 'python', 'export_frontend_data.py');
 
-    // Shell script that activates venv and runs export
-    const shell = `source "${pythonEnv}" && python "${scriptPath}"`;
+    const shell = `[ -x "${pythonBin}" ] && "${pythonBin}" "${scriptPath}" || python3 "${scriptPath}"`;
 
-    const proc = spawn('/bin/bash', ['-c', shell], {
+    const proc = spawn('/bin/sh', ['-c', shell], {
       cwd: projectRoot,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -113,6 +112,11 @@ async function refreshDashboard() {
 
     proc.stderr.on('data', (data) => {
       stderr += data.toString();
+    });
+
+    proc.on('error', (err) => {
+      console.error(`[Dashboard WS] Export spawn failed: ${err.message}`);
+      reject(new Error(`Export spawn failed: ${err.message}`));
     });
 
     proc.on('close', (code) => {

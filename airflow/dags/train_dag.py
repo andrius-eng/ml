@@ -39,6 +39,8 @@ PREDICTIONS_PATH = OUTPUT_DIR / "predictions.csv"
 TRAINING_PLOT_PATH = OUTPUT_DIR / "training_mse.png"
 DIAGNOSTICS_PLOT_PATH = OUTPUT_DIR / "diagnostics.png"
 PYTHON_BIN = os.environ.get("TRAIN_PYTHON_BIN", "python")
+if PYTHON_BIN != "python" and not Path(PYTHON_BIN).exists():
+    PYTHON_BIN = "python"
 
 
 def project_python_command(*args: str) -> str:

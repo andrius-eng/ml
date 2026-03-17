@@ -24,6 +24,8 @@ DAG_DIR = Path(__file__).resolve().parent
 DEFAULT_PROJECT_ROOT = DAG_DIR.parents[1] if len(DAG_DIR.parents) >= 2 else Path("/opt/airflow/project")
 PROJECT_ROOT = Path(os.environ.get("ML_PROJECT_ROOT", str(DEFAULT_PROJECT_ROOT))).resolve()
 PYTHON_BIN = os.environ.get("TRAIN_PYTHON_BIN", "python")
+if PYTHON_BIN != "python" and not Path(PYTHON_BIN).exists():
+    PYTHON_BIN = "python"
 
 WEATHER_FETCH_SCRIPT = PROJECT_ROOT / "python" / "weather_fetch.py"
 WEATHER_ANALYZE_SCRIPT = PROJECT_ROOT / "python" / "weather_analyze.py"
