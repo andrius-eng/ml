@@ -121,16 +121,26 @@ npm run build    # output in dist/
 
 ### Airflow (Docker — production setup)
 
-Requires Docker Desktop running.
+From the `ml/` project root:
 
 ```bash
-cd ml/airflow
+# Colima users (macOS): point Docker CLI to Colima socket
+export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
 
-docker compose up airflow-init   # first time only — migrates DB + creates admin
-docker compose up -d             # starts webserver + scheduler + postgres
-docker compose down              # stop
-docker compose down -v           # stop + wipe postgres volume
+# Build and start the full stack (Airflow + frontend + ws server)
+docker-compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
+
+# Check service status
+docker-compose -f airflow/docker-compose.yml -f docker-compose.full.yml ps
+
+# Stop services
+docker-compose -f airflow/docker-compose.yml -f docker-compose.full.yml down
+
+# Stop and remove volumes
+docker-compose -f airflow/docker-compose.yml -f docker-compose.full.yml down -v
 ```
+
+If you use Docker Desktop instead of Colima, you can skip setting `DOCKER_HOST`.
 
 Open **http://localhost:8080** · username `admin` · password `admin`.
 
