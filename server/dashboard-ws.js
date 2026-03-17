@@ -11,7 +11,9 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const projectRoot = path.resolve(__dirname, '..');
+// In Docker, PROJECT_ROOT is set to the mounted project path.
+// In local dev it falls back to the parent of the server/ directory.
+const projectRoot = process.env.PROJECT_ROOT || path.resolve(__dirname, '..');
 
 const WS_HOST = '127.0.0.1';
 const WS_PORT = 3000;

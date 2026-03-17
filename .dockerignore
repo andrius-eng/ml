@@ -1,0 +1,21 @@
+# Root .dockerignore — applies to all docker builds from ml/
+.git
+.gitignore
+*.md
+node_modules
+.venv
+airflow/.venv
+airflow/.airflow
+airflow/logs
+airflow/plugins
+mlruns
+python/mlruns
+python/__pycache__
+python/output
+**/__pycache__
+**/*.pyc
+**/*.pyo
+dist
+.DS_Store
+.env
+*.local
