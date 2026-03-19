@@ -3,6 +3,12 @@
 End-to-end MLOps workflow for ERA5 climate analytics with Airflow orchestration,
 PyTorch training, Qdrant-backed retrieval, and a live dashboard.
 
+## Prerequisites
+
+- Python 3.11+ managed by [uv](https://docs.astral.sh/uv/)
+- Node.js 18+ and npm
+- Docker and Docker Compose (for the full stack)
+
 ## Stack
 
 | Layer | Technology |
@@ -32,7 +38,8 @@ pipeline artifacts.
 
 ```bash
 cd ml
-uv sync
+uv sync          # Python deps
+npm install       # JS deps
 ```
 
 ### 2. Validate tests
@@ -49,59 +56,35 @@ Current verified status: 30 passed.
 uv run python python/export_frontend_data.py
 ```
 
+This reads pipeline outputs under python/output/ and writes src/data/dashboard.json.
+
 ### 4. Start dashboard UI
 
 ```bash
 npm run dev
 ```
 
-Open http://localhost:5173
+Open http://localhost:5173. You will see:
 
-## Live RAG Query API (Option B)
+- KPI cards for current Lithuanian temperature and precipitation anomalies
+- A 30-year Vilnius March anomaly bar chart
+- City-level z-score comparisons
+- ML model regression metrics
+- Vector RAG Briefings assembled from pipeline artifacts
+- An "Ask the Pipeline" form for live retrieval queries
 
-The dashboard Ask the Pipeline form calls the FastAPI endpoint:
+## Docker Stack
 
-- GET /rag/query?q=your question
-
-Working local command:
-
-```bash
-cd ml
-uv run uvicorn --app-dir python serve:app --host 127.0.0.1 --port 8000
-```
-
-If you run uvicorn from repo root without --app-dir python, you get:
-
-- Error loading ASGI app. Could not import module serve
-
-Quick endpoint test:
-
-```bash
-curl "http://127.0.0.1:8000/rag/query?q=How+unusual+is+this+March+in+Vilnius%3F"
-```
-
-If port 8000 is occupied:
-
-```bash
-lsof -nP -iTCP:8000 -sTCP:LISTEN
-kill -9 <PID>
-```
-
-## Docker stack
+The fastest way to run everything (Airflow + dashboard + RAG API):
 
 ```bash
 docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml ps
 ```
 
-This stack includes:
+Once running, trigger DAGs from Airflow UI at http://localhost:8080 (admin / admin).
+The dashboard at http://localhost:5173 updates automatically via WebSocket.
 
-- Airflow webserver and scheduler
-- ws-server for dashboard refresh messages
-- frontend (nginx)
-- ml-server for FastAPI prediction and RAG query endpoints
-
-## Airflow (local standalone)
+## Airflow (Local Standalone)
 
 Run in its own terminal:
 
@@ -131,6 +114,39 @@ env -u VIRTUAL_ENV \
   TRAIN_PYTHON_BIN="$PWD/../.venv/bin/python" \
   ./.venv/bin/airflow dags trigger lithuania_weather_analysis
 ```
+
+## Live RAG Query API
+
+The dashboard "Ask the Pipeline" form sends questions to a FastAPI endpoint.
+Start the API server in a separate terminal:
+
+```bash
+cd ml
+uv run uvicorn --app-dir python serve:app --host 127.0.0.1 --port 8000
+```
+
+The --app-dir python flag is required so uvicorn can find serve.py.
+Without it you get: Could not import module "serve".
+
+Test it:
+
+```bash
+curl "http://127.0.0.1:8000/rag/query?q=Is+Lithuania+warmer+than+usual%3F"
+```
+
+Example response:
+
+```json
+{
+  "question": "Is Lithuania warmer than usual?",
+  "answer": "Based on retrieved DAG outputs, Lithuania year-to-date weather shows a temperature anomaly of -3.46 C with z-score -1.47.",
+  "sources": [{"title": "weather_summary narrative 1", "source": "weather/weather_summary.md", "score": 0.41}]
+}
+```
+
+Note: the API returns meaningful answers only after DAGs have run and produced
+artifacts under python/output/. Before that, you get "No relevant pipeline
+artifacts were available."
 
 ## Project Layout
 

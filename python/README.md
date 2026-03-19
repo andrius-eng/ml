@@ -42,10 +42,10 @@ uv run python python/<script>.py
 
 ### Vilnius March anomaly pipeline
 
-- vilnius_march_fetch.py
-- vilnius_march_analyze.py
-- vilnius_march_plot.py
-- vilnius_march_quality_gate.py
+- vilnius_march_fetch.py: fetch 30-year March daily temperatures for Vilnius
+- vilnius_march_analyze.py: compute year-by-year anomaly and z-score vs baseline
+- vilnius_march_plot.py: render March anomaly bar chart
+- vilnius_march_quality_gate.py: validate year count and z-score bounds
 
 ### Retrieval and dashboard bridge
 
@@ -66,7 +66,7 @@ Current DAG IDs and major script paths:
 - lithuania_weather_analysis: weather_fetch, weather_analyze, weather_plot, weather_quality_gate, rag_pipeline
 - vilnius_march_temperature_anomalies: vilnius_march_fetch, vilnius_march_analyze, vilnius_march_plot, vilnius_march_quality_gate, rag_pipeline
 
-## FastAPI (Option B)
+## FastAPI Server
 
 Endpoint:
 
