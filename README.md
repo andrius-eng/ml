@@ -1,196 +1,134 @@
+to reproduce or compare experiments.
+decades (unlike station networks that change over time) and appropriate for
 # Lithuania Climate Anomaly Dashboard
 
-An end-to-end MLOps pipeline that fetches ERA5 reanalysis data, computes
-temperature and precipitation anomalies, and serves a live Chart.js dashboard.
-Designed as a credible early-warning signal for agri, energy, and logistics
-clients exposed to temperature risk — the kind of system you'd hand to a paying
-client on Monday.
+End-to-end MLOps workflow for ERA5 climate analytics with Airflow orchestration,
+PyTorch training, Qdrant-backed retrieval, and a live dashboard.
 
----
-
-## What this demonstrates
+## Stack
 
 | Layer | Technology |
 |---|---|
-| Orchestration | Apache Airflow 2.10 (LocalExecutor + PostgreSQL via Docker) |
-| Data source | Open-Meteo ERA5 reanalysis API (1940–present, 9 km resolution) |
-| Processing | Python 3.11 · pandas · numpy |
-| ML training | PyTorch feed-forward network · MLflow experiment tracking |
-| Quality gates | Per-DAG validation tasks that fail the pipeline on bad data |
-| Testing | pytest 9 · 17 unit + integration smoke tests · `uv run pytest` |
-| Frontend | Vite + vanilla JS + Chart.js — live anomaly charts from pipeline JSON |
-| Deployment | `docker compose up` for Airflow; `npm run build` for the dashboard |
+| Orchestration | Apache Airflow 2.10 + PostgreSQL |
+| Data | Open-Meteo ERA5 reanalysis |
+| Processing | Python 3.11, pandas, numpy |
+| Modeling | PyTorch, MLflow-skinny |
+| Retrieval | Qdrant local store + lightweight TF-IDF |
+| Frontend | Vite, vanilla JS, Chart.js |
+| Live updates | Node WebSocket server + periodic export |
 
----
+## DAGs
 
-## The three Airflow DAGs
+Current DAG IDs:
 
-### `mlflow_torch_training`
-Generates synthetic weather-like data, trains a PyTorch regression model, and
-logs all parameters, metrics, and the model artifact to MLflow. Run on demand
-to reproduce or compare experiments.
+- climate_temperature_model
+- lithuania_weather_analysis
+- vilnius_march_temperature_anomalies
 
-### `lithuania_weather_analysis`
-Fetches ERA5 daily temperature and precipitation for Vilnius, Kaunas, and
-Klaipeda from Jan 1 to the DAG execution date. Computes YTD anomalies,
-city rankings, monthly z-scores, and per-city charts. A quality gate rejects
-runs with sparse coverage or extreme z-scores.
+Each DAG ends with refresh_rag_context to rebuild retrieval context from latest
+pipeline artifacts.
 
-### `vilnius_march_temperature_anomalies`
-Extracts the March 1–N slice from 30 years of Vilnius ERA5 data and computes a
-year-by-year temperature anomaly with z-scores against the full-window baseline.
-Produces a longitudinal trend chart showing whether each March was warmer or
-cooler than average — useful for seasonal risk assessments.
+## Quick Start
 
----
-
-## Quick start
-
-### 1 — Python environment
+### 1. Install dependencies
 
 ```bash
 cd ml
-uv sync                  # creates .venv and installs all deps
-uv run pytest            # 17 tests — should all pass
+uv sync
 ```
 
----
-
-### 2 — Airflow (local standalone)
-
-Run in its own terminal. Keep it running while you trigger DAGs.
+### 2. Validate tests
 
 ```bash
-cd ml/airflow
-
-export AIRFLOW_HOME="$PWD/.airflow"
-export AIRFLOW__CORE__DAGS_FOLDER="$PWD/dags"
-export AIRFLOW__CORE__LOAD_EXAMPLES=False
-export ML_PROJECT_ROOT="$PWD/.."
-export TRAIN_PYTHON_BIN="$PWD/../.venv/bin/python"
-
-env -u VIRTUAL_ENV uv run airflow standalone
+uv run python -m pytest python/tests -q
 ```
 
-Open **http://localhost:8080** — username `admin`, password printed in the terminal on first run (check `.airflow/standalone_admin_password.txt`).
+Current verified status: 30 passed.
 
-To trigger a DAG manually (in a second terminal):
+### 3. Export dashboard data
 
 ```bash
-cd ml/airflow
-
-env -u VIRTUAL_ENV \
-  AIRFLOW_HOME="$PWD/.airflow" \
-  AIRFLOW__CORE__DAGS_FOLDER="$PWD/dags" \
-  AIRFLOW__CORE__LOAD_EXAMPLES=False \
-  ML_PROJECT_ROOT="$PWD/.." \
-  TRAIN_PYTHON_BIN="$PWD/../.venv/bin/python" \
-  ./.venv/bin/airflow dags trigger lithuania_weather_analysis
+uv run python python/export_frontend_data.py
 ```
 
-Available DAG ids:
-- `mlflow_torch_training`
-- `lithuania_weather_analysis`
-- `vilnius_march_temperature_anomalies`
-
----
-
-### 3 — Dashboard (Chart.js / Vite)
-
-Run in its own terminal. Re-run the export step any time a DAG completes.
+### 4. Start dashboard UI
 
 ```bash
-cd ml
-
-# Pull latest pipeline outputs into the dashboard JSON
-env -u VIRTUAL_ENV uv run python python/export_frontend_data.py
-
-# Start the dev server
 npm run dev
 ```
 
-Open **http://localhost:5173**
+Open http://localhost:5173
 
-To build a static bundle for deployment:
+## Live RAG Query API (Option B)
 
-```bash
-npm run build    # output in dist/
-```
+The dashboard Ask the Pipeline form calls the FastAPI endpoint:
 
----
+- GET /rag/query?q=your question
 
-### Airflow (Docker — production setup)
-
-From the `ml/` project root:
+Working local command:
 
 ```bash
-# Colima users (macOS): point Docker CLI to Colima socket
-export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
-
-# Build and start the full stack (Airflow + frontend + ws server)
-docker-compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
-
-# Check service status
-docker-compose -f airflow/docker-compose.yml -f docker-compose.full.yml ps
-
-# Stop services
-docker-compose -f airflow/docker-compose.yml -f docker-compose.full.yml down
-
-# Stop and remove volumes
-docker-compose -f airflow/docker-compose.yml -f docker-compose.full.yml down -v
+cd ml
+uv run uvicorn --app-dir python serve:app --host 127.0.0.1 --port 8000
 ```
 
-If you use Docker Desktop instead of Colima, you can skip setting `DOCKER_HOST`.
+If you run uvicorn from repo root without --app-dir python, you get:
 
-Open **http://localhost:8080** · username `admin` · password `admin`.
+- Error loading ASGI app. Could not import module serve
 
----
+Quick endpoint test:
 
-## Data accuracy note
-
-ERA5 is reanalysis data — it blends station observations, satellite radiances,
-and radar via a physical model on a 0.25° grid (~25 km). It is consistent across
-decades (unlike station networks that change over time) and appropriate for
-anomaly comparison, but is not a substitute for point-station observations.
-For publication-quality climatology, cross-validate against the Lithuanian
-Hydrometeorological Service station records.
-
----
-
-## Project layout
-
+```bash
+curl "http://127.0.0.1:8000/rag/query?q=How+unusual+is+this+March+in+Vilnius%3F"
 ```
+
+If port 8000 is occupied:
+
+```bash
+lsof -nP -iTCP:8000 -sTCP:LISTEN
+kill -9 <PID>
+```
+
+## Docker stack
+
+```bash
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml ps
+```
+
+This stack includes:
+
+- Airflow webserver and scheduler
+- ws-server for dashboard refresh messages
+- frontend (nginx)
+- ml-server for FastAPI prediction and RAG query endpoints
+
+## Project Layout
+
+```text
 ml/
-├── python/
-│   ├── vilnius_march_fetch.py       # fetch 30yr Vilnius March ERA5 data
-│   ├── vilnius_march_analyze.py     # compute year-by-year anomalies
-│   ├── vilnius_march_plot.py        # render anomaly bar chart
-│   ├── vilnius_march_quality_gate.py
-│   ├── weather_fetch.py             # Lithuania YTD fetch
-│   ├── weather_analyze.py           # city/country anomaly analysis
-│   ├── weather_plot.py              # per-city + country charts
-│   ├── weather_quality_gate.py
-│   ├── weather_common.py            # shared fetch + retry logic
-│   ├── export_frontend_data.py      # bridge: pipeline outputs → dashboard JSON
-│   ├── train.py / evaluate.py       # PyTorch + MLflow training
-│   └── tests/                       # pytest smoke tests (17 tests)
-├── airflow/
-│   ├── dags/                        # three production DAGs
-│   └── docker-compose.yml           # Airflow + PostgreSQL stack
-└── src/                             # Vite frontend
-    ├── main.js                      # Chart.js dashboard
-    ├── styles.css
-    └── data/
-        └── dashboard.json           # generated by export_frontend_data.py
+  airflow/dags/
+  python/
+    climate_data.py
+    climate_train.py
+    climate_evaluate.py
+    weather_fetch.py
+    weather_analyze.py
+    weather_plot.py
+    vilnius_march_fetch.py
+    vilnius_march_analyze.py
+    vilnius_march_plot.py
+    rag_pipeline.py
+    export_frontend_data.py
+    serve.py
+    tests/
+  server/dashboard-ws.js
+  src/main.js
+  src/styles.css
 ```
 
+## Notes
 
-> If you prefer Netlify/Vercel, just point the deploy target to the `dist/` folder.
-
----
-
-## 🧪 CI / CD
-
-This repo includes a GitHub Actions workflow (`.github/workflows/ci.yml`) that runs a build on every push and pull request.
-
-If you want to auto-deploy on push, you can add an action for `gh-pages` or use your preferred host’s deploy workflow.
+- pyproject.toml plus uv.lock are the dependency source of truth.
+- python/requirements.txt is exported for compatibility workflows.
+- python/requirements-airflow-runtime.txt remains curated for airflow image needs.

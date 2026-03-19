@@ -4,6 +4,14 @@ import data from './data/dashboard.json';
 
 Chart.register(...registerables);
 
+let marchChartInstance = null;
+let cityTempChartInstance = null;
+let cityPrecipChartInstance = null;
+
+function formatSource(source) {
+  return source.source || source.title;
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function sign(n) {
@@ -22,11 +30,20 @@ function zLabel(z) {
 function kpiCard({ label, value, sub, highlight }) {
   const el = document.createElement('div');
   el.className = 'kpi-card' + (highlight ? ' kpi-card--highlight' : '');
-  el.innerHTML = `
-    <div class="kpi-label">${label}</div>
-    <div class="kpi-value">${value}</div>
-    ${sub ? `<div class="kpi-sub">${sub}</div>` : ''}
-  `;
+  const labelEl = document.createElement('div');
+  labelEl.className = 'kpi-label';
+  labelEl.textContent = label;
+  el.appendChild(labelEl);
+  const valueEl = document.createElement('div');
+  valueEl.className = 'kpi-value';
+  valueEl.textContent = value;
+  el.appendChild(valueEl);
+  if (sub) {
+    const subEl = document.createElement('div');
+    subEl.className = 'kpi-sub';
+    subEl.textContent = sub;
+    el.appendChild(subEl);
+  }
   return el;
 }
 
@@ -39,6 +56,7 @@ function renderHeader(d) {
 
 function renderKPIs(d) {
   const row = document.getElementById('kpi-row');
+  row.innerHTML = '';
   const m = d.vilnius_march;
   const w = d.lithuania_weather;
 
@@ -90,7 +108,8 @@ function renderMarchChart(d) {
     m.annual[i].year === currentYear ? 2 : 0
   );
 
-  new Chart(document.getElementById('marchChart'), {
+  if (marchChartInstance) marchChartInstance.destroy();
+  marchChartInstance = new Chart(document.getElementById('marchChart'), {
     type: 'bar',
     data: {
       labels,
@@ -151,10 +170,6 @@ function renderCityCharts(d) {
 
   const cities = w.city_rankings.temperature.map((r) => r.city);
   const tempZ = w.city_rankings.temperature.map((r) => r.z_score);
-  const precipZ = w.city_rankings.precipitation.map((r) => {
-    const match = w.city_rankings.precipitation.find((p) => p.city === r.city);
-    return match ? match.z_score : 0;
-  });
 
   // order precipitation by the same city order as temperature
   const precipZOrdered = cities.map((city) => {
@@ -177,7 +192,8 @@ function renderCityCharts(d) {
     },
   });
 
-  new Chart(document.getElementById('cityTempChart'), {
+  if (cityTempChartInstance) cityTempChartInstance.destroy();
+  cityTempChartInstance = new Chart(document.getElementById('cityTempChart'), {
     type: 'bar',
     data: {
       labels: cities,
@@ -196,7 +212,8 @@ function renderCityCharts(d) {
     },
   });
 
-  new Chart(document.getElementById('cityPrecipChart'), {
+  if (cityPrecipChartInstance) cityPrecipChartInstance.destroy();
+  cityPrecipChartInstance = new Chart(document.getElementById('cityPrecipChart'), {
     type: 'bar',
     data: {
       labels: cities,
@@ -218,6 +235,7 @@ function renderCityCharts(d) {
 
 function renderMLMetrics(d) {
   const row = document.getElementById('ml-kpi-row');
+  row.innerHTML = '';
   const ml = d.ml_model;
 
   [
@@ -227,25 +245,67 @@ function renderMLMetrics(d) {
   ].forEach((item) => row.appendChild(kpiCard(item)));
 }
 
+function renderRagDemo(d) {
+  const meta = document.getElementById('rag-meta');
+  const grid = document.getElementById('rag-grid');
+  const rag = d.rag_demo;
+
+  if (!rag || !Array.isArray(rag.questions) || rag.questions.length === 0) {
+    meta.textContent = 'No retrieval briefings available yet.';
+    grid.innerHTML = '';
+    return;
+  }
+
+  meta.textContent = `Collection ${rag.collection} · ${rag.corpus_size} indexed documents · Updated ${rag.generated_at}`;
+  grid.innerHTML = '';
+
+  rag.questions.forEach((item) => {
+    const card = document.createElement('article');
+    card.className = 'rag-card';
+
+    const question = document.createElement('h3');
+    question.className = 'rag-question';
+    question.textContent = item.question;
+    card.appendChild(question);
+
+    const answer = document.createElement('p');
+    answer.className = 'rag-answer';
+    answer.textContent = item.answer;
+    card.appendChild(answer);
+
+    const sources = document.createElement('div');
+    sources.className = 'rag-sources';
+    (item.sources || []).forEach((source) => {
+      const chip = document.createElement('span');
+      chip.textContent = `${formatSource(source)} (${source.score.toFixed(2)})`;
+      sources.appendChild(chip);
+    });
+    card.appendChild(sources);
+
+    grid.appendChild(card);
+  });
+}
+
 function renderPipeline() {
   const grid = document.getElementById('pipeline-grid');
+  grid.innerHTML = '';
   const dags = [
     {
-      name: 'mlflow_torch_training',
-      desc: 'Trains and evaluates a PyTorch regression model, logging params + artifacts to MLflow.',
-      steps: ['generate_data', 'train_model', 'evaluate_model'],
-      tags: ['PyTorch', 'MLflow', 'Regression'],
+      name: 'climate_temperature_model',
+      desc: 'Trains a PyTorch MLP on real ERA5 Lithuania daily weather (1991–2022) to predict daily mean temperature. Evaluates R² and RMSE on held-out 2023+ data, logging to MLflow.',
+      steps: ['prepare_data', 'train_model', 'evaluate_model', 'quality_gate', 'refresh_rag_context'],
+      tags: ['PyTorch', 'MLflow', 'ERA5', 'Seasonality'],
     },
     {
       name: 'lithuania_weather_analysis',
       desc: 'Fetches ERA5 daily weather for 3 Lithuanian cities, computes YTD anomalies, city rankings, per-city charts, and validates output quality.',
-      steps: ['fetch_weather', 'analyze_anomalies', 'plot_charts', 'quality_gate'],
+      steps: ['fetch_weather', 'analyze_anomalies', 'plot_charts', 'quality_gate', 'refresh_rag_context'],
       tags: ['ERA5', 'Anomaly detection', 'Vega/Matplotlib'],
     },
     {
       name: 'vilnius_march_temperature_anomalies',
       desc: 'Historical 30-year deep-dive: extracts every March 1–N slice, computes year-by-year temperature anomaly and z-score, generates a longitudinal trend chart.',
-      steps: ['fetch_vilnius_march', 'analyze_anomalies', 'plot_anomalies + quality_gate'],
+      steps: ['fetch_vilnius_march', 'analyze_anomalies', 'plot_anomalies', 'quality_gate', 'refresh_rag_context'],
       tags: ['ERA5', 'Climate trend', '30-year baseline'],
     },
   ];
@@ -253,22 +313,50 @@ function renderPipeline() {
   dags.forEach((dag) => {
     const card = document.createElement('div');
     card.className = 'pipeline-card';
-    card.innerHTML = `
-      <h3 class="pipeline-name">${dag.name}</h3>
-      <p class="pipeline-desc">${dag.desc}</p>
-      <div class="pipeline-steps">
-        ${dag.steps.map((s, i) => `
-          ${i > 0 ? '<span class="step-arrow">&rarr;</span>' : ''}
-          <span class="step">${s}</span>
-        `).join('')}
-      </div>
-      <p class="tags">${dag.tags.map((t) => `<span>${t}</span>`).join('')}</p>
-    `;
+
+    const h3 = document.createElement('h3');
+    h3.className = 'pipeline-name';
+    h3.textContent = dag.name;
+    card.appendChild(h3);
+
+    const desc = document.createElement('p');
+    desc.className = 'pipeline-desc';
+    desc.textContent = dag.desc;
+    card.appendChild(desc);
+
+    const stepsEl = document.createElement('div');
+    stepsEl.className = 'pipeline-steps';
+    dag.steps.forEach((s, i) => {
+      if (i > 0) {
+        const arrow = document.createElement('span');
+        arrow.className = 'step-arrow';
+        arrow.textContent = '\u2192';
+        stepsEl.appendChild(arrow);
+      }
+      const step = document.createElement('span');
+      step.className = 'step';
+      step.textContent = s;
+      stepsEl.appendChild(step);
+    });
+    card.appendChild(stepsEl);
+
+    const tagsEl = document.createElement('p');
+    tagsEl.className = 'tags';
+    dag.tags.forEach((t) => {
+      const tagSpan = document.createElement('span');
+      tagSpan.textContent = t;
+      tagsEl.appendChild(tagSpan);
+    });
+    card.appendChild(tagsEl);
+
     grid.appendChild(card);
   });
 }
 
 // ── live updates via WebSocket ──────────────────────────────────────────────
+
+let wsReconnectDelay = 1000;
+const WS_MAX_RECONNECT_DELAY = 60000;
 
 function connectWebSocket() {
   const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -282,6 +370,7 @@ function connectWebSocket() {
   ws.addEventListener('open', () => {
     console.log('[Dashboard] WebSocket connected');
     document.body.classList.add('ws-connected');
+    wsReconnectDelay = 1000;
   });
 
   ws.addEventListener('message', async (event) => {
@@ -299,6 +388,8 @@ function connectWebSocket() {
       renderMarchChart(newData);
       renderCityCharts(newData);
       renderMLMetrics(newData);
+      renderRagDemo(newData);
+      renderPipeline();
 
       // Flash update indicator
       const badge = document.getElementById('generated-badge');
@@ -317,9 +408,10 @@ function connectWebSocket() {
   });
 
   ws.addEventListener('close', () => {
-    console.log('[Dashboard] WebSocket disconnected, reconnecting in 5s...');
+    console.log(`[Dashboard] WebSocket disconnected, reconnecting in ${wsReconnectDelay / 1000}s...`);
     document.body.classList.remove('ws-connected');
-    setTimeout(connectWebSocket, 5000);
+    setTimeout(connectWebSocket, wsReconnectDelay);
+    wsReconnectDelay = Math.min(wsReconnectDelay * 2, WS_MAX_RECONNECT_DELAY);
   });
 
   ws.addEventListener('error', (err) => {
@@ -335,6 +427,7 @@ function init() {
   renderMarchChart(data);
   renderCityCharts(data);
   renderMLMetrics(data);
+  renderRagDemo(data);
   renderPipeline();
 
   // Attempt to connect to live update server

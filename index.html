@@ -81,6 +81,35 @@
         <div class="kpi-row" id="ml-kpi-row"></div>
       </section>
 
+      <section class="card" id="rag-section">
+        <h2>Vector RAG Briefings</h2>
+        <p class="section-desc">
+          Airflow tasks publish summaries, rankings, and evaluation artifacts.
+          A Qdrant-backed retrieval layer indexes them and assembles the briefings below from retrieved evidence.
+        </p>
+        <div class="rag-meta" id="rag-meta">Loading retrieval corpus…</div>
+        <div class="rag-grid" id="rag-grid"></div>
+      </section>
+
+        <section class="card" id="rag-query-section">
+          <h2>Ask the Pipeline</h2>
+          <p class="section-desc">
+            Query the Qdrant vector store live. The retrieval layer finds the most relevant
+            pipeline artifacts and assembles an answer from retrieved evidence.
+          </p>
+          <form class="rag-form" id="rag-form" autocomplete="off">
+            <input
+              class="rag-input"
+              id="rag-input"
+              type="text"
+              placeholder="e.g. Is Lithuania warmer than usual this year?"
+              aria-label="Ask a question about the pipeline outputs"
+            />
+            <button class="rag-submit" type="submit">Ask</button>
+          </form>
+          <div id="rag-query-result" class="rag-query-result" hidden></div>
+        </section>
+
       <!-- Pipeline architecture -->
       <section class="card" id="pipeline-section">
         <h2>Pipeline Architecture</h2>

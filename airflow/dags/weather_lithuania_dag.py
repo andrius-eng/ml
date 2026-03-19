@@ -31,6 +31,7 @@ WEATHER_FETCH_SCRIPT = PROJECT_ROOT / "python" / "weather_fetch.py"
 WEATHER_ANALYZE_SCRIPT = PROJECT_ROOT / "python" / "weather_analyze.py"
 WEATHER_PLOT_SCRIPT = PROJECT_ROOT / "python" / "weather_plot.py"
 WEATHER_QUALITY_GATE_SCRIPT = PROJECT_ROOT / "python" / "weather_quality_gate.py"
+RAG_PIPELINE_SCRIPT = PROJECT_ROOT / "python" / "rag_pipeline.py"
 
 WEATHER_OUTPUT_DIR = PROJECT_ROOT / "python" / "output" / "weather"
 RAW_WEATHER_PATH = WEATHER_OUTPUT_DIR / "raw_daily_weather.csv"
@@ -47,6 +48,7 @@ CITY_RANKINGS_PATH = WEATHER_OUTPUT_DIR / "city_rankings.json"
 WEATHER_PLOT_PATH = WEATHER_OUTPUT_DIR / "weather_anomalies.png"
 WEATHER_REPORT_PATH = WEATHER_OUTPUT_DIR / "weather_summary.md"
 CITY_PLOTS_DIR = WEATHER_OUTPUT_DIR / "cities"
+RAG_DEMO_PATH = PROJECT_ROOT / "python" / "output" / "rag" / "rag_demo.json"
 ANALYSIS_END = "{{ ds }}"
 
 
@@ -59,7 +61,7 @@ with DAG(
     dag_id="lithuania_weather_analysis",
     default_args=DEFAULT_ARGS,
     description="Compare Lithuania 2026 year-to-date weather with historical expectations",
-    schedule=None,
+    schedule="0 6 * * *",
     start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=["weather", "analytics", "lithuania"],
@@ -108,4 +110,16 @@ with DAG(
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
     )
 
+    refresh_rag_context = BashOperator(
+        task_id="refresh_rag_context",
+        cwd=str(PROJECT_ROOT),
+        bash_command=(
+            "set -euo pipefail\n"
+            f'test -f "{RAG_PIPELINE_SCRIPT}"\n'
+            f'{project_python_command(str(RAG_PIPELINE_SCRIPT), "--output-dir", str(PROJECT_ROOT / "python" / "output"), "--demo-output", str(RAG_DEMO_PATH))}'
+        ),
+        env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+    )
+
     fetch_weather >> analyze_weather >> [plot_weather, quality_gate]
+    [plot_weather, quality_gate] >> refresh_rag_context

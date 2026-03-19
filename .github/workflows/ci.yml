@@ -32,14 +32,18 @@ jobs:
         run: npm run format -- --check
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r python/requirements.txt
+        run: uv sync --frozen
 
       - name: Smoke test ML dependencies
-        run: python python/train.py --dry-run
+        run: uv run python python/train.py --dry-run
+
+      - name: Run Python tests
+        run: uv run python -m pytest python/tests/ -v

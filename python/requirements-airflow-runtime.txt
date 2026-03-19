@@ -1,0 +1,8 @@
+numpy<2
+pandas>=2.0.0
+qdrant-client>=1.9.0
+matplotlib>=3.8.0
+cryptography<45
+cffi<2
+torch==2.2.2+cpu ; platform_system == "Linux" and platform_machine == "x86_64"
+torch==2.2.2 ; platform_system != "Linux" or platform_machine != "x86_64"

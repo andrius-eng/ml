@@ -7,9 +7,17 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
+from pathlib import Path
 
-from data import save_csv, make_synthetic_data
+# Ensure sibling modules are importable regardless of cwd
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import numpy as np
+
+from data import save_csv
 from evaluate import evaluate
+from model import make_synthetic_data
 from train import train
 
 
@@ -20,12 +28,17 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # 1) Generate data
-    x, y = make_synthetic_data(400)
-    data_path = os.path.join(args.output_dir, 'data.csv')
-    save_csv(x, y, data_path)
+    # 1) Generate data with train/test split
+    x, y = make_synthetic_data(500)
+    n_test = int(len(x) * 0.2)
+    rng = np.random.default_rng(0)
+    perm = rng.permutation(len(x))
+    train_path = os.path.join(args.output_dir, 'train.csv')
+    test_path = os.path.join(args.output_dir, 'test.csv')
+    save_csv(x[perm[n_test:]], y[perm[n_test:]], train_path)
+    save_csv(x[perm[:n_test]], y[perm[:n_test]], test_path)
 
-    # 2) Train
+    # 2) Train on training set
     model_path = os.path.join(args.output_dir, 'model.pth')
     metrics_path = os.path.join(args.output_dir, 'metrics.csv')
     train(
@@ -35,13 +48,13 @@ def main():
         tracking_uri='./mlruns',
         model_path=model_path,
         metrics_path=metrics_path,
-        data_path=data_path,
+        data_path=train_path,
     )
 
-    # 3) Evaluate
+    # 3) Evaluate on held-out test set
     evaluation = evaluate(
         model_path=model_path,
-        data_path=data_path,
+        data_path=test_path,
         summary_path=os.path.join(args.output_dir, 'evaluation.json'),
         predictions_path=os.path.join(args.output_dir, 'predictions.csv'),
     )

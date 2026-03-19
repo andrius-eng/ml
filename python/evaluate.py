@@ -10,17 +10,9 @@ import os
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-
-class LinearModel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.linear = nn.Linear(1, 1)
-
-    def forward(self, x):
-        return self.linear(x)
+from metrics import mean_absolute_error, mean_squared_error, r2_score
+from model import LinearModel
 
 
 def load_data(path: str):
@@ -37,7 +29,7 @@ def evaluate(
     predictions_path: str | None = None,
 ):
     model = LinearModel()
-    model.load_state_dict(torch.load(model_path))
+    model.load_state_dict(torch.load(model_path, weights_only=True))
     model.eval()
 
     x, y = load_data(data_path)

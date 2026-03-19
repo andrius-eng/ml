@@ -1,289 +1,344 @@
 {
-  "generated_at": "2026-03-17",
+  "generated_at": "2026-03-18",
   "vilnius_march": {
     "window": {
-      "cutoff_day": 17,
+      "cutoff_day": 18,
       "end_year": 2026,
-      "execution_date": "2026-03-17",
+      "execution_date": "2026-03-18",
       "start_year": 1997,
       "years_included": 30
     },
     "baseline": {
-      "mean_temp_c": 0.109,
-      "std_temp_c": 3.106
+      "mean_temp_c": 0.156,
+      "std_temp_c": 3.046
     },
     "latest_year": {
       "year": 2026,
-      "mean_temp_c": 4.41,
-      "anomaly_c": 4.3,
-      "zscore": 1.38
+      "mean_temp_c": 4.39,
+      "anomaly_c": 4.24,
+      "zscore": 1.39
     },
     "extremes": {
       "warmest": {
         "year": 2026,
-        "anomaly_c": 4.3
+        "anomaly_c": 4.24
       },
       "coldest": {
-        "year": 2005,
-        "anomaly_c": -6.26
+        "year": 2013,
+        "anomaly_c": -6.13
       }
     },
     "annual": [
       {
         "year": 1997,
-        "mean_temp_c": 2.653,
-        "anomaly_c": 2.544,
-        "zscore": 0.819
+        "mean_temp_c": 2.339,
+        "anomaly_c": 2.183,
+        "zscore": 0.717
       },
       {
         "year": 1998,
-        "mean_temp_c": -1.547,
+        "mean_temp_c": -1.5,
         "anomaly_c": -1.656,
-        "zscore": -0.533
+        "zscore": -0.544
       },
       {
         "year": 1999,
-        "mean_temp_c": -0.806,
-        "anomaly_c": -0.915,
-        "zscore": -0.295
+        "mean_temp_c": -1.028,
+        "anomaly_c": -1.183,
+        "zscore": -0.388
       },
       {
         "year": 2000,
-        "mean_temp_c": 0.976,
-        "anomaly_c": 0.868,
-        "zscore": 0.279
+        "mean_temp_c": 0.817,
+        "anomaly_c": 0.661,
+        "zscore": 0.217
       },
       {
         "year": 2001,
-        "mean_temp_c": 0.641,
-        "anomaly_c": 0.532,
-        "zscore": 0.171
+        "mean_temp_c": 0.533,
+        "anomaly_c": 0.378,
+        "zscore": 0.124
       },
       {
         "year": 2002,
-        "mean_temp_c": 2.518,
-        "anomaly_c": 2.409,
-        "zscore": 0.776
+        "mean_temp_c": 2.717,
+        "anomaly_c": 2.561,
+        "zscore": 0.841
       },
       {
         "year": 2003,
-        "mean_temp_c": -1.647,
-        "anomaly_c": -1.756,
-        "zscore": -0.565
+        "mean_temp_c": -1.422,
+        "anomaly_c": -1.578,
+        "zscore": -0.518
       },
       {
         "year": 2004,
-        "mean_temp_c": -2.271,
-        "anomaly_c": -2.379,
-        "zscore": -0.766
+        "mean_temp_c": -1.756,
+        "anomaly_c": -1.911,
+        "zscore": -0.627
       },
       {
         "year": 2005,
-        "mean_temp_c": -6.147,
-        "anomaly_c": -6.256,
-        "zscore": -2.014
+        "mean_temp_c": -5.794,
+        "anomaly_c": -5.95,
+        "zscore": -1.953
       },
       {
         "year": 2006,
-        "mean_temp_c": -5.165,
-        "anomaly_c": -5.274,
-        "zscore": -1.698
+        "mean_temp_c": -4.822,
+        "anomaly_c": -4.978,
+        "zscore": -1.634
       },
       {
         "year": 2007,
-        "mean_temp_c": 3.206,
-        "anomaly_c": 3.097,
-        "zscore": 0.997
+        "mean_temp_c": 3.222,
+        "anomaly_c": 3.067,
+        "zscore": 1.007
       },
       {
         "year": 2008,
-        "mean_temp_c": 2.512,
-        "anomaly_c": 2.403,
-        "zscore": 0.774
+        "mean_temp_c": 2.406,
+        "anomaly_c": 2.25,
+        "zscore": 0.739
       },
       {
         "year": 2009,
-        "mean_temp_c": -0.659,
-        "anomaly_c": -0.768,
-        "zscore": -0.247
+        "mean_temp_c": -0.578,
+        "anomaly_c": -0.733,
+        "zscore": -0.241
       },
       {
         "year": 2010,
-        "mean_temp_c": -5.112,
-        "anomaly_c": -5.221,
-        "zscore": -1.681
+        "mean_temp_c": -4.9,
+        "anomaly_c": -5.056,
+        "zscore": -1.66
       },
       {
         "year": 2011,
-        "mean_temp_c": -2.441,
-        "anomaly_c": -2.55,
-        "zscore": -0.821
+        "mean_temp_c": -2.339,
+        "anomaly_c": -2.494,
+        "zscore": -0.819
       },
       {
         "year": 2012,
-        "mean_temp_c": -0.429,
-        "anomaly_c": -0.538,
-        "zscore": -0.173
+        "mean_temp_c": -0.156,
+        "anomaly_c": -0.311,
+        "zscore": -0.102
       },
       {
         "year": 2013,
-        "mean_temp_c": -5.688,
-        "anomaly_c": -5.797,
-        "zscore": -1.866
+        "mean_temp_c": -5.978,
+        "anomaly_c": -6.133,
+        "zscore": -2.014
       },
       {
         "year": 2014,
-        "mean_temp_c": 2.941,
-        "anomaly_c": 2.832,
-        "zscore": 0.912
+        "mean_temp_c": 2.889,
+        "anomaly_c": 2.733,
+        "zscore": 0.897
       },
       {
         "year": 2015,
-        "mean_temp_c": 3.676,
-        "anomaly_c": 3.568,
-        "zscore": 1.149
+        "mean_temp_c": 3.717,
+        "anomaly_c": 3.561,
+        "zscore": 1.169
       },
       {
         "year": 2016,
-        "mean_temp_c": 1.806,
-        "anomaly_c": 1.697,
-        "zscore": 0.546
+        "mean_temp_c": 1.761,
+        "anomaly_c": 1.606,
+        "zscore": 0.527
       },
       {
         "year": 2017,
-        "mean_temp_c": 3.006,
-        "anomaly_c": 2.897,
-        "zscore": 0.933
+        "mean_temp_c": 2.989,
+        "anomaly_c": 2.833,
+        "zscore": 0.93
       },
       {
         "year": 2018,
-        "mean_temp_c": -3.8,
-        "anomaly_c": -3.909,
-        "zscore": -1.259
+        "mean_temp_c": -3.861,
+        "anomaly_c": -4.017,
+        "zscore": -1.319
       },
       {
         "year": 2019,
-        "mean_temp_c": 1.912,
-        "anomaly_c": 1.803,
-        "zscore": 0.58
+        "mean_temp_c": 2.083,
+        "anomaly_c": 1.928,
+        "zscore": 0.633
       },
       {
         "year": 2020,
-        "mean_temp_c": 3.653,
-        "anomaly_c": 3.544,
-        "zscore": 1.141
+        "mean_temp_c": 3.883,
+        "anomaly_c": 3.728,
+        "zscore": 1.224
       },
       {
         "year": 2021,
-        "mean_temp_c": -0.076,
-        "anomaly_c": -0.185,
-        "zscore": -0.06
+        "mean_temp_c": -0.156,
+        "anomaly_c": -0.311,
+        "zscore": -0.102
       },
       {
         "year": 2022,
-        "mean_temp_c": -1.012,
-        "anomaly_c": -1.121,
+        "mean_temp_c": -0.944,
+        "anomaly_c": -1.1,
         "zscore": -0.361
       },
       {
         "year": 2023,
-        "mean_temp_c": -0.176,
-        "anomaly_c": -0.285,
-        "zscore": -0.092
+        "mean_temp_c": 0.028,
+        "anomaly_c": -0.128,
+        "zscore": -0.042
       },
       {
         "year": 2024,
-        "mean_temp_c": 2.194,
-        "anomaly_c": 2.085,
-        "zscore": 0.671
+        "mean_temp_c": 2.189,
+        "anomaly_c": 2.033,
+        "zscore": 0.668
       },
       {
         "year": 2025,
-        "mean_temp_c": 4.141,
-        "anomaly_c": 4.032,
-        "zscore": 1.298
+        "mean_temp_c": 3.933,
+        "anomaly_c": 3.778,
+        "zscore": 1.24
       },
       {
         "year": 2026,
-        "mean_temp_c": 4.406,
-        "anomaly_c": 4.297,
-        "zscore": 1.384
+        "mean_temp_c": 4.394,
+        "anomaly_c": 4.239,
+        "zscore": 1.392
       }
     ]
   },
   "lithuania_weather": {
     "year": 2026,
-    "period": "01-01 to 03-17",
+    "period": "01-01 to 03-18",
     "cities": [
       "Vilnius",
       "Kaunas",
       "Klaipeda"
     ],
-    "temp_anomaly_c": -3.53,
-    "temp_zscore": -1.5,
-    "precip_anomaly_mm": -19.8,
-    "precip_zscore": -0.58,
-    "latest_7d_temp_anomaly": 6.18,
+    "temp_anomaly_c": -3.46,
+    "temp_zscore": -1.47,
+    "precip_anomaly_mm": -21.2,
+    "precip_zscore": -0.6,
+    "latest_7d_temp_anomaly": 5.67,
     "city_rankings": {
       "combined": [
         {
           "city": "Klaipeda",
-          "combined_score": 1.8073758231762218,
-          "precipitation_z": 0.027841294355757263,
-          "temperature_z": -1.8073758231762218
+          "combined_score": 1.7922089272445474,
+          "precipitation_z": -0.0010362274754070065,
+          "temperature_z": -1.7922089272445474
         },
         {
           "city": "Vilnius",
-          "combined_score": 1.4092975186791867,
-          "precipitation_z": -1.4092975186791867,
-          "temperature_z": -1.3083297286601596
+          "combined_score": 1.4231250018431048,
+          "precipitation_z": -1.4231250018431048,
+          "temperature_z": -1.2793427189732944
         },
         {
           "city": "Kaunas",
-          "combined_score": 1.395957000390744,
-          "precipitation_z": -0.5419480918742968,
-          "temperature_z": -1.395957000390744
+          "combined_score": 1.3692963751772085,
+          "precipitation_z": -0.5646245503423621,
+          "temperature_z": -1.3692963751772085
         }
       ],
       "precipitation": [
         {
-          "anomaly": -43.420000000000016,
+          "anomaly": -44.93000000000001,
           "city": "Vilnius",
-          "z_score": -1.4092975186791867
+          "z_score": -1.4231250018431048
         },
         {
-          "anomaly": -17.333333333333357,
+          "anomaly": -18.693333333333342,
           "city": "Kaunas",
-          "z_score": -0.5419480918742968
+          "z_score": -0.5646245503423621
         },
         {
-          "anomaly": 1.2266666666666595,
+          "anomaly": -0.04666666666668107,
           "city": "Klaipeda",
-          "z_score": 0.027841294355757263
+          "z_score": -0.0010362274754070065
         }
       ],
       "temperature": [
         {
-          "anomaly": -3.952686261107314,
+          "anomaly": -3.908053058053058,
           "city": "Klaipeda",
-          "z_score": -1.8073758231762218
+          "z_score": -1.7922089272445474
         },
         {
-          "anomaly": -3.4820779220779223,
+          "anomaly": -3.3989810189810186,
           "city": "Kaunas",
-          "z_score": -1.395957000390744
+          "z_score": -1.3692963751772085
         },
         {
-          "anomaly": -3.164634313055365,
+          "anomaly": -3.0792468642468642,
           "city": "Vilnius",
-          "z_score": -1.3083297286601596
+          "z_score": -1.2793427189732944
         }
       ]
     }
   },
   "ml_model": {
-    "r2": 0.9889,
-    "rmse": 0.2035,
-    "mae": 0.1604
+    "r2": -0.0277,
+    "rmse": 5.4928,
+    "mae": 3.9038
+  },
+  "rag_demo": {
+    "generated_at": "2026-03-18",
+    "collection": "climate_dashboard_docs",
+    "corpus_size": 11,
+    "questions": [
+      {
+        "question": "Is Lithuania currently warmer or colder than normal?",
+        "answer": "Based on retrieved DAG outputs, Lithuania Weather Summary Lithuania year-to-date weather for 01-01 to 03-18 across Vilnius, Kaunas, Klaipeda shows a temperature anomaly of -3.46 C with z-score -1.47.",
+        "sources": [
+          {
+            "title": "weather_summary narrative 1",
+            "source": "weather/weather_summary.md",
+            "score": 0.4124
+          },
+          {
+            "title": "Lithuania YTD weather overview",
+            "source": "weather/ytd_summary.json",
+            "score": 0.1171
+          }
+        ]
+      },
+      {
+        "question": "How unusual is this March in Vilnius?",
+        "answer": "Based on retrieved DAG outputs, Vilnius March Temperature Anomalies Vilnius March through day 18 in 2026 has mean temperature 4.39 C, an anomaly of 4.24 C, and z-score 1.39.",
+        "sources": [
+          {
+            "title": "report narrative 1",
+            "source": "vilnius_march/report.md",
+            "score": 0.4213
+          },
+          {
+            "title": "Vilnius March anomaly overview",
+            "source": "vilnius_march/summary.json",
+            "score": 0.1642
+          },
+          {
+            "title": "Vilnius March historical extremes",
+            "source": "vilnius_march/march_temperature_anomalies.csv",
+            "score": 0.1107
+          }
+        ]
+      },
+      {
+        "question": "Can I trust the climate model outputs?",
+        "answer": "Based on retrieved DAG outputs, The climate model reports R2 -0.0277, RMSE 5.4928, and MAE 3.9038 on held-out data.",
+        "sources": [
+          {
+            "title": "Climate model evaluation",
+            "source": "climate/climate_evaluation.json",
+            "score": 0.3487
+          }
+        ]
+      }
+    ]
   }
 }

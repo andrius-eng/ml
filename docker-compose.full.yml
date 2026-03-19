@@ -15,10 +15,29 @@
 #   frontend             — Nginx-served Vite dashboard on :5173
 
 services:
+  airflow-init:
+    build:
+      context: ..
+      dockerfile: docker/airflow/Dockerfile
+    image: ${AIRFLOW_IMAGE:-airflow-custom:latest}
+
+  airflow-webserver:
+    build:
+      context: ..
+      dockerfile: docker/airflow/Dockerfile
+    image: ${AIRFLOW_IMAGE:-airflow-custom:latest}
+
+  airflow-scheduler:
+    build:
+      context: ..
+      dockerfile: docker/airflow/Dockerfile
+    image: ${AIRFLOW_IMAGE:-airflow-custom:latest}
+
   ws-server:
     build:
       context: ..
       dockerfile: docker/ws-server/Dockerfile
+    image: ${WS_IMAGE:-airflow-ws-server:latest}
     ports:
       - "3000:3000"
     environment:
@@ -41,6 +60,7 @@ services:
     build:
       context: ..
       dockerfile: docker/frontend/Dockerfile
+    image: ${FRONTEND_IMAGE:-airflow-frontend:latest}
     ports:
       - "5173:80"
     volumes:
@@ -48,9 +68,27 @@ services:
       - dashboard-data:/usr/share/nginx/html/data
     depends_on:
       - ws-server
+       - ml-server
     restart: unless-stopped
     networks:
       - default
+
+    ml-server:
+      build:
+        context: ..
+        dockerfile: docker/ml-pipeline/Dockerfile
+      image: ${PIPELINE_IMAGE:-airflow-ml-pipeline:latest}
+      command: sh -c "cd /app/python && python -m uvicorn serve:app --host 0.0.0.0 --port 8000"
+      ports:
+        - "8000:8000"
+      environment:
+        ML_OUTPUT_DIR: /project/python/output
+      volumes:
+        # Read pipeline outputs written by Airflow DAGs
+        - ..:/project:ro
+      restart: unless-stopped
+      networks:
+        - default
 
 volumes:
   dashboard-data:

@@ -18,21 +18,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-
-def make_synthetic_data(n_samples: int = 400):
-    rng = np.random.default_rng(42)
-    x = rng.normal(size=(n_samples, 1)).astype(np.float32)
-    y = 2 * x + 1 + rng.normal(0, 0.2, size=(n_samples, 1)).astype(np.float32)
-    return x, y
-
-
-class LinearModel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.linear = nn.Linear(1, 1)
-
-    def forward(self, x):
-        return self.linear(x)
+from model import LinearModel, make_synthetic_data
 
 
 def train(

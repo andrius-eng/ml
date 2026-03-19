@@ -1,0 +1,218 @@
+# Docker Swarm stack — full ML project (Airflow + WebSocket server + Frontend)
+#
+# Design goals:
+#   - No host bind mounts for code or outputs (multi-node safe)
+#   - Registry-ready images via env vars
+#   - One-shot Airflow bootstrap pattern inside Swarm (airflow-init service)
+#   - Node placement constraints to keep local volumes coherent
+#
+# ── Quick start (single-node Swarm) ──────────────────────────────────────────
+#
+#   # 1) Build local images (or push to your registry for multi-node)
+#   docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml build
+#
+#   # 2) Enable Swarm (once per machine)
+#   docker swarm init
+#
+#   # 3) Label the current node (required by placement constraints)
+#   NODE_ID=$(docker node ls --format '{{.ID}}' | head -1)
+#   docker node update --label-add ml_airflow=true --label-add ml_dashboard=true "$NODE_ID"
+#
+#   # 4) Deploy base stack (airflow-init replicas=0 by default)
+#   docker stack deploy -c docker-stack.yml ml
+#
+#   # 5) First-time bootstrap: run airflow-init once
+#   docker service scale ml_airflow-init=1
+#   docker service logs -f ml_airflow-init
+#   docker service scale ml_airflow-init=0
+#
+#   # 6) Verify services
+#   docker stack services ml
+#   docker stack ps ml
+#
+# ── Multi-node note ──────────────────────────────────────────────────────────
+# Set AIRFLOW_IMAGE/WS_IMAGE/FRONTEND_IMAGE to registry-backed tags and ensure
+# every node can pull them.
+#
+# ── Environment variables ────────────────────────────────────────────────────
+#   AIRFLOW_IMAGE        Airflow image with DAGs + python scripts baked in
+#   WS_IMAGE             WebSocket server image
+#   FRONTEND_IMAGE       Frontend nginx image
+#   AIRFLOW_UID          UID for Airflow containers (default: 50000)
+#   AIRFLOW_FERNET_KEY   Airflow encryption key (optional for local dev)
+#   DASHBOARD_WS_TOKEN   Optional WebSocket auth token
+#   POLL_INTERVAL_MS     Dashboard refresh interval (ms), default 3600000
+
+x-airflow-common: &airflow-common
+  image: ${AIRFLOW_IMAGE:-airflow-custom:latest}
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+    AIRFLOW__CORE__FERNET_KEY: "${AIRFLOW_FERNET_KEY:-}"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: "300"
+    PYTHONWARNINGS: "ignore::SyntaxWarning"
+    ML_PROJECT_ROOT: /opt/airflow/project
+    TRAIN_PYTHON_BIN: /usr/local/bin/python
+  volumes:
+    - airflow-logs:/opt/airflow/logs
+    - ml-output:/opt/airflow/project/python/output
+  user: "${AIRFLOW_UID:-50000}:0"
+  networks:
+    - ml-stack
+
+services:
+
+  # ── Database ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ml-stack
+    deploy:
+      placement:
+        constraints:
+          - node.labels.ml_airflow == true
+      restart_policy:
+        condition: any
+        delay: 5s
+
+  # ── Airflow ───────────────────────────────────────────────────────────────
+  # Init pattern for Swarm:
+  #   docker service scale ml_airflow-init=1
+  #   docker service logs -f ml_airflow-init
+  #   docker service scale ml_airflow-init=0
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        set -e
+        airflow db migrate
+        airflow users create \
+          --username admin \
+          --password admin \
+          --firstname Airflow \
+          --lastname Admin \
+          --role Admin \
+          --email admin@example.com || true
+    deploy:
+      replicas: 0
+      placement:
+        constraints:
+          - node.labels.ml_airflow == true
+      restart_policy:
+        condition: none
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --max-time 10 http://127.0.0.1:8080/health || exit 1"]
+      interval: 30s
+      timeout: 30s
+      retries: 10
+      start_period: 240s
+    deploy:
+      placement:
+        constraints:
+          - node.labels.ml_airflow == true
+      restart_policy:
+        condition: any
+        delay: 15s
+        max_attempts: 10
+        window: 300s
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      # Lightweight TCP check on the scheduler's internal gunicorn port (8793).
+      # "airflow jobs check" imports the full Airflow+SQLAlchemy stack on every
+      # probe, which exceeds 60 s on memory-constrained nodes (Colima).
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/8793' || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 5
+      start_period: 300s
+    deploy:
+      placement:
+        constraints:
+          - node.labels.ml_airflow == true
+      restart_policy:
+        condition: any
+        delay: 15s
+        max_attempts: 10
+        window: 300s
+
+  # ── Dashboard backend ─────────────────────────────────────────────────────
+  ws-server:
+    image: ${WS_IMAGE:-airflow-ws-server:latest}
+    ports:
+      - "3000:3000"
+    environment:
+      PROJECT_ROOT: /project
+      DASHBOARD_WS_HOST: 0.0.0.0
+      DASHBOARD_WS_TOKEN: "${DASHBOARD_WS_TOKEN:-}"
+      POLL_INTERVAL_MS: "${POLL_INTERVAL_MS:-3600000}"
+    volumes:
+      - ml-output:/project/python/output:ro
+      - dashboard-data:/project/src/data
+    networks:
+      - ml-stack
+    deploy:
+      placement:
+        constraints:
+          - node.labels.ml_dashboard == true
+      restart_policy:
+        condition: any
+        delay: 10s
+
+  # ── Dashboard frontend ────────────────────────────────────────────────────
+  frontend:
+    image: ${FRONTEND_IMAGE:-airflow-frontend:latest}
+    ports:
+      - "5173:80"
+    volumes:
+      - dashboard-data:/usr/share/nginx/html/data
+    networks:
+      - ml-stack
+    deploy:
+      placement:
+        constraints:
+          - node.labels.ml_dashboard == true
+      restart_policy:
+        condition: any
+        delay: 5s
+
+volumes:
+  postgres-db-volume:
+    driver: local
+  airflow-logs:
+    driver: local
+  ml-output:
+    driver: local
+  dashboard-data:
+    driver: local
+
+networks:
+  ml-stack:
+    driver: overlay
+    # attachable: allows docker exec / manual containers to join the network
+    attachable: true

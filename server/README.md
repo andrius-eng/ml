@@ -2,108 +2,77 @@
 
 ## Overview
 
-The WebSocket server (`dashboard-ws.js`) enables **live dashboard updates**. It periodically refreshes dashboard data from your Airflow workflows and pushes updates to connected clients in real-time.
+dashboard-ws.js pushes live dashboard refresh events to browsers and periodically
+regenerates dashboard JSON from pipeline outputs.
 
-## Features
+It does not answer RAG questions directly. Live RAG question answering is served
+by FastAPI at /rag/query.
 
-- **Hourly polling**: Refreshes dashboard data every 60 minutes using `export_frontend_data.py`
-- **Real-time push**: Broadcasts updates to all connected browser clients via WebSocket
-- **Auto-reconnect**: Browsers automatically reconnect if the server goes down
-- **Visual indicator**: Frontend displays "🔄 live" badge when connected
+## Responsibilities
 
-## Architecture
+- Keep src/data/dashboard.json fresh by running export_frontend_data.py
+- Broadcast dashboard_update events to connected clients
+- Enforce origin checks and connection rate limits
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ WebSocket Server (ws://localhost:3000)                          │
-├─────────────────────────────────────────────────────────────────┤
-│ • Listens for client connections (Vite frontend)               │
-│ • Polls every 60 minutes                                        │
-│ • Runs: python/export_frontend_data.py                          │
-│ • Broadcasts update message to all connected clients            │
-└─────────────────────────────────────────────────────────────────┘
-         ▲                                      │
-         │ (JSON update)                       │
-         │                                      ▼
-    ┌─────────────────────────────────────────────────────────────┐
-    │ Frontend (http://localhost:5173)                             │
-    ├─────────────────────────────────────────────────────────────┤
-    │ • Connects to WS on page load                               │
-    │ • Listens for 'dashboard_update' messages                   │
-    │ • Re-fetches /data/dashboard.json on update                 │
-    │ • Re-renders charts with fresh data                         │
-    └─────────────────────────────────────────────────────────────┘
-```
+## Run Locally
 
-## Starting the Server
-
-The server runs as a standalone Node.js process:
+From project root:
 
 ```bash
 cd /Users/andrius/Development/ml
-node server/dashboard-ws.js &
+node server/dashboard-ws.js
 ```
 
-Or via npm:
+Or from server directory:
 
 ```bash
 cd /Users/andrius/Development/ml/server
-npm start &
+npm start
 ```
 
-## Configuration
+## Related Services
 
-Edit `dashboard-ws.js` to adjust:
+- Frontend UI: http://localhost:5173
+- WebSocket endpoint: ws://localhost:3000
+- FastAPI RAG endpoint: http://127.0.0.1:8000/rag/query
 
-- **WS_PORT**: WebSocket server port (default: `3000`)
-- **POLL_INTERVAL_MS**: Refresh interval (default: `3600000` = 60 minutes)
-
-## Environment Requirements
-
-- Node.js 18+
-- Python environment with dependencies installed
-- Airflow + ML pipeline running
-
-## Integration with Startup Scripts
-
-To start all components together (Airflow, Vite, WebSocket):
+FastAPI startup command used by docs and local verification:
 
 ```bash
-# In ml/ directory
-./airflow/.venv/bin/airflow standalone &
-npm run dev &
-node server/dashboard-ws.js &
+cd /Users/andrius/Development/ml
+uv run uvicorn --app-dir python serve:app --host 127.0.0.1 --port 8000
 ```
 
-All three services will now run in parallel and the frontend will auto-update as data changes.
+## Docker Compose Full Stack
+
+The full compose setup wires:
+
+- ws-server for websocket updates
+- frontend nginx serving dashboard
+- ml-server for FastAPI predict and rag query endpoints
+
+Start stack:
+
+```bash
+cd /Users/andrius/Development/ml
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
+```
 
 ## Troubleshooting
 
-- **Connection refused (port 3000)**: Check if another process is using port 3000
-  ```bash
-  lsof -i :3000
-  ```
-
-- **Dashboard not updating**: Check WebSocket server console output and ensure `export_frontend_data.py` completes successfully
-
-- **"Dashboard WS unavailable" warning in browser**: This is OK for development; the dashboard will still work statically
-
-## Logs
-
-Check the WebSocket server output:
+Connection refused on ws://localhost:3000:
 
 ```bash
-tail -f <terminal_output> # Check the running process logs
+lsof -nP -iTCP:3000 -sTCP:LISTEN
 ```
 
-Example output on startup:
-```
-[Dashboard WS] Server listening on ws://localhost:3000
-[Dashboard WS] Starting hourly polling (interval: 60 min)
-[Dashboard WS] Refreshing dashboard data...
-[Dashboard WS] Export successful
-```
+RAG endpoint import error:
 
-## Memory Usage
+- If you see Could not import module serve, start uvicorn with app-dir python.
 
-The server is lightweight (~50MB on startup). Each client connection uses minimal memory (~1MB).
+Port already in use on 8000:
+
+```bash
+lsof -nP -iTCP:8000 -sTCP:LISTEN
+kill -9 <PID>
+```

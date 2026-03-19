@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from rag_pipeline import build_demo_payload
+
 
 def load_json(path: Path) -> dict:
     with open(path) as f:
@@ -26,7 +28,12 @@ def main() -> None:
     march_annual = pd.read_csv(out / "vilnius_march" / "march_temperature_anomalies.csv")
     weather_summary = load_json(out / "weather" / "ytd_summary.json")
     city_rankings = load_json(out / "weather" / "city_rankings.json")
-    ml_eval = load_json(out / "evaluation.json")
+    # Prefer the real-data climate model evaluation; fall back to legacy synthetic run
+    climate_eval = out / "climate" / "climate_evaluation.json"
+    legacy_eval = out / "evaluation.json"
+    ml_eval = load_json(climate_eval if climate_eval.exists() else legacy_eval)
+    rag_demo_path = out / "rag" / "rag_demo.json"
+    rag_demo = load_json(rag_demo_path) if rag_demo_path.exists() else build_demo_payload(out)
 
     annual_list = march_annual[["year", "mean_temp_c", "anomaly_c", "zscore"]].round(3).to_dict(orient="records")
     sorted_by_anomaly = march_annual.sort_values("anomaly_c")
@@ -76,6 +83,7 @@ def main() -> None:
             "rmse": round(ml_eval["rmse"], 4),
             "mae": round(ml_eval["mae"], 4),
         },
+        "rag_demo": rag_demo,
     }
 
     dest = Path(args.frontend_data)

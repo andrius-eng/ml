@@ -31,6 +31,7 @@ FETCH_SCRIPT = PROJECT_ROOT / "python" / "vilnius_march_fetch.py"
 ANALYZE_SCRIPT = PROJECT_ROOT / "python" / "vilnius_march_analyze.py"
 PLOT_SCRIPT = PROJECT_ROOT / "python" / "vilnius_march_plot.py"
 QUALITY_GATE_SCRIPT = PROJECT_ROOT / "python" / "vilnius_march_quality_gate.py"
+RAG_PIPELINE_SCRIPT = PROJECT_ROOT / "python" / "rag_pipeline.py"
 
 OUTPUT_DIR = PROJECT_ROOT / "python" / "output" / "vilnius_march"
 RAW_PATH = OUTPUT_DIR / "raw_daily_weather.csv"
@@ -38,6 +39,7 @@ ANNUAL_PATH = OUTPUT_DIR / "march_temperature_anomalies.csv"
 SUMMARY_PATH = OUTPUT_DIR / "summary.json"
 REPORT_PATH = OUTPUT_DIR / "report.md"
 PLOT_PATH = OUTPUT_DIR / "march_temperature_anomalies.png"
+RAG_DEMO_PATH = PROJECT_ROOT / "python" / "output" / "rag" / "rag_demo.json"
 EXECUTION_DATE = "{{ ds }}"
 
 
@@ -50,7 +52,7 @@ with DAG(
     dag_id="vilnius_march_temperature_anomalies",
     default_args=DEFAULT_ARGS,
     description="Compare Vilnius March temperature slices across the last 30 years",
-    schedule=None,
+    schedule="0 7 * * *",
     start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=["weather", "vilnius", "temperature", "march"],
@@ -99,4 +101,16 @@ with DAG(
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
     )
 
+    refresh_rag_context = BashOperator(
+        task_id="refresh_rag_context",
+        cwd=str(PROJECT_ROOT),
+        bash_command=(
+            "set -euo pipefail\n"
+            f'test -f "{RAG_PIPELINE_SCRIPT}"\n'
+            f'{project_python_command(str(RAG_PIPELINE_SCRIPT), "--output-dir", str(PROJECT_ROOT / "python" / "output"), "--demo-output", str(RAG_DEMO_PATH))}'
+        ),
+        env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+    )
+
     fetch_vilnius_march >> analyze_vilnius_march >> [plot_vilnius_march, quality_gate]
+    [plot_vilnius_march, quality_gate] >> refresh_rag_context
