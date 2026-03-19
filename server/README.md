@@ -19,14 +19,14 @@ by FastAPI at /rag/query.
 From project root:
 
 ```bash
-cd /Users/andrius/Development/ml
+cd ml
 node server/dashboard-ws.js
 ```
 
 Or from server directory:
 
 ```bash
-cd /Users/andrius/Development/ml/server
+cd ml/server
 npm start
 ```
 
@@ -39,7 +39,7 @@ npm start
 FastAPI startup command used by docs and local verification:
 
 ```bash
-cd /Users/andrius/Development/ml
+cd ml
 uv run uvicorn --app-dir python serve:app --host 127.0.0.1 --port 8000
 ```
 
@@ -54,7 +54,7 @@ The full compose setup wires:
 Start stack:
 
 ```bash
-cd /Users/andrius/Development/ml
+cd ml
 docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
 ```
 
