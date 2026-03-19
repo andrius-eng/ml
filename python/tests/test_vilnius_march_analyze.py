@@ -10,6 +10,7 @@ import sys
 import textwrap
 from pathlib import Path
 
+import calendar
 import pandas as pd
 import pytest
 
@@ -20,11 +21,21 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # ── helpers mirroring the analysis logic ──────────────────────────────────
 
 def compute_march_anomalies(raw: pd.DataFrame, execution_date_str: str, window_years: int = 5):
-    """Inline re-implementation of the core analysis step for unit testing."""
+    """Inline re-implementation of the core analysis step for unit testing.
+
+    month defaults to 3 (March) for backward compatibility with existing tests.
+    """
+    from datetime import date
+
+    return compute_month_anomalies(raw, execution_date_str, month=3, window_years=window_years)
+
+
+def compute_month_anomalies(raw: pd.DataFrame, execution_date_str: str, month: int = 3, window_years: int = 5):
+    """Generalized inline re-implementation of the core analysis step."""
     from datetime import date
 
     execution_date = date.fromisoformat(execution_date_str)
-    cutoff_day = execution_date.day if execution_date.month == 3 else 31
+    cutoff_day = execution_date.day if execution_date.month == month else calendar.monthrange(execution_date.year, month)[1]
     start_year = execution_date.year - window_years + 1
 
     raw = raw.copy()
@@ -36,7 +47,7 @@ def compute_march_anomalies(raw: pd.DataFrame, execution_date_str: str, window_y
     march = raw[
         (raw["year"] >= start_year)
         & (raw["year"] <= execution_date.year)
-        & (raw["month"] == 3)
+        & (raw["month"] == month)
         & (raw["day"] <= cutoff_day)
     ].copy()
 
@@ -53,12 +64,18 @@ def compute_march_anomalies(raw: pd.DataFrame, execution_date_str: str, window_y
 
 
 def _make_raw(temps_by_year: dict[int, float], days: int = 16) -> pd.DataFrame:
-    """Build a minimal raw CSV-like DataFrame with daily rows for each year/March."""
+    """Build a minimal raw CSV-like DataFrame with daily rows for each year and given month."""
+    rows = []
+    return _make_raw_for_month(temps_by_year, month=3, days=days)
+
+
+def _make_raw_for_month(temps_by_year: dict[int, float], month: int = 3, days: int = 16) -> pd.DataFrame:
+    """Build a minimal raw DataFrame with daily rows for each year and specified month."""
     rows = []
     for year, temp in temps_by_year.items():
         for day in range(1, days + 1):
             rows.append({
-                "time": f"{year}-03-{day:02d}",
+                "time": f"{year}-{month:02d}-{day:02d}",
                 "temperature_2m_mean": temp,
                 "precipitation_sum": 0.0,
                 "city": "Vilnius",

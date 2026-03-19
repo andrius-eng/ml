@@ -1,7 +1,12 @@
-"""Airflow DAG for Vilnius March temperature anomalies over the last 30 years."""
+"""Airflow DAG for Vilnius monthly temperature anomalies over the last 30 years.
+
+Set VILNIUS_ANALYSIS_MONTH env var (1-12) to analyze a different month.
+Default is 3 (March).
+"""
 
 from __future__ import annotations
 
+import calendar
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -27,18 +32,21 @@ PYTHON_BIN = os.environ.get("TRAIN_PYTHON_BIN", "python")
 if PYTHON_BIN != "python" and not Path(PYTHON_BIN).exists():
     PYTHON_BIN = "python"
 
+MONTH = int(os.environ.get("VILNIUS_ANALYSIS_MONTH", "3"))
+MONTH_SLUG = calendar.month_name[MONTH].lower()
+
 FETCH_SCRIPT = PROJECT_ROOT / "python" / "vilnius_march_fetch.py"
 ANALYZE_SCRIPT = PROJECT_ROOT / "python" / "vilnius_march_analyze.py"
 PLOT_SCRIPT = PROJECT_ROOT / "python" / "vilnius_march_plot.py"
 QUALITY_GATE_SCRIPT = PROJECT_ROOT / "python" / "vilnius_march_quality_gate.py"
 RAG_PIPELINE_SCRIPT = PROJECT_ROOT / "python" / "rag_pipeline.py"
 
-OUTPUT_DIR = PROJECT_ROOT / "python" / "output" / "vilnius_march"
+OUTPUT_DIR = PROJECT_ROOT / "python" / "output" / f"vilnius_{MONTH_SLUG}"
 RAW_PATH = OUTPUT_DIR / "raw_daily_weather.csv"
-ANNUAL_PATH = OUTPUT_DIR / "march_temperature_anomalies.csv"
+ANNUAL_PATH = OUTPUT_DIR / f"{MONTH_SLUG}_temperature_anomalies.csv"
 SUMMARY_PATH = OUTPUT_DIR / "summary.json"
 REPORT_PATH = OUTPUT_DIR / "report.md"
-PLOT_PATH = OUTPUT_DIR / "march_temperature_anomalies.png"
+PLOT_PATH = OUTPUT_DIR / f"{MONTH_SLUG}_temperature_anomalies.png"
 RAG_DEMO_PATH = PROJECT_ROOT / "python" / "output" / "rag" / "rag_demo.json"
 EXECUTION_DATE = "{{ ds }}"
 
@@ -49,38 +57,38 @@ def project_python_command(*args: str) -> str:
 
 
 with DAG(
-    dag_id="vilnius_march_temperature_anomalies",
+    dag_id=f"vilnius_{MONTH_SLUG}_temperature_anomalies",
     default_args=DEFAULT_ARGS,
-    description="Compare Vilnius March temperature slices across the last 30 years",
+    description=f"Compare Vilnius {calendar.month_name[MONTH]} temperature slices across the last 30 years",
     schedule="0 7 * * *",
     start_date=datetime(2025, 1, 1),
     catchup=False,
-    tags=["weather", "vilnius", "temperature", "march"],
+    tags=["weather", "vilnius", "temperature", MONTH_SLUG],
 ) as dag:
-    fetch_vilnius_march = BashOperator(
-        task_id="fetch_vilnius_march_weather",
+    fetch_vilnius_month = BashOperator(
+        task_id=f"fetch_vilnius_{MONTH_SLUG}_weather",
         cwd=str(PROJECT_ROOT),
         bash_command=(
             "set -euo pipefail\n"
             f'test -f "{FETCH_SCRIPT}"\n'
-            f'{project_python_command(str(FETCH_SCRIPT), "--execution-date", EXECUTION_DATE, "--window-years", "30", "--output", str(RAW_PATH))}'
+            f'{project_python_command(str(FETCH_SCRIPT), "--month", str(MONTH), "--execution-date", EXECUTION_DATE, "--window-years", "30", "--output", str(RAW_PATH))}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
     )
 
-    analyze_vilnius_march = BashOperator(
-        task_id="analyze_vilnius_march_anomalies",
+    analyze_vilnius_month = BashOperator(
+        task_id=f"analyze_vilnius_{MONTH_SLUG}_anomalies",
         cwd=str(PROJECT_ROOT),
         bash_command=(
             "set -euo pipefail\n"
             f'test -f "{ANALYZE_SCRIPT}"\n'
-            f'{project_python_command(str(ANALYZE_SCRIPT), "--raw-input", str(RAW_PATH), "--annual-output", str(ANNUAL_PATH), "--summary-output", str(SUMMARY_PATH), "--report-output", str(REPORT_PATH), "--execution-date", EXECUTION_DATE, "--window-years", "30")}'
+            f'{project_python_command(str(ANALYZE_SCRIPT), "--month", str(MONTH), "--raw-input", str(RAW_PATH), "--annual-output", str(ANNUAL_PATH), "--summary-output", str(SUMMARY_PATH), "--report-output", str(REPORT_PATH), "--execution-date", EXECUTION_DATE, "--window-years", "30")}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
     )
 
-    plot_vilnius_march = BashOperator(
-        task_id="plot_vilnius_march_anomalies",
+    plot_vilnius_month = BashOperator(
+        task_id=f"plot_vilnius_{MONTH_SLUG}_anomalies",
         cwd=str(PROJECT_ROOT),
         bash_command=(
             "set -euo pipefail\n"
@@ -91,7 +99,7 @@ with DAG(
     )
 
     quality_gate = BashOperator(
-        task_id="validate_vilnius_march_output",
+        task_id=f"validate_vilnius_{MONTH_SLUG}_output",
         cwd=str(PROJECT_ROOT),
         bash_command=(
             "set -euo pipefail\n"
@@ -112,5 +120,5 @@ with DAG(
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
     )
 
-    fetch_vilnius_march >> analyze_vilnius_march >> [plot_vilnius_march, quality_gate]
-    [plot_vilnius_march, quality_gate] >> refresh_rag_context
+    fetch_vilnius_month >> analyze_vilnius_month >> [plot_vilnius_month, quality_gate]
+    [plot_vilnius_month, quality_gate] >> refresh_rag_context

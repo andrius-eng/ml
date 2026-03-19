@@ -57,18 +57,18 @@ function renderHeader(d) {
 function renderKPIs(d) {
   const row = document.getElementById('kpi-row');
   row.innerHTML = '';
-  const m = d.vilnius_march;
+  const m = d.vilnius_month_anomaly;
   const w = d.lithuania_weather;
 
   const items = [
     {
-      label: 'Vilnius March 2026 anomaly',
+      label: `Vilnius ${m.month_name} ${m.latest_year.year} anomaly`,
       value: sign(m.latest_year.anomaly_c) + m.latest_year.anomaly_c.toFixed(1) + ' °C',
       sub: `z = ${sign(m.latest_year.zscore)}${m.latest_year.zscore.toFixed(2)} · ${zLabel(m.latest_year.zscore)}`,
       highlight: true,
     },
     {
-      label: '30-yr March baseline (1997–2026)',
+      label: `30-yr ${m.month_name} baseline`,
       value: sign(m.baseline.mean_temp_c) + m.baseline.mean_temp_c.toFixed(2) + ' °C',
       sub: `σ = ${m.baseline.std_temp_c.toFixed(2)} °C`,
     },
@@ -88,7 +88,7 @@ function renderKPIs(d) {
 }
 
 function renderMarchChart(d) {
-  const m = d.vilnius_march;
+  const m = d.vilnius_month_anomaly;
   const currentYear = m.latest_year.year;
 
   document.getElementById('cutoff-day').textContent = m.window.cutoff_day;
@@ -115,7 +115,7 @@ function renderMarchChart(d) {
       labels,
       datasets: [
         {
-          label: 'March anomaly (°C)',
+          label: `${m.month_name} anomaly (°C)`,
           data: values,
           backgroundColor: bgColors,
           borderColor: borderColors,
@@ -304,7 +304,8 @@ function renderPipeline() {
     },
     {
       name: 'vilnius_march_temperature_anomalies',
-      desc: 'Historical 30-year deep-dive: extracts every March 1–N slice, computes year-by-year temperature anomaly and z-score, generates a longitudinal trend chart.',
+      name: `vilnius_${d.vilnius_month_anomaly ? d.vilnius_month_anomaly.month_name.toLowerCase() : 'march'}_temperature_anomalies`,
+      desc: `Historical 30-year deep-dive: extracts every ${d.vilnius_month_anomaly ? d.vilnius_month_anomaly.month_name : 'March'} 1–N slice, computes year-by-year temperature anomaly and z-score, generates a longitudinal trend chart.`,
       steps: ['fetch_vilnius_march', 'analyze_anomalies', 'plot_anomalies', 'quality_gate', 'refresh_rag_context'],
       tags: ['ERA5', 'Climate trend', '30-year baseline'],
     },

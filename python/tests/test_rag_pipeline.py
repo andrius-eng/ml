@@ -26,6 +26,8 @@ def create_pipeline_fixture(tmp_path: Path) -> Path:
     (march_dir / "summary.json").write_text(
         json.dumps(
             {
+                "month": 3,
+                "month_name": "March",
                 "window": {
                     "start_year": 2022,
                     "end_year": 2026,

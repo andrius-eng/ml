@@ -28,6 +28,8 @@ year,mean_temp_c,days_observed,anomaly_c,zscore
 """
 
 MARCH_SUMMARY = {
+    "month": 3,
+    "month_name": "March",
     "window": {
         "start_year": 2022,
         "end_year": 2026,
@@ -115,7 +117,7 @@ class TestExportFrontendData:
         self._run_export(pipeline_output_dir, dest)
         data = json.loads(dest.read_text())
         assert "generated_at" in data
-        assert "vilnius_march" in data
+        assert "vilnius_month_anomaly" in data
         assert "lithuania_weather" in data
         assert "ml_model" in data
         assert "rag_demo" in data
@@ -124,7 +126,7 @@ class TestExportFrontendData:
         dest = tmp_path / "dashboard.json"
         self._run_export(pipeline_output_dir, dest)
         data = json.loads(dest.read_text())
-        assert len(data["vilnius_march"]["annual"]) == 5
+        assert len(data["vilnius_month_anomaly"]["annual"]) == 5
 
     def test_ml_metrics_are_floats(self, pipeline_output_dir, tmp_path):
         dest = tmp_path / "dashboard.json"
@@ -139,13 +141,13 @@ class TestExportFrontendData:
         dest = tmp_path / "dashboard.json"
         self._run_export(pipeline_output_dir, dest)
         data = json.loads(dest.read_text())
-        assert data["vilnius_march"]["latest_year"]["year"] == 2026
+        assert data["vilnius_month_anomaly"]["latest_year"]["year"] == 2026
 
     def test_extremes_present(self, pipeline_output_dir, tmp_path):
         dest = tmp_path / "dashboard.json"
         self._run_export(pipeline_output_dir, dest)
         data = json.loads(dest.read_text())
-        extremes = data["vilnius_march"]["extremes"]
+        extremes = data["vilnius_month_anomaly"]["extremes"]
         assert "warmest" in extremes and "coldest" in extremes
         assert extremes["warmest"]["year"] == 2026
         assert extremes["coldest"]["year"] == 2023

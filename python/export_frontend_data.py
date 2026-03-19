@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import calendar
 import json
 from datetime import date
 from pathlib import Path
@@ -21,11 +22,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Export pipeline outputs for frontend dashboard")
     parser.add_argument("--output-dir", type=str, default="python/output")
     parser.add_argument("--frontend-data", type=str, default="src/data/dashboard.json")
+    parser.add_argument("--month", type=int, default=3, help="Calendar month number for the Vilnius monthly anomaly pipeline (1-12)")
     args = parser.parse_args()
 
     out = Path(args.output_dir)
-    march_summary = load_json(out / "vilnius_march" / "summary.json")
-    march_annual = pd.read_csv(out / "vilnius_march" / "march_temperature_anomalies.csv")
+    month_slug = calendar.month_name[args.month].lower()
+    month_name = calendar.month_name[args.month]
+    month_csv_name = f"{month_slug}_temperature_anomalies.csv"
+
+    month_summary = load_json(out / f"vilnius_{month_slug}" / "summary.json")
+    month_annual = pd.read_csv(out / f"vilnius_{month_slug}" / month_csv_name)
     weather_summary = load_json(out / "weather" / "ytd_summary.json")
     city_rankings = load_json(out / "weather" / "city_rankings.json")
     # Prefer the real-data climate model evaluation; fall back to legacy synthetic run
@@ -35,19 +41,20 @@ def main() -> None:
     rag_demo_path = out / "rag" / "rag_demo.json"
     rag_demo = load_json(rag_demo_path) if rag_demo_path.exists() else build_demo_payload(out)
 
-    annual_list = march_annual[["year", "mean_temp_c", "anomaly_c", "zscore"]].round(3).to_dict(orient="records")
-    sorted_by_anomaly = march_annual.sort_values("anomaly_c")
+    annual_list = month_annual[["year", "mean_temp_c", "anomaly_c", "zscore"]].round(3).to_dict(orient="records")
+    sorted_by_anomaly = month_annual.sort_values("anomaly_c")
     warmest = sorted_by_anomaly.iloc[-1]
     coldest = sorted_by_anomaly.iloc[0]
-    latest_year_row = march_annual.sort_values("year").iloc[-1]
+    latest_year_row = month_annual.sort_values("year").iloc[-1]
 
     dashboard = {
         "generated_at": date.today().isoformat(),
-        "vilnius_march": {
-            "window": march_summary["window"],
+        "vilnius_month_anomaly": {
+            "month_name": month_name,
+            "window": month_summary["window"],
             "baseline": {
-                "mean_temp_c": round(march_summary["baseline"]["mean_temp_c"], 3),
-                "std_temp_c": round(march_summary["baseline"]["std_temp_c"], 3),
+                "mean_temp_c": round(month_summary["baseline"]["mean_temp_c"], 3),
+                "std_temp_c": round(month_summary["baseline"]["std_temp_c"], 3),
             },
             "latest_year": {
                 "year": int(latest_year_row["year"]),

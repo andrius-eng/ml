@@ -113,7 +113,6 @@ def build_documents(output_dir: Path) -> list[dict]:
 
     weather_summary = load_optional_json(output_dir / "weather" / "ytd_summary.json")
     city_rankings = load_optional_json(output_dir / "weather" / "city_rankings.json")
-    march_summary = load_optional_json(output_dir / "vilnius_march" / "summary.json")
     climate_eval = load_optional_json(output_dir / "climate" / "climate_evaluation.json")
     if climate_eval is None:
         climate_eval = load_optional_json(output_dir / "evaluation.json")
@@ -164,36 +163,46 @@ def build_documents(output_dir: Path) -> list[dict]:
             " ".join(fragments),
         )
 
-    march_csv = output_dir / "vilnius_march" / "march_temperature_anomalies.csv"
-    if isinstance(march_summary, dict) and march_csv.exists():
-        annual = pd.read_csv(march_csv)
-        if not annual.empty:
-            latest = annual.sort_values("year").iloc[-1]
-            warmest = annual.sort_values("anomaly_c").iloc[-1]
-            coldest = annual.sort_values("anomaly_c").iloc[0]
-            baseline = march_summary.get("baseline", {})
-            window = march_summary.get("window", {})
-            add_document(
-                documents,
-                "march-overview",
-                "Vilnius March anomaly overview",
-                "vilnius_march/summary.json",
-                (
-                    f"Vilnius March through day {window.get('cutoff_day', '?')} in {int(latest['year'])} has mean temperature {float(latest['mean_temp_c']):.2f} C, "
-                    f"an anomaly of {float(latest['anomaly_c']):.2f} C, and z-score {float(latest['zscore']):.2f}. "
-                    f"The baseline mean is {baseline.get('mean_temp_c', 0.0):.2f} C with standard deviation {baseline.get('std_temp_c', 0.0):.2f} C."
-                ),
-            )
-            add_document(
-                documents,
-                "march-extremes",
-                "Vilnius March historical extremes",
-                "vilnius_march/march_temperature_anomalies.csv",
-                (
-                    f"The warmest March slice in the window was {int(warmest['year'])} with anomaly {float(warmest['anomaly_c']):.2f} C. "
-                    f"The coldest was {int(coldest['year'])} with anomaly {float(coldest['anomaly_c']):.2f} C."
-                ),
-            )
+    # Discover any vilnius_{month}/ directories and index their anomaly data
+    for summary_path in sorted(output_dir.glob("vilnius_*/summary.json")):
+        month_dir = summary_path.parent
+        month_summary = load_optional_json(summary_path)
+        if not isinstance(month_summary, dict):
+            continue
+        dir_stem = month_dir.name  # e.g. "vilnius_march"
+        month_name = month_summary.get("month_name", dir_stem.replace("vilnius_", "").capitalize())
+        month_slug = month_name.lower()
+        csvs = list(month_dir.glob("*_temperature_anomalies.csv"))
+        month_csv = csvs[0] if csvs else month_dir / f"{month_slug}_temperature_anomalies.csv"
+        if month_csv.exists():
+            annual = pd.read_csv(month_csv)
+            if not annual.empty:
+                latest = annual.sort_values("year").iloc[-1]
+                warmest = annual.sort_values("anomaly_c").iloc[-1]
+                coldest = annual.sort_values("anomaly_c").iloc[0]
+                baseline = month_summary.get("baseline", {})
+                window = month_summary.get("window", {})
+                add_document(
+                    documents,
+                    f"{month_slug}-overview",
+                    f"Vilnius {month_name} anomaly overview",
+                    f"{dir_stem}/summary.json",
+                    (
+                        f"Vilnius {month_name} through day {window.get('cutoff_day', '?')} in {int(latest['year'])} has mean temperature {float(latest['mean_temp_c']):.2f} C, "
+                        f"an anomaly of {float(latest['anomaly_c']):.2f} C, and z-score {float(latest['zscore']):.2f}. "
+                        f"The baseline mean is {baseline.get('mean_temp_c', 0.0):.2f} C with standard deviation {baseline.get('std_temp_c', 0.0):.2f} C."
+                    ),
+                )
+                add_document(
+                    documents,
+                    f"{month_slug}-extremes",
+                    f"Vilnius {month_name} historical extremes",
+                    f"{dir_stem}/{month_csv.name}",
+                    (
+                        f"The warmest {month_name} slice in the window was {int(warmest['year'])} with anomaly {float(warmest['anomaly_c']):.2f} C. "
+                        f"The coldest was {int(coldest['year'])} with anomaly {float(coldest['anomaly_c']):.2f} C."
+                    ),
+                )
 
     if isinstance(climate_eval, dict):
         r2 = float(climate_eval.get("r2", 0.0))
@@ -211,7 +220,11 @@ def build_documents(output_dir: Path) -> list[dict]:
             ),
         )
 
-    for rel_path in [Path("weather") / "weather_summary.md", Path("vilnius_march") / "report.md"]:
+    vilnius_report_paths = [
+        Path(month_dir.name) / "report.md"
+        for month_dir in sorted(output_dir.glob("vilnius_*/"))
+    ]
+    for rel_path in [Path("weather") / "weather_summary.md", *vilnius_report_paths]:
         report_path = output_dir / rel_path
         if report_path.exists():
             paragraphs = [segment.strip() for segment in report_path.read_text().split("\n\n") if segment.strip()]
