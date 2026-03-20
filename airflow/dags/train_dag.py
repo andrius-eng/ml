@@ -49,8 +49,9 @@ DIAGNOSTICS_SCRIPT = PROJECT_ROOT / "python" / "diagnostics.py"
 QUALITY_GATE_SCRIPT = PROJECT_ROOT / "python" / "quality_gate.py"
 RAG_PIPELINE_SCRIPT = PROJECT_ROOT / "python" / "rag_pipeline.py"
 
-# Input: produced by the lithuania_weather_analysis DAG
-WEATHER_DAILY_PATH = PROJECT_ROOT / "python" / "output" / "weather" / "country_daily_weather.csv"
+# Input: raw city-level data produced by the lithuania_weather_analysis DAG
+# climate_data.py aggregates cities → country-level internally
+WEATHER_DAILY_PATH = PROJECT_ROOT / "python" / "output" / "weather" / "raw_daily_weather.csv"
 
 # Outputs: all under python/output/climate/
 TRACKING_DIR = PROJECT_ROOT / "mlruns"
@@ -103,7 +104,7 @@ with DAG(
         bash_command=(
             "set -euo pipefail\n"
             f'test -f "{CLIMATE_TRAIN_SCRIPT}"\n'
-            f'{project_python_command(str(CLIMATE_TRAIN_SCRIPT), "--train-data", str(TRAIN_SET_PATH), "--epochs", "100", "--lr", "0.001", "--batch-size", "128", "--tracking-uri", str(TRACKING_DIR), "--model-path", str(MODEL_PATH), "--metrics-path", str(METRICS_PATH))}'
+            f'{project_python_command(str(CLIMATE_TRAIN_SCRIPT), "--train-data", str(TRAIN_SET_PATH), "--epochs", "200", "--lr", "0.001", "--batch-size", "128", "--tracking-uri", str(TRACKING_DIR), "--model-path", str(MODEL_PATH), "--metrics-path", str(METRICS_PATH))}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
     )
@@ -147,7 +148,7 @@ with DAG(
         bash_command=(
             "set -euo pipefail\n"
             f'test -f "{QUALITY_GATE_SCRIPT}"\n'
-            # R² > 0.65: seasonality signal captured; MSE < 50 °C²: daily noise expected
+            # R² > 0.65: model must explain 65% of variance; MSE < 50 °C²: daily noise expected
             f'{project_python_command(str(QUALITY_GATE_SCRIPT), "--summary-json", str(EVALUATION_PATH), "--max-mse", "50.0", "--min-r2", "0.65")}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},

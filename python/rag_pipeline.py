@@ -315,6 +315,58 @@ def retrieve(question: str, output_dir: Path, top_k: int = 3) -> list[dict]:
     ]
 
 
+def _interpret_answer(raw_answer: str) -> str:
+    """Generate a plain-language interpretation from retrieved metrics."""
+    import re
+
+    lines: list[str] = []
+
+    # Look for temperature anomaly
+    m = re.search(r"temperature anomaly of\s*([+-]?\d+\.?\d*)\s*[°C]", raw_answer, re.IGNORECASE)
+    if not m:
+        m = re.search(r"anomaly[:\s]+([+-]?\d+\.?\d*)\s*°?C", raw_answer, re.IGNORECASE)
+    if m:
+        val = float(m.group(1))
+        direction = "warmer" if val > 0 else "colder"
+        intensity = "slightly" if abs(val) < 1 else ("notably" if abs(val) < 3 else "significantly")
+        lines.append(f"This means it has been {intensity} {direction} than the 30-year average ({val:+.1f} °C).")
+
+    # Look for z-score
+    m = re.search(r"z[- ]?score[:\s]+([+-]?\d+\.?\d*)", raw_answer, re.IGNORECASE)
+    if m:
+        z = float(m.group(1))
+        absz = abs(z)
+        if absz < 0.5:
+            desc = "within the normal range"
+        elif absz < 1.0:
+            desc = "slightly unusual"
+        elif absz < 1.5:
+            desc = "anomalous — outside typical variability"
+        elif absz < 2.0:
+            desc = "very anomalous — in the ~5th percentile of historical years"
+        else:
+            desc = "extreme — a rare event in the 35-year record"
+        lines.append(f"A z-score of {z:+.2f} is {desc}.")
+
+    # Look for R² / model performance
+    m = re.search(r"[Rr]²?\s*[=:]\s*([+-]?\d+\.?\d*)", raw_answer)
+    if m:
+        r2 = float(m.group(1))
+        if r2 >= 0.8:
+            lines.append(f"R² = {r2:.2f} indicates the model explains most of the variance — a good fit.")
+        elif r2 >= 0.65:
+            lines.append(f"R² = {r2:.2f} means the model captures the main seasonal pattern reasonably well.")
+        elif r2 >= 0:
+            lines.append(f"R² = {r2:.2f} suggests the model has limited predictive power.")
+        else:
+            lines.append(f"R² = {r2:.2f} means the model is worse than predicting the mean — it needs improvement.")
+
+    if not lines:
+        return ""
+
+    return " ".join(lines)
+
+
 def answer_question(question: str, output_dir: Path, top_k: int = 3) -> dict:
     matches = retrieve(question, output_dir, top_k=top_k)
     if not matches:
@@ -327,9 +379,11 @@ def answer_question(question: str, output_dir: Path, top_k: int = 3) -> dict:
     snippets = [first_sentences(match["text"], limit=1) for match in matches[:2]]
     snippets = [snippet for snippet in snippets if snippet]
     answer = "Based on retrieved DAG outputs, " + " ".join(snippets)
+    interpretation = _interpret_answer(answer)
     return {
         "question": question,
         "answer": answer,
+        "interpretation": interpretation,
         "sources": [
             {
                 "title": match["title"],

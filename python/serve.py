@@ -6,6 +6,7 @@ from pathlib import Path
 
 import torch
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from model import LinearModel
@@ -45,10 +46,18 @@ def get_model() -> LinearModel | None:
 
 app = FastAPI(title='Torch + MLflow Demo')
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost', 'http://127.0.0.1'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
 
 class RagQueryResponse(BaseModel):
     question: str
     answer: str
+    interpretation: str = ''
     sources: list[dict]
 
 

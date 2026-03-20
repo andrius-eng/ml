@@ -24,6 +24,16 @@ import numpy as np
 import pandas as pd
 
 
+def aggregate_to_country(df: pd.DataFrame) -> pd.DataFrame:
+    """Average city-level rows to one country row per day."""
+    df = df.copy()
+    df['time'] = pd.to_datetime(df['time'])
+    return (
+        df.groupby('time', as_index=False)[['temperature_2m_mean', 'precipitation_sum']]
+        .mean()
+    )
+
+
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df['time'] = pd.to_datetime(df['time'])
@@ -44,8 +54,8 @@ def main() -> None:
     parser.add_argument(
         '--input',
         type=str,
-        default='python/output/weather/country_daily_weather.csv',
-        help='country_daily_weather.csv produced by the lithuania_weather_analysis DAG',
+        default='python/output/weather/raw_daily_weather.csv',
+        help='raw_daily_weather.csv (city-level) produced by the lithuania_weather_analysis DAG',
     )
     parser.add_argument(
         '--train-output',
@@ -66,7 +76,8 @@ def main() -> None:
     args = parser.parse_args()
 
     raw = pd.read_csv(args.input)
-    features = build_features(raw)
+    country = aggregate_to_country(raw)
+    features = build_features(country)
 
     train_df = features[features['year'] < args.test_from_year].drop(columns=['year'])
     test_df = features[features['year'] >= args.test_from_year].drop(columns=['year'])

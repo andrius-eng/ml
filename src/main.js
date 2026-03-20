@@ -7,6 +7,8 @@ Chart.register(...registerables);
 let marchChartInstance = null;
 let cityTempChartInstance = null;
 let cityPrecipChartInstance = null;
+let mlParityChartInstance = null;
+let mlResidualChartInstance = null;
 
 function formatSource(source) {
   return source.source || source.title;
@@ -239,10 +241,115 @@ function renderMLMetrics(d) {
   const ml = d.ml_model;
 
   [
-    { label: 'R² (test set)', value: ml.r2.toFixed(4), sub: 'Variance explained' },
-    { label: 'RMSE', value: ml.rmse.toFixed(4), sub: 'Root mean squared error' },
-    { label: 'MAE', value: ml.mae.toFixed(4), sub: 'Mean absolute error' },
+    { label: 'R² (test set)', value: ml.r2.toFixed(4), sub: 'Variance explained', highlight: ml.r2 >= 0.65 },
+    { label: 'RMSE', value: ml.rmse.toFixed(2) + ' °C', sub: 'Root mean squared error' },
+    { label: 'MAE', value: ml.mae.toFixed(2) + ' °C', sub: 'Mean absolute error' },
   ].forEach((item) => row.appendChild(kpiCard(item)));
+}
+
+function renderMLCharts(d) {
+  const preds = d.ml_model.predictions;
+  if (!preds || preds.length === 0) return;
+
+  // ── Parity chart: predicted vs actual ──
+  const parityData = preds.map((p) => ({ x: p.actual, y: p.predicted }));
+  const allVals = preds.flatMap((p) => [p.actual, p.predicted]);
+  const lo = Math.floor(Math.min(...allVals)) - 2;
+  const hi = Math.ceil(Math.max(...allVals)) + 2;
+
+  if (mlParityChartInstance) mlParityChartInstance.destroy();
+  mlParityChartInstance = new Chart(document.getElementById('mlParityChart'), {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          label: 'Predictions',
+          data: parityData,
+          backgroundColor: 'rgba(99,202,183,0.5)',
+          borderColor: 'rgba(99,202,183,0.8)',
+          pointRadius: 2.5,
+        },
+        {
+          label: 'Perfect fit',
+          data: [{ x: lo, y: lo }, { x: hi, y: hi }],
+          type: 'line',
+          borderColor: 'rgba(255,255,255,0.3)',
+          borderDash: [6, 4],
+          borderWidth: 1,
+          pointRadius: 0,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: { display: true, text: 'Predicted vs Actual (°C)', color: '#f7f7f7' },
+        legend: { display: false },
+      },
+      scales: {
+        x: {
+          min: lo, max: hi,
+          title: { display: true, text: 'Actual °C', color: 'rgba(255,255,255,0.45)' },
+          grid: { color: 'rgba(255,255,255,0.06)' },
+          ticks: { color: 'rgba(255,255,255,0.6)' },
+        },
+        y: {
+          min: lo, max: hi,
+          title: { display: true, text: 'Predicted °C', color: 'rgba(255,255,255,0.45)' },
+          grid: { color: 'rgba(255,255,255,0.08)' },
+          ticks: { color: 'rgba(255,255,255,0.6)' },
+        },
+      },
+    },
+  });
+
+  // ── Residual histogram ──
+  const residuals = preds.map((p) => +(p.actual - p.predicted).toFixed(2));
+  const bucketSize = 1;
+  const rMin = Math.floor(Math.min(...residuals));
+  const rMax = Math.ceil(Math.max(...residuals));
+  const bucketLabels = [];
+  const bucketCounts = [];
+  for (let b = rMin; b <= rMax; b += bucketSize) {
+    bucketLabels.push(b);
+    bucketCounts.push(residuals.filter((r) => r >= b && r < b + bucketSize).length);
+  }
+
+  if (mlResidualChartInstance) mlResidualChartInstance.destroy();
+  mlResidualChartInstance = new Chart(document.getElementById('mlResidualChart'), {
+    type: 'bar',
+    data: {
+      labels: bucketLabels,
+      datasets: [{
+        label: 'Count',
+        data: bucketCounts,
+        backgroundColor: 'rgba(99,202,183,0.6)',
+        borderRadius: 2,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        title: { display: true, text: 'Residual Distribution (°C)', color: '#f7f7f7' },
+        legend: { display: false },
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Actual − Predicted (°C)', color: 'rgba(255,255,255,0.45)' },
+          grid: { color: 'rgba(255,255,255,0.06)' },
+          ticks: { color: 'rgba(255,255,255,0.6)' },
+        },
+        y: {
+          title: { display: true, text: 'Frequency', color: 'rgba(255,255,255,0.45)' },
+          grid: { color: 'rgba(255,255,255,0.08)' },
+          ticks: { color: 'rgba(255,255,255,0.6)' },
+        },
+      },
+    },
+  });
 }
 
 function renderRagDemo(d) {
@@ -292,7 +399,7 @@ function renderPipeline() {
   const dags = [
     {
       name: 'climate_temperature_model',
-      desc: 'Trains a PyTorch MLP on real ERA5 Lithuania daily weather (1991–2022) to predict daily mean temperature. Evaluates R² and RMSE on held-out 2023+ data, logging to MLflow.',
+      desc: 'Trains a PyTorch MLP on full-year ERA5 Lithuania daily weather (1991–2022) to predict daily mean temperature from seasonal + trend features. Evaluates R² and RMSE on held-out 2023+ data, logging to MLflow.',
       steps: ['prepare_data', 'train_model', 'evaluate_model', 'quality_gate', 'refresh_rag_context'],
       tags: ['PyTorch', 'MLflow', 'ERA5', 'Seasonality'],
     },
@@ -389,6 +496,7 @@ function connectWebSocket() {
       renderMarchChart(newData);
       renderCityCharts(newData);
       renderMLMetrics(newData);
+      renderMLCharts(newData);
       renderRagDemo(newData);
       renderPipeline();
 
@@ -420,6 +528,40 @@ function connectWebSocket() {
   });
 }
 
+// ── RAG query form handler ──────────────────────────────────────────────────
+
+document.getElementById('rag-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const input = document.getElementById('rag-input');
+  const question = input.value.trim();
+  if (!question) return;
+
+  const resultDiv = document.getElementById('rag-query-result');
+  resultDiv.textContent = 'Loading...';
+  resultDiv.removeAttribute('hidden');
+
+  try {
+    const response = await fetch(`http://localhost:8000/rag/query?q=${encodeURIComponent(question)}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+
+    const interpHtml = data.interpretation
+      ? `<div class="rag-interpretation">${data.interpretation}</div>`
+      : '';
+
+    resultDiv.innerHTML = `
+      <h3>${data.question}</h3>
+      <p>${data.answer}</p>
+      ${interpHtml}
+      <div class="rag-sources">
+        ${data.sources.map(s => `<span>${s.title} (${s.score.toFixed(2)})</span>`).join('')}
+      </div>
+    `;
+  } catch (err) {
+    resultDiv.textContent = `Error: ${err.message}`;
+  }
+});
+
 // ── boot ─────────────────────────────────────────────────────────────────────
 
 function init() {
@@ -428,6 +570,7 @@ function init() {
   renderMarchChart(data);
   renderCityCharts(data);
   renderMLMetrics(data);
+  renderMLCharts(data);
   renderRagDemo(data);
   renderPipeline();
 

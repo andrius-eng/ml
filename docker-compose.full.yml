@@ -80,6 +80,8 @@ services:
     volumes:
       # Read pipeline outputs written by Airflow DAGs
       - ..:/project:ro
+      # Qdrant local DB needs write access for its lock file
+      - ../python/output/rag:/project/python/output/rag
     restart: unless-stopped
     networks:
       - default

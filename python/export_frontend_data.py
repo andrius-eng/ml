@@ -8,6 +8,7 @@ import json
 from datetime import date
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from rag_pipeline import build_demo_payload
@@ -16,6 +17,19 @@ from rag_pipeline import build_demo_payload
 def load_json(path: Path) -> dict:
     with open(path) as f:
         return json.load(f)
+
+
+def _sample_predictions(df: pd.DataFrame, max_points: int = 200) -> list[dict]:
+    """Downsample predictions for frontend chart rendering."""
+    if df.empty:
+        return []
+    if len(df) > max_points:
+        idx = np.round(np.linspace(0, len(df) - 1, max_points)).astype(int)
+        df = df.iloc[idx]
+    return [
+        {"actual": round(float(r.y_true), 2), "predicted": round(float(r.y_pred), 2)}
+        for r in df.itertuples()
+    ]
 
 
 def main() -> None:
@@ -38,6 +52,8 @@ def main() -> None:
     climate_eval = out / "climate" / "climate_evaluation.json"
     legacy_eval = out / "evaluation.json"
     ml_eval = load_json(climate_eval if climate_eval.exists() else legacy_eval)
+    predictions_csv = out / "climate" / "climate_predictions.csv"
+    predictions_df = pd.read_csv(predictions_csv) if predictions_csv.exists() else pd.DataFrame()
     rag_demo_path = out / "rag" / "rag_demo.json"
     rag_demo = load_json(rag_demo_path) if rag_demo_path.exists() else build_demo_payload(out)
 
@@ -89,6 +105,7 @@ def main() -> None:
             "r2": round(ml_eval["r2"], 4),
             "rmse": round(ml_eval["rmse"], 4),
             "mae": round(ml_eval["mae"], 4),
+            "predictions": _sample_predictions(predictions_df),
         },
         "rag_demo": rag_demo,
     }

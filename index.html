@@ -75,10 +75,18 @@
       <section class="card" id="ml-section">
         <h2>ML Model — Regression Performance</h2>
         <p class="section-desc">
-          PyTorch feed-forward network trained via Airflow + MLflow on
-          weather-derived features. Metrics from held-out test set.
+          PyTorch MLP trained on full-year ERA5 daily temperatures (1991–2022)
+          using seasonal &amp; trend features. Metrics from held-out 2023+ test set.
         </p>
         <div class="kpi-row" id="ml-kpi-row"></div>
+        <div class="chart-row">
+          <div class="chart-wrap chart-wrap--half">
+            <canvas id="mlParityChart"></canvas>
+          </div>
+          <div class="chart-wrap chart-wrap--half">
+            <canvas id="mlResidualChart"></canvas>
+          </div>
+        </div>
       </section>
 
       <section class="card" id="rag-section">

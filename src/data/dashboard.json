@@ -1,315 +1,1123 @@
 {
-  "generated_at": "2026-03-18",
-  "vilnius_march": {
+  "generated_at": "2026-03-20",
+  "vilnius_month_anomaly": {
+    "month_name": "March",
     "window": {
-      "cutoff_day": 18,
+      "cutoff_day": 20,
       "end_year": 2026,
-      "execution_date": "2026-03-18",
+      "execution_date": "2026-03-20",
       "start_year": 1997,
       "years_included": 30
     },
     "baseline": {
-      "mean_temp_c": 0.156,
-      "std_temp_c": 3.046
+      "mean_temp_c": 0.238,
+      "std_temp_c": 2.946
     },
     "latest_year": {
       "year": 2026,
-      "mean_temp_c": 4.39,
-      "anomaly_c": 4.24,
+      "mean_temp_c": 4.34,
+      "anomaly_c": 4.1,
       "zscore": 1.39
     },
     "extremes": {
       "warmest": {
         "year": 2026,
-        "anomaly_c": 4.24
+        "anomaly_c": 4.1
       },
       "coldest": {
         "year": 2013,
-        "anomaly_c": -6.13
+        "anomaly_c": -6.34
       }
     },
     "annual": [
       {
         "year": 1997,
-        "mean_temp_c": 2.339,
-        "anomaly_c": 2.183,
-        "zscore": 0.717
+        "mean_temp_c": 1.8,
+        "anomaly_c": 1.562,
+        "zscore": 0.53
       },
       {
         "year": 1998,
-        "mean_temp_c": -1.5,
-        "anomaly_c": -1.656,
-        "zscore": -0.544
+        "mean_temp_c": -1.415,
+        "anomaly_c": -1.653,
+        "zscore": -0.561
       },
       {
         "year": 1999,
-        "mean_temp_c": -1.028,
-        "anomaly_c": -1.183,
-        "zscore": -0.388
+        "mean_temp_c": -1.185,
+        "anomaly_c": -1.423,
+        "zscore": -0.483
       },
       {
         "year": 2000,
-        "mean_temp_c": 0.817,
-        "anomaly_c": 0.661,
-        "zscore": 0.217
+        "mean_temp_c": 0.625,
+        "anomaly_c": 0.387,
+        "zscore": 0.131
       },
       {
         "year": 2001,
-        "mean_temp_c": 0.533,
-        "anomaly_c": 0.378,
-        "zscore": 0.124
+        "mean_temp_c": 0.305,
+        "anomaly_c": 0.067,
+        "zscore": 0.023
       },
       {
         "year": 2002,
-        "mean_temp_c": 2.717,
-        "anomaly_c": 2.561,
-        "zscore": 0.841
+        "mean_temp_c": 2.945,
+        "anomaly_c": 2.707,
+        "zscore": 0.919
       },
       {
         "year": 2003,
-        "mean_temp_c": -1.422,
-        "anomaly_c": -1.578,
-        "zscore": -0.518
+        "mean_temp_c": -1.22,
+        "anomaly_c": -1.458,
+        "zscore": -0.495
       },
       {
         "year": 2004,
-        "mean_temp_c": -1.756,
-        "anomaly_c": -1.911,
-        "zscore": -0.627
+        "mean_temp_c": -1.18,
+        "anomaly_c": -1.418,
+        "zscore": -0.481
       },
       {
         "year": 2005,
-        "mean_temp_c": -5.794,
-        "anomaly_c": -5.95,
-        "zscore": -1.953
+        "mean_temp_c": -5.865,
+        "anomaly_c": -6.103,
+        "zscore": -2.071
       },
       {
         "year": 2006,
-        "mean_temp_c": -4.822,
-        "anomaly_c": -4.978,
-        "zscore": -1.634
+        "mean_temp_c": -4.565,
+        "anomaly_c": -4.803,
+        "zscore": -1.63
       },
       {
         "year": 2007,
-        "mean_temp_c": 3.222,
-        "anomaly_c": 3.067,
-        "zscore": 1.007
+        "mean_temp_c": 3.345,
+        "anomaly_c": 3.107,
+        "zscore": 1.055
       },
       {
         "year": 2008,
-        "mean_temp_c": 2.406,
-        "anomaly_c": 2.25,
-        "zscore": 0.739
+        "mean_temp_c": 2.065,
+        "anomaly_c": 1.827,
+        "zscore": 0.62
       },
       {
         "year": 2009,
-        "mean_temp_c": -0.578,
-        "anomaly_c": -0.733,
-        "zscore": -0.241
+        "mean_temp_c": -0.57,
+        "anomaly_c": -0.808,
+        "zscore": -0.274
       },
       {
         "year": 2010,
-        "mean_temp_c": -4.9,
-        "anomaly_c": -5.056,
-        "zscore": -1.66
+        "mean_temp_c": -3.83,
+        "anomaly_c": -4.068,
+        "zscore": -1.381
       },
       {
         "year": 2011,
-        "mean_temp_c": -2.339,
-        "anomaly_c": -2.494,
-        "zscore": -0.819
+        "mean_temp_c": -2.065,
+        "anomaly_c": -2.303,
+        "zscore": -0.782
       },
       {
         "year": 2012,
-        "mean_temp_c": -0.156,
-        "anomaly_c": -0.311,
-        "zscore": -0.102
+        "mean_temp_c": 0.21,
+        "anomaly_c": -0.028,
+        "zscore": -0.009
       },
       {
         "year": 2013,
-        "mean_temp_c": -5.978,
-        "anomaly_c": -6.133,
-        "zscore": -2.014
+        "mean_temp_c": -6.105,
+        "anomaly_c": -6.343,
+        "zscore": -2.153
       },
       {
         "year": 2014,
-        "mean_temp_c": 2.889,
-        "anomaly_c": 2.733,
-        "zscore": 0.897
+        "mean_temp_c": 3.11,
+        "anomaly_c": 2.872,
+        "zscore": 0.975
       },
       {
         "year": 2015,
-        "mean_temp_c": 3.717,
-        "anomaly_c": 3.561,
-        "zscore": 1.169
+        "mean_temp_c": 3.65,
+        "anomaly_c": 3.412,
+        "zscore": 1.158
       },
       {
         "year": 2016,
-        "mean_temp_c": 1.761,
-        "anomaly_c": 1.606,
-        "zscore": 0.527
+        "mean_temp_c": 1.41,
+        "anomaly_c": 1.172,
+        "zscore": 0.398
       },
       {
         "year": 2017,
-        "mean_temp_c": 2.989,
-        "anomaly_c": 2.833,
-        "zscore": 0.93
+        "mean_temp_c": 2.94,
+        "anomaly_c": 2.702,
+        "zscore": 0.917
       },
       {
         "year": 2018,
-        "mean_temp_c": -3.861,
-        "anomaly_c": -4.017,
-        "zscore": -1.319
+        "mean_temp_c": -3.62,
+        "anomaly_c": -3.858,
+        "zscore": -1.309
       },
       {
         "year": 2019,
-        "mean_temp_c": 2.083,
-        "anomaly_c": 1.928,
-        "zscore": 0.633
+        "mean_temp_c": 2.175,
+        "anomaly_c": 1.937,
+        "zscore": 0.658
       },
       {
         "year": 2020,
-        "mean_temp_c": 3.883,
-        "anomaly_c": 3.728,
-        "zscore": 1.224
+        "mean_temp_c": 4.0,
+        "anomaly_c": 3.762,
+        "zscore": 1.277
       },
       {
         "year": 2021,
-        "mean_temp_c": -0.156,
-        "anomaly_c": -0.311,
-        "zscore": -0.102
+        "mean_temp_c": -0.35,
+        "anomaly_c": -0.588,
+        "zscore": -0.2
       },
       {
         "year": 2022,
-        "mean_temp_c": -0.944,
-        "anomaly_c": -1.1,
-        "zscore": -0.361
+        "mean_temp_c": -0.68,
+        "anomaly_c": -0.918,
+        "zscore": -0.312
       },
       {
         "year": 2023,
-        "mean_temp_c": 0.028,
-        "anomaly_c": -0.128,
-        "zscore": -0.042
+        "mean_temp_c": 0.7,
+        "anomaly_c": 0.462,
+        "zscore": 0.157
       },
       {
         "year": 2024,
-        "mean_temp_c": 2.189,
-        "anomaly_c": 2.033,
-        "zscore": 0.668
+        "mean_temp_c": 2.34,
+        "anomaly_c": 2.102,
+        "zscore": 0.714
       },
       {
         "year": 2025,
-        "mean_temp_c": 3.933,
-        "anomaly_c": 3.778,
-        "zscore": 1.24
+        "mean_temp_c": 3.825,
+        "anomaly_c": 3.587,
+        "zscore": 1.218
       },
       {
         "year": 2026,
-        "mean_temp_c": 4.394,
-        "anomaly_c": 4.239,
+        "mean_temp_c": 4.34,
+        "anomaly_c": 4.102,
         "zscore": 1.392
       }
     ]
   },
   "lithuania_weather": {
     "year": 2026,
-    "period": "01-01 to 03-18",
+    "period": "01-01 to 03-20",
     "cities": [
       "Vilnius",
       "Kaunas",
       "Klaipeda"
     ],
-    "temp_anomaly_c": -3.46,
-    "temp_zscore": -1.47,
-    "precip_anomaly_mm": -21.2,
-    "precip_zscore": -0.6,
-    "latest_7d_temp_anomaly": 5.67,
+    "temp_anomaly_c": -3.32,
+    "temp_zscore": -1.43,
+    "precip_anomaly_mm": -23.4,
+    "precip_zscore": -0.65,
+    "latest_7d_temp_anomaly": 4.63,
     "city_rankings": {
       "combined": [
         {
           "city": "Klaipeda",
-          "combined_score": 1.7922089272445474,
-          "precipitation_z": -0.0010362274754070065,
-          "temperature_z": -1.7922089272445474
+          "combined_score": 1.76154450761776,
+          "precipitation_z": -0.05346691714597352,
+          "temperature_z": -1.76154450761776
         },
         {
           "city": "Vilnius",
-          "combined_score": 1.4231250018431048,
-          "precipitation_z": -1.4231250018431048,
-          "temperature_z": -1.2793427189732944
+          "combined_score": 1.4691270298850234,
+          "precipitation_z": -1.4691270298850234,
+          "temperature_z": -1.2300809281900722
         },
         {
           "city": "Kaunas",
-          "combined_score": 1.3692963751772085,
-          "precipitation_z": -0.5646245503423621,
-          "temperature_z": -1.3692963751772085
+          "combined_score": 1.325244565079566,
+          "precipitation_z": -0.6212528312385629,
+          "temperature_z": -1.325244565079566
         }
       ],
       "precipitation": [
         {
-          "anomaly": -44.93000000000001,
+          "anomaly": -46.753333333333345,
           "city": "Vilnius",
-          "z_score": -1.4231250018431048
+          "z_score": -1.4691270298850234
         },
         {
-          "anomaly": -18.693333333333342,
+          "anomaly": -21.063333333333333,
           "city": "Kaunas",
-          "z_score": -0.5646245503423621
+          "z_score": -0.6212528312385629
         },
         {
-          "anomaly": -0.04666666666668107,
+          "anomaly": -2.4533333333333474,
           "city": "Klaipeda",
-          "z_score": -0.0010362274754070065
+          "z_score": -0.05346691714597352
         }
       ],
       "temperature": [
         {
-          "anomaly": -3.908053058053058,
+          "anomaly": -3.7880279535864974,
           "city": "Klaipeda",
-          "z_score": -1.7922089272445474
+          "z_score": -1.76154450761776
         },
         {
-          "anomaly": -3.3989810189810186,
+          "anomaly": -3.2453966244725727,
           "city": "Kaunas",
-          "z_score": -1.3692963751772085
+          "z_score": -1.325244565079566
         },
         {
-          "anomaly": -3.0792468642468642,
+          "anomaly": -2.919602320675105,
           "city": "Vilnius",
-          "z_score": -1.2793427189732944
+          "z_score": -1.2300809281900722
         }
       ]
     }
   },
   "ml_model": {
-    "r2": -0.0277,
-    "rmse": 5.4928,
-    "mae": 3.9038
+    "r2": 0.7969,
+    "rmse": 3.8645,
+    "mae": 2.9982,
+    "predictions": [
+      {
+        "actual": 10.3,
+        "predicted": -0.66
+      },
+      {
+        "actual": -7.43,
+        "predicted": -1.15
+      },
+      {
+        "actual": 4.27,
+        "predicted": -1.65
+      },
+      {
+        "actual": 1.2,
+        "predicted": -1.71
+      },
+      {
+        "actual": -0.17,
+        "predicted": -1.58
+      },
+      {
+        "actual": 1.6,
+        "predicted": -1.42
+      },
+      {
+        "actual": -3.83,
+        "predicted": -1.15
+      },
+      {
+        "actual": 2.1,
+        "predicted": -0.78
+      },
+      {
+        "actual": 2.83,
+        "predicted": -0.34
+      },
+      {
+        "actual": -2.9,
+        "predicted": 0.16
+      },
+      {
+        "actual": 1.43,
+        "predicted": 0.73
+      },
+      {
+        "actual": -0.93,
+        "predicted": 1.35
+      },
+      {
+        "actual": 0.3,
+        "predicted": 2.02
+      },
+      {
+        "actual": 6.43,
+        "predicted": 2.76
+      },
+      {
+        "actual": 8.1,
+        "predicted": 3.53
+      },
+      {
+        "actual": 4.3,
+        "predicted": 4.19
+      },
+      {
+        "actual": 0.67,
+        "predicted": 5.04
+      },
+      {
+        "actual": 10.13,
+        "predicted": 6.04
+      },
+      {
+        "actual": 8.3,
+        "predicted": 7.05
+      },
+      {
+        "actual": 13.0,
+        "predicted": 8.02
+      },
+      {
+        "actual": 8.23,
+        "predicted": 9.07
+      },
+      {
+        "actual": 5.6,
+        "predicted": 10.18
+      },
+      {
+        "actual": 12.63,
+        "predicted": 11.5
+      },
+      {
+        "actual": 10.77,
+        "predicted": 12.76
+      },
+      {
+        "actual": 17.07,
+        "predicted": 13.92
+      },
+      {
+        "actual": 13.1,
+        "predicted": 14.93
+      },
+      {
+        "actual": 9.93,
+        "predicted": 16.07
+      },
+      {
+        "actual": 19.1,
+        "predicted": 17.1
+      },
+      {
+        "actual": 19.03,
+        "predicted": 17.77
+      },
+      {
+        "actual": 22.03,
+        "predicted": 18.32
+      },
+      {
+        "actual": 17.2,
+        "predicted": 18.76
+      },
+      {
+        "actual": 17.2,
+        "predicted": 19.06
+      },
+      {
+        "actual": 17.77,
+        "predicted": 19.24
+      },
+      {
+        "actual": 19.4,
+        "predicted": 19.28
+      },
+      {
+        "actual": 16.8,
+        "predicted": 19.29
+      },
+      {
+        "actual": 18.07,
+        "predicted": 19.46
+      },
+      {
+        "actual": 19.37,
+        "predicted": 19.56
+      },
+      {
+        "actual": 19.6,
+        "predicted": 19.39
+      },
+      {
+        "actual": 19.23,
+        "predicted": 19.0
+      },
+      {
+        "actual": 23.97,
+        "predicted": 18.19
+      },
+      {
+        "actual": 19.07,
+        "predicted": 17.24
+      },
+      {
+        "actual": 18.13,
+        "predicted": 16.33
+      },
+      {
+        "actual": 18.2,
+        "predicted": 15.33
+      },
+      {
+        "actual": 19.13,
+        "predicted": 14.33
+      },
+      {
+        "actual": 17.7,
+        "predicted": 13.29
+      },
+      {
+        "actual": 18.47,
+        "predicted": 12.4
+      },
+      {
+        "actual": 18.27,
+        "predicted": 11.39
+      },
+      {
+        "actual": 12.13,
+        "predicted": 10.55
+      },
+      {
+        "actual": 11.2,
+        "predicted": 9.84
+      },
+      {
+        "actual": 7.73,
+        "predicted": 9.12
+      },
+      {
+        "actual": 9.33,
+        "predicted": 8.38
+      },
+      {
+        "actual": 2.83,
+        "predicted": 7.54
+      },
+      {
+        "actual": 9.13,
+        "predicted": 6.47
+      },
+      {
+        "actual": 6.9,
+        "predicted": 5.41
+      },
+      {
+        "actual": 0.9,
+        "predicted": 4.25
+      },
+      {
+        "actual": -2.77,
+        "predicted": 3.31
+      },
+      {
+        "actual": -5.1,
+        "predicted": 2.3
+      },
+      {
+        "actual": -3.67,
+        "predicted": 1.41
+      },
+      {
+        "actual": -4.2,
+        "predicted": 0.82
+      },
+      {
+        "actual": -1.67,
+        "predicted": 0.34
+      },
+      {
+        "actual": 2.37,
+        "predicted": -0.08
+      },
+      {
+        "actual": 1.9,
+        "predicted": -0.43
+      },
+      {
+        "actual": -5.67,
+        "predicted": -0.69
+      },
+      {
+        "actual": -15.27,
+        "predicted": -1.19
+      },
+      {
+        "actual": -0.77,
+        "predicted": -1.62
+      },
+      {
+        "actual": -2.83,
+        "predicted": -1.6
+      },
+      {
+        "actual": 2.1,
+        "predicted": -1.48
+      },
+      {
+        "actual": 2.2,
+        "predicted": -1.28
+      },
+      {
+        "actual": -0.6,
+        "predicted": -0.99
+      },
+      {
+        "actual": 2.33,
+        "predicted": -0.61
+      },
+      {
+        "actual": 0.03,
+        "predicted": -0.15
+      },
+      {
+        "actual": 6.5,
+        "predicted": 0.36
+      },
+      {
+        "actual": 6.77,
+        "predicted": 0.94
+      },
+      {
+        "actual": -0.63,
+        "predicted": 1.56
+      },
+      {
+        "actual": 2.9,
+        "predicted": 2.24
+      },
+      {
+        "actual": 2.13,
+        "predicted": 2.84
+      },
+      {
+        "actual": 3.47,
+        "predicted": 3.62
+      },
+      {
+        "actual": 11.43,
+        "predicted": 4.41
+      },
+      {
+        "actual": 7.7,
+        "predicted": 5.28
+      },
+      {
+        "actual": 9.4,
+        "predicted": 6.25
+      },
+      {
+        "actual": 5.8,
+        "predicted": 7.25
+      },
+      {
+        "actual": 2.8,
+        "predicted": 8.23
+      },
+      {
+        "actual": 15.67,
+        "predicted": 9.25
+      },
+      {
+        "actual": 15.3,
+        "predicted": 10.41
+      },
+      {
+        "actual": 8.23,
+        "predicted": 11.73
+      },
+      {
+        "actual": 14.13,
+        "predicted": 12.77
+      },
+      {
+        "actual": 18.57,
+        "predicted": 13.99
+      },
+      {
+        "actual": 21.8,
+        "predicted": 15.17
+      },
+      {
+        "actual": 18.33,
+        "predicted": 16.29
+      },
+      {
+        "actual": 15.4,
+        "predicted": 17.31
+      },
+      {
+        "actual": 16.53,
+        "predicted": 17.99
+      },
+      {
+        "actual": 17.2,
+        "predicted": 18.5
+      },
+      {
+        "actual": 23.7,
+        "predicted": 18.91
+      },
+      {
+        "actual": 17.17,
+        "predicted": 19.19
+      },
+      {
+        "actual": 20.57,
+        "predicted": 19.35
+      },
+      {
+        "actual": 20.07,
+        "predicted": 19.37
+      },
+      {
+        "actual": 18.77,
+        "predicted": 19.36
+      },
+      {
+        "actual": 19.2,
+        "predicted": 19.48
+      },
+      {
+        "actual": 18.4,
+        "predicted": 19.52
+      },
+      {
+        "actual": 18.7,
+        "predicted": 19.32
+      },
+      {
+        "actual": 17.2,
+        "predicted": 18.88
+      },
+      {
+        "actual": 21.37,
+        "predicted": 18.04
+      },
+      {
+        "actual": 22.17,
+        "predicted": 17.09
+      },
+      {
+        "actual": 19.3,
+        "predicted": 16.18
+      },
+      {
+        "actual": 20.07,
+        "predicted": 15.17
+      },
+      {
+        "actual": 17.53,
+        "predicted": 14.32
+      },
+      {
+        "actual": 18.57,
+        "predicted": 13.31
+      },
+      {
+        "actual": 16.43,
+        "predicted": 12.27
+      },
+      {
+        "actual": 11.2,
+        "predicted": 11.27
+      },
+      {
+        "actual": 8.93,
+        "predicted": 10.49
+      },
+      {
+        "actual": 12.47,
+        "predicted": 9.79
+      },
+      {
+        "actual": 5.7,
+        "predicted": 9.07
+      },
+      {
+        "actual": 11.03,
+        "predicted": 8.33
+      },
+      {
+        "actual": 9.27,
+        "predicted": 7.39
+      },
+      {
+        "actual": 4.73,
+        "predicted": 6.33
+      },
+      {
+        "actual": 5.13,
+        "predicted": 5.44
+      },
+      {
+        "actual": 5.0,
+        "predicted": 4.29
+      },
+      {
+        "actual": 1.1,
+        "predicted": 3.19
+      },
+      {
+        "actual": 5.3,
+        "predicted": 2.2
+      },
+      {
+        "actual": 4.5,
+        "predicted": 1.34
+      },
+      {
+        "actual": 1.3,
+        "predicted": 0.79
+      },
+      {
+        "actual": 1.63,
+        "predicted": 0.32
+      },
+      {
+        "actual": 2.43,
+        "predicted": -0.09
+      },
+      {
+        "actual": 3.97,
+        "predicted": -0.39
+      },
+      {
+        "actual": 3.0,
+        "predicted": -0.66
+      },
+      {
+        "actual": 2.97,
+        "predicted": -1.1
+      },
+      {
+        "actual": -1.37,
+        "predicted": -1.51
+      },
+      {
+        "actual": 3.27,
+        "predicted": -1.5
+      },
+      {
+        "actual": 3.2,
+        "predicted": -1.37
+      },
+      {
+        "actual": 4.27,
+        "predicted": -1.17
+      },
+      {
+        "actual": 1.57,
+        "predicted": -0.88
+      },
+      {
+        "actual": -6.17,
+        "predicted": -0.5
+      },
+      {
+        "actual": -2.63,
+        "predicted": -0.05
+      },
+      {
+        "actual": -1.4,
+        "predicted": 0.47
+      },
+      {
+        "actual": 2.37,
+        "predicted": 1.04
+      },
+      {
+        "actual": 6.23,
+        "predicted": 1.56
+      },
+      {
+        "actual": 5.93,
+        "predicted": 2.23
+      },
+      {
+        "actual": 3.3,
+        "predicted": 2.94
+      },
+      {
+        "actual": 5.3,
+        "predicted": 3.7
+      },
+      {
+        "actual": 8.6,
+        "predicted": 4.49
+      },
+      {
+        "actual": 0.17,
+        "predicted": 5.35
+      },
+      {
+        "actual": 4.53,
+        "predicted": 6.32
+      },
+      {
+        "actual": 18.97,
+        "predicted": 7.28
+      },
+      {
+        "actual": 11.63,
+        "predicted": 8.27
+      },
+      {
+        "actual": 10.3,
+        "predicted": 9.26
+      },
+      {
+        "actual": 6.4,
+        "predicted": 10.21
+      },
+      {
+        "actual": 6.6,
+        "predicted": 11.53
+      },
+      {
+        "actual": 8.33,
+        "predicted": 12.81
+      },
+      {
+        "actual": 10.9,
+        "predicted": 14.06
+      },
+      {
+        "actual": 14.47,
+        "predicted": 15.23
+      },
+      {
+        "actual": 16.93,
+        "predicted": 16.34
+      },
+      {
+        "actual": 13.83,
+        "predicted": 17.35
+      },
+      {
+        "actual": 18.33,
+        "predicted": 18.12
+      },
+      {
+        "actual": 14.23,
+        "predicted": 18.61
+      },
+      {
+        "actual": 16.5,
+        "predicted": 19.0
+      },
+      {
+        "actual": 21.83,
+        "predicted": 19.25
+      },
+      {
+        "actual": 16.17,
+        "predicted": 19.42
+      },
+      {
+        "actual": 18.97,
+        "predicted": 19.46
+      },
+      {
+        "actual": 21.3,
+        "predicted": 19.42
+      },
+      {
+        "actual": 20.7,
+        "predicted": 19.47
+      },
+      {
+        "actual": 18.9,
+        "predicted": 19.5
+      },
+      {
+        "actual": 17.3,
+        "predicted": 19.3
+      },
+      {
+        "actual": 19.1,
+        "predicted": 18.88
+      },
+      {
+        "actual": 16.07,
+        "predicted": 18.04
+      },
+      {
+        "actual": 11.83,
+        "predicted": 17.1
+      },
+      {
+        "actual": 17.7,
+        "predicted": 16.35
+      },
+      {
+        "actual": 19.93,
+        "predicted": 15.36
+      },
+      {
+        "actual": 15.93,
+        "predicted": 14.33
+      },
+      {
+        "actual": 14.9,
+        "predicted": 13.34
+      },
+      {
+        "actual": 9.3,
+        "predicted": 12.32
+      },
+      {
+        "actual": 8.7,
+        "predicted": 11.33
+      },
+      {
+        "actual": 10.63,
+        "predicted": 10.55
+      },
+      {
+        "actual": 9.77,
+        "predicted": 9.86
+      },
+      {
+        "actual": 6.03,
+        "predicted": 9.14
+      },
+      {
+        "actual": 11.3,
+        "predicted": 8.4
+      },
+      {
+        "actual": 7.87,
+        "predicted": 7.54
+      },
+      {
+        "actual": 9.0,
+        "predicted": 6.52
+      },
+      {
+        "actual": 4.33,
+        "predicted": 5.48
+      },
+      {
+        "actual": 0.53,
+        "predicted": 4.32
+      },
+      {
+        "actual": 1.63,
+        "predicted": 3.24
+      },
+      {
+        "actual": 0.03,
+        "predicted": 2.25
+      },
+      {
+        "actual": 3.93,
+        "predicted": 1.43
+      },
+      {
+        "actual": 7.17,
+        "predicted": 0.85
+      },
+      {
+        "actual": 2.77,
+        "predicted": 0.38
+      },
+      {
+        "actual": 3.37,
+        "predicted": -0.03
+      },
+      {
+        "actual": 3.9,
+        "predicted": -0.27
+      },
+      {
+        "actual": 0.87,
+        "predicted": -0.66
+      },
+      {
+        "actual": -8.57,
+        "predicted": -1.16
+      },
+      {
+        "actual": -10.43,
+        "predicted": -1.43
+      },
+      {
+        "actual": -12.33,
+        "predicted": -1.38
+      },
+      {
+        "actual": -6.5,
+        "predicted": -1.24
+      },
+      {
+        "actual": -19.1,
+        "predicted": -1.03
+      },
+      {
+        "actual": -3.67,
+        "predicted": -0.71
+      },
+      {
+        "actual": -0.87,
+        "predicted": -0.32
+      },
+      {
+        "actual": -5.67,
+        "predicted": 0.14
+      },
+      {
+        "actual": 0.23,
+        "predicted": 0.57
+      },
+      {
+        "actual": 1.2,
+        "predicted": 1.15
+      },
+      {
+        "actual": 2.13,
+        "predicted": 1.78
+      },
+      {
+        "actual": 10.07,
+        "predicted": 2.45
+      },
+      {
+        "actual": 4.4,
+        "predicted": 3.17
+      }
+    ]
   },
   "rag_demo": {
-    "generated_at": "2026-03-18",
+    "generated_at": "2026-03-20",
     "collection": "climate_dashboard_docs",
     "corpus_size": 11,
     "questions": [
       {
         "question": "Is Lithuania currently warmer or colder than normal?",
-        "answer": "Based on retrieved DAG outputs, Lithuania Weather Summary Lithuania year-to-date weather for 01-01 to 03-18 across Vilnius, Kaunas, Klaipeda shows a temperature anomaly of -3.46 C with z-score -1.47.",
+        "answer": "Based on retrieved DAG outputs, Lithuania Weather Summary The climate model reports R2 0.7969, RMSE 3.8645, and MAE 2.9982 on held-out data.",
         "sources": [
           {
             "title": "weather_summary narrative 1",
             "source": "weather/weather_summary.md",
-            "score": 0.4124
+            "score": 0.268
+          },
+          {
+            "title": "Climate model evaluation",
+            "source": "climate/climate_evaluation.json",
+            "score": 0.1028
           },
           {
             "title": "Lithuania YTD weather overview",
             "source": "weather/ytd_summary.json",
-            "score": 0.1171
+            "score": 0.0647
           }
         ]
       },
       {
         "question": "How unusual is this March in Vilnius?",
-        "answer": "Based on retrieved DAG outputs, Vilnius March Temperature Anomalies Vilnius March through day 18 in 2026 has mean temperature 4.39 C, an anomaly of 4.24 C, and z-score 1.39.",
+        "answer": "Based on retrieved DAG outputs, Vilnius March Temperature Anomalies Vilnius March through day 20 in 2026 has mean temperature 4.34 C, an anomaly of 4.10 C, and z-score 1.39.",
         "sources": [
           {
             "title": "report narrative 1",
@@ -319,23 +1127,23 @@
           {
             "title": "Vilnius March anomaly overview",
             "source": "vilnius_march/summary.json",
-            "score": 0.1642
+            "score": 0.128
           },
           {
-            "title": "Vilnius March historical extremes",
-            "source": "vilnius_march/march_temperature_anomalies.csv",
-            "score": 0.1107
+            "title": "report narrative 2",
+            "source": "vilnius_march/report.md",
+            "score": 0.0977
           }
         ]
       },
       {
         "question": "Can I trust the climate model outputs?",
-        "answer": "Based on retrieved DAG outputs, The climate model reports R2 -0.0277, RMSE 5.4928, and MAE 3.9038 on held-out data.",
+        "answer": "Based on retrieved DAG outputs, The climate model reports R2 0.7969, RMSE 3.8645, and MAE 2.9982 on held-out data.",
         "sources": [
           {
             "title": "Climate model evaluation",
             "source": "climate/climate_evaluation.json",
-            "score": 0.3487
+            "score": 0.3122
           }
         ]
       }
