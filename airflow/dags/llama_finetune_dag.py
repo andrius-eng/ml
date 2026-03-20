@@ -34,7 +34,9 @@ if PYTHON_BIN != "python" and not Path(PYTHON_BIN).exists():
 PREP_SCRIPT = PROJECT_ROOT / "python" / "llama_prepare_sft.py"
 TRAIN_SCRIPT = PROJECT_ROOT / "python" / "llama_train_lora.py"
 LLM_OUTPUT_DIR = PROJECT_ROOT / "python" / "output" / "llm"
-BASE_MODEL = os.environ.get("LLAMA_BASE_MODEL", "TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+# distilgpt2 (82M params) trains in ~1-2 min on CPU with 8 examples.
+# Override with LLAMA_BASE_MODEL env var for a larger model.
+BASE_MODEL = os.environ.get("LLAMA_BASE_MODEL", "distilgpt2")
 
 
 def project_python_command(*args: str) -> str:
@@ -68,7 +70,7 @@ with DAG(
         bash_command=(
             "set -euo pipefail\n"
             f'test -f "{TRAIN_SCRIPT}"\n'
-            f'{project_python_command(str(TRAIN_SCRIPT), "--train-jsonl", str(LLM_OUTPUT_DIR / "sft_train.jsonl"), "--eval-jsonl", str(LLM_OUTPUT_DIR / "sft_eval.jsonl"), "--base-model", BASE_MODEL, "--output-dir", str(LLM_OUTPUT_DIR / "lora-adapter"))}'
+            f'{project_python_command(str(TRAIN_SCRIPT), "--train-jsonl", str(LLM_OUTPUT_DIR / "sft_train.jsonl"), "--eval-jsonl", str(LLM_OUTPUT_DIR / "sft_eval.jsonl"), "--base-model", BASE_MODEL, "--output-dir", str(LLM_OUTPUT_DIR / "lora-adapter"), "--max-length", "256")}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN, "LLAMA_BASE_MODEL": BASE_MODEL},
     )

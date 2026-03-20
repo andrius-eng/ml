@@ -232,6 +232,8 @@ uv run python python/llama_prepare_sft.py --output-dir python/output
 uv run python python/llama_train_lora.py \
   --train-jsonl python/output/llm/sft_train.jsonl \
   --eval-jsonl python/output/llm/sft_eval.jsonl \
+  --base-model distilgpt2 \
+  --max-length 256 \
   --output-dir python/output/llm/lora-adapter
 ```
 
@@ -239,8 +241,8 @@ Or trigger in Airflow UI:
 
 - DAG: `llama_dag_finetune`
 - Tasks: `prepare_sft_dataset` -> `train_lora_adapter`
-- Default base model: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
-- Override with env var `LLAMA_BASE_MODEL` if you want a different llama-compatible checkpoint.
+- Default base model: `distilgpt2` (82M params, trains in ~1-2 min on CPU)
+- Override with env var `LLAMA_BASE_MODEL` for a larger model (e.g. `TinyLlama/TinyLlama-1.1B-Chat-v1.0`).
 
 Expected output path after a successful run:
 

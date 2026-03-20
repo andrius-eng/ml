@@ -66,9 +66,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="LoRA fine-tune Llama on DAG SFT data")
     parser.add_argument("--train-jsonl", type=str, default="python/output/llm/sft_train.jsonl")
     parser.add_argument("--eval-jsonl", type=str, default="python/output/llm/sft_eval.jsonl")
-    parser.add_argument("--base-model", type=str, default="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+    parser.add_argument("--base-model", type=str, default="distilgpt2")
     parser.add_argument("--output-dir", type=str, default="python/output/llm/lora-adapter")
-    parser.add_argument("--max-length", type=int, default=1024)
+    parser.add_argument("--max-length", type=int, default=256)
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
@@ -108,10 +108,11 @@ def main() -> None:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    def tok(batch):
-        texts = [format_example(row) for row in batch]
+    def tok(row):
+        # row is a single example dict when batched=False (the default)
+        text = format_example(row)
         encoded = tokenizer(
-            texts,
+            text,
             truncation=True,
             max_length=args.max_length,
             padding="max_length",
@@ -119,8 +120,8 @@ def main() -> None:
         encoded["labels"] = encoded["input_ids"].copy()
         return encoded
 
-    train_ds = dataset["train"].map(tok, batched=True, remove_columns=dataset["train"].column_names)
-    eval_ds = dataset["eval"].map(tok, batched=True, remove_columns=dataset["eval"].column_names)
+    train_ds = dataset["train"].map(tok, remove_columns=dataset["train"].column_names)
+    eval_ds = dataset["eval"].map(tok, remove_columns=dataset["eval"].column_names)
 
     model = AutoModelForCausalLM.from_pretrained(args.base_model)
     lora_cfg = LoraConfig(
