@@ -437,6 +437,62 @@ a:hover {
   font-size: 0.85rem;
 }
 
+/* ── Baseline info box ──────────────────────────────────────── */
+.baseline-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin: 1rem 0 0.5rem;
+  padding: 0.85rem 1rem;
+  background: rgba(92, 124, 250, 0.08);
+  border: 1px solid rgba(92, 124, 250, 0.25);
+  border-radius: 10px;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.baseline-info-icon {
+  font-size: 1.35rem;
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+}
+
+.baseline-info strong {
+  color: #f7f7f7;
+}
+
+/* ── Project limitations card ───────────────────────────────── */
+.limitations-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.limitations-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.limitations-list li::before {
+  content: '⚠';
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  color: rgba(251, 191, 36, 0.8);
+  margin-top: 0.08rem;
+}
+
+.limitations-list strong {
+  color: rgba(255, 255, 255, 0.9);
+}
+
 /* ── WebSocket connection indicator ────────────────────────── */
 body.ws-connected #generated-badge::after {
   content: ' · 🔄 live';

@@ -42,6 +42,16 @@
               Red&nbsp;= warmer than baseline · Blue&nbsp;= cooler ·
               <strong>Outlined bar</strong>&nbsp;= current year.
             </p>
+            <div class="baseline-info" role="note" aria-label="How to read this chart">
+              <span class="baseline-info-icon">💡</span>
+              <span>
+                <strong>How to read this:</strong> Each bar shows how much warmer (🔴 red) or cooler (🔵 blue) March was
+                compared to <strong>normal</strong>. "Normal" (the <em>baseline</em>) is the average March temperature
+                calculated from the previous 30 years of data. Think of it like your height compared to other kids your
+                age — if you're taller than average, the number is positive; shorter, it's negative. A value of
+                <strong>+2 °C</strong> means that March was 2 degrees warmer than a typical March.
+              </span>
+            </div>
           </div>
         </div>
         <div class="chart-wrap">
@@ -81,6 +91,18 @@
               Lithuanian and neighbouring cities. Computed by an Apache Beam
               pipeline. Select a city to view its year × month heatmap.
             </p>
+            <div class="baseline-info" role="note" aria-label="How to read this table">
+              <span class="baseline-info-icon">💡</span>
+              <span>
+                <strong>How to read this table:</strong> Each cell shows how much warmer (<span style="color:#f87171">red</span>)
+                or cooler (<span style="color:#60a5fa">blue</span>) that month was compared to <strong>normal</strong>.
+                The <em>baseline</em> (normal) is the average temperature for that month, calculated across all years from
+                1991 to 2025. Imagine measuring your body temperature every day for 30 years and calculating the average —
+                that average is the baseline, and the anomaly tells you how far today's temperature is from it.
+                A cell showing <strong>+3.5</strong> means that month was 3.5 °C warmer than the long-term average.
+                Hover over any cell to see the exact value and its z-score (how unusual this is statistically).
+              </span>
+            </div>
           </div>
         </div>
         <div class="beam-controls">
@@ -146,6 +168,55 @@
         </p>
         <div class="pipeline-grid" id="pipeline-grid"></div>
       </section>
+      <!-- Project Limitations -->
+      <section class="card" id="limitations-section">
+        <h2>Known Project Limitations</h2>
+        <p class="section-desc">
+          This dashboard is a portfolio MLOps demonstration. The following weaknesses should be
+          considered before using results for any operational or publication-quality analysis.
+        </p>
+        <ul class="limitations-list">
+          <li>
+            <span><strong>Reanalysis data, not station records.</strong> All temperature values come from the
+            ERA5 reanalysis grid (0.25° ≈ 28 km resolution). ERA5 interpolates and models the atmosphere
+            from satellite and radiosonde observations — it is not the same as a thermometer on the ground.
+            For authoritative Lithuanian climate statistics, cross-validate against the Lithuanian
+            Hydrometeorological Service (LHMT) station network.</span>
+          </li>
+          <li>
+            <span><strong>Single data source.</strong> The entire pipeline depends exclusively on the
+            Open-Meteo ERA5 API. Any API outage, schema change, or rate-limit interruption will stall
+            all Airflow DAGs simultaneously. There is no fallback or mirror source.</span>
+          </li>
+          <li>
+            <span><strong>Baseline period is not fully standardised.</strong> The Vilnius March chart
+            uses a rolling 30-year window, while the city YTD comparison and Beam heatmap are pinned to
+            1991–2025. These different reference periods produce subtly different "normals" and are not
+            directly comparable.</span>
+          </li>
+          <li>
+            <span><strong>Simple ML model with limited features.</strong> The PyTorch MLP uses only
+            day-of-year and year as inputs. It cannot capture drivers such as the North Atlantic
+            Oscillation (NAO), El Niño/La Niña (ENSO), or soil-moisture feedbacks, which strongly
+            influence Lithuanian temperature variability.</span>
+          </li>
+          <li>
+            <span><strong>No uncertainty quantification.</strong> Anomaly values and model predictions
+            are reported as point estimates with no confidence intervals, credible intervals, or
+            ensemble spread. A single number without error bars can be misleading.</span>
+          </li>
+          <li>
+            <span><strong>Small geographic scope.</strong> Analysis covers Lithuania and a handful of
+            nearby cities. Results should not be extrapolated to broader regional or global conclusions.</span>
+          </li>
+          <li>
+            <span><strong>ERA5 data latency.</strong> ERA5 reanalysis is typically available with a
+            ~5-day delay. "Latest" values on this dashboard may not reflect the most recent days and
+            should not be treated as real-time observations.</span>
+          </li>
+        </ul>
+      </section>
+
     </main>
 
     <footer class="footer">
