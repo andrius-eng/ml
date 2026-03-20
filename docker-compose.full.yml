@@ -19,19 +19,19 @@ services:
     build:
       context: ..
       dockerfile: docker/airflow/Dockerfile
-    image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius}/ml-airflow-custom:latest}
+    image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-airflow-custom:latest}
 
   airflow-webserver:
-    image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius}/ml-airflow-custom:latest}
+    image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-airflow-custom:latest}
 
   airflow-scheduler:
-    image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius}/ml-airflow-custom:latest}
+    image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-airflow-custom:latest}
 
   ws-server:
     build:
       context: ..
       dockerfile: docker/ws-server/Dockerfile
-    image: ${WS_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius}/ml-ws-server:latest}
+    image: ${WS_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-ws-server:latest}
     ports:
       - "3000:3000"
     environment:
@@ -54,7 +54,7 @@ services:
     build:
       context: ..
       dockerfile: docker/frontend/Dockerfile
-    image: ${FRONTEND_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius}/ml-frontend:latest}
+    image: ${FRONTEND_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-frontend:latest}
     ports:
       - "5173:80"
     volumes:
@@ -71,7 +71,7 @@ services:
     build:
       context: ..
       dockerfile: docker/ml-pipeline/Dockerfile
-    image: ${PIPELINE_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius}/ml-ml-pipeline:latest}
+    image: ${PIPELINE_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-ml-pipeline:latest}
     command: sh -c "cd /app/python && python -m uvicorn serve:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
