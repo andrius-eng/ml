@@ -77,17 +77,39 @@ services:
       - "8000:8000"
     environment:
       ML_OUTPUT_DIR: /project/python/output
+      RAG_LLM_PROVIDER: "${RAG_LLM_PROVIDER:-ollama}"
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-llama3.1:8b}"
     volumes:
       # Read pipeline outputs written by Airflow DAGs
       - ..:/project:ro
+      # Allow Beam job reruns from this container to write refreshed regional outputs
+      - ../python/output/beam:/project/python/output/beam
       # Qdrant local DB needs write access for its lock file
       - ../python/output/rag:/project/python/output/rag
+      # Allow manual export_frontend_data runs to update the same shared dashboard volume served by frontend
+      - dashboard-data:/project/src/data
+    restart: unless-stopped
+    networks:
+      - default
+    depends_on:
+      - ollama
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
     restart: unless-stopped
     networks:
       - default
 
 volumes:
   dashboard-data:
+    driver: local
+  ollama-data:
     driver: local
 
 networks:

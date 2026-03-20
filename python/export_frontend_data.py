@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import calendar
 import json
+import os
 from datetime import date
 from pathlib import Path
 
@@ -34,8 +35,14 @@ def _sample_predictions(df: pd.DataFrame, max_points: int = 200) -> list[dict]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Export pipeline outputs for frontend dashboard")
-    parser.add_argument("--output-dir", type=str, default="python/output")
-    parser.add_argument("--frontend-data", type=str, default="src/data/dashboard.json")
+    default_output_dir = os.environ.get("ML_OUTPUT_DIR", "python/output")
+    default_frontend_data = "src/data/dashboard.json"
+    if default_output_dir.startswith("/"):
+        project_root = Path(default_output_dir).parent.parent
+        default_frontend_data = str(project_root / "src" / "data" / "dashboard.json")
+
+    parser.add_argument("--output-dir", type=str, default=default_output_dir)
+    parser.add_argument("--frontend-data", type=str, default=default_frontend_data)
     parser.add_argument("--month", type=int, default=3, help="Calendar month number for the Vilnius monthly anomaly pipeline (1-12)")
     args = parser.parse_args()
 
