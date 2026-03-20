@@ -80,12 +80,16 @@ services:
     volumes:
       # Read pipeline outputs written by Airflow DAGs
       - ..:/project:ro
+      # Writable volume for the RAG index (qdrant DB + vectorizer) built on first query
+      - ml-rag-data:/project/python/output/rag
     restart: unless-stopped
     networks:
       - default
 
 volumes:
   dashboard-data:
+    driver: local
+  ml-rag-data:
     driver: local
 
 networks:
