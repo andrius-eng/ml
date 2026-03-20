@@ -81,6 +81,19 @@ The fastest way to run everything (Airflow + dashboard + RAG API):
 docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
 ```
 
+To use prebuilt GHCR images (no local image build), pull and run:
+
+```bash
+export GHCR_OWNER=andrius
+echo <github_pat> | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml pull
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d
+```
+
+The GHCR images are intended to stay private. Authenticate before pulling them
+locally. If you ever change a GHCR package to public in GitHub, GitHub does not
+allow changing that package back to private.
+
 Once running, trigger DAGs from Airflow UI at http://localhost:8080 (admin / admin).
 The dashboard at http://localhost:5173 updates automatically via WebSocket.
 
@@ -199,11 +212,16 @@ ml/
 
 ## CI
 
-GitHub Actions workflow in .github/workflows/ci.yml runs on push and PR:
+GitHub Actions workflows:
 
-- uv sync --frozen
-- uv run python -m pytest python/tests
-- npm ci and npm run build
+- .github/workflows/ci.yml
+  - npm ci, npm run build, format check
+  - uv sync, dry-run train check, pytest
+  - full Docker stack smoke test (build + airflow-init + endpoint checks)
+- .github/workflows/docker-images.yml
+  - builds and pushes images to ghcr.io on push to main/master and manual dispatch
+  - images: ml-airflow-custom, ml-ws-server, ml-frontend, ml-ml-pipeline
+  - images are expected to remain private in GHCR; local pulls require auth
 
 ## Notes
 

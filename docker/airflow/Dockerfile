@@ -21,7 +21,5 @@ RUN pip install \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     -r /tmp/requirements-airflow-runtime.txt
 
-# Bake DAGs and project scripts into the image for Swarm portability.
-COPY airflow/dags/ /opt/airflow/dags/
-COPY python/ /opt/airflow/project/python/
-COPY src/data/ /opt/airflow/project/src/data/
+# Project code and DAGs are mounted at runtime via docker-compose volumes.
+# Keeping the image lean avoids long COPY phases on macOS file sharing.

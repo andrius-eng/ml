@@ -11,9 +11,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python deps separately for better layer caching
-COPY python/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Install CPU-oriented runtime deps (no CUDA/NVIDIA stack) for faster builds
+COPY python/requirements-airflow-runtime.txt /app/requirements-runtime.txt
+RUN pip install --no-cache-dir \
+    --retries 10 \
+    --timeout 120 \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    -r requirements-runtime.txt
 
 # Copy project source
 COPY python/ /app/python/

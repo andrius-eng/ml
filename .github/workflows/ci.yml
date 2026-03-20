@@ -47,3 +47,66 @@ jobs:
 
       - name: Run Python tests
         run: uv run python -m pytest python/tests/ -v
+
+  stack-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: build
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build stack images
+        run: |
+          docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml build airflow-init ws-server frontend ml-server
+
+      - name: Initialize Airflow DB
+        run: |
+          docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up airflow-init
+
+      - name: Start full stack
+        run: |
+          docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d
+
+      - name: Wait for healthy endpoints
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/health >/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/docs >/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5173 >/dev/null; then
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Stack smoke checks
+        run: |
+          set -euo pipefail
+          curl -fsS http://127.0.0.1:8080/health
+          curl -fsS http://127.0.0.1:8000/docs >/dev/null
+          curl -fsS "http://127.0.0.1:8000/rag/query?q=test" | grep -q 'answer'
+          curl -fsS http://127.0.0.1:5173 >/dev/null
+          docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml ps
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml logs --tail=200
+
+      - name: Stop stack
+        if: always()
+        run: |
+          docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml down -v
