@@ -348,17 +348,18 @@ def _interpret_answer(raw_answer: str) -> str:
             desc = "extreme — a rare event in the 35-year record"
         lines.append(f"A z-score of {z:+.2f} is {desc}.")
 
-    # Look for R² / model performance
-    m = re.search(r"[Rr]²?\s*[=:]\s*([+-]?\d+\.?\d*)", raw_answer)
+    # Look for R² / model performance — require "R2" or "R²" explicitly
+    m = re.search(r"[Rr][²2]\s*[=:]\s*([+-]?\d+\.?\d*)", raw_answer)
     if m:
         r2 = float(m.group(1))
-        if r2 >= 0.8:
-            lines.append(f"R² = {r2:.2f} indicates the model explains most of the variance — a good fit.")
-        elif r2 >= 0.65:
-            lines.append(f"R² = {r2:.2f} means the model captures the main seasonal pattern reasonably well.")
-        elif r2 >= 0:
-            lines.append(f"R² = {r2:.2f} suggests the model has limited predictive power.")
-        else:
+        if 0 <= r2 <= 1:  # valid R² range only
+            if r2 >= 0.8:
+                lines.append(f"R² = {r2:.2f} indicates the model explains most of the variance — a good fit.")
+            elif r2 >= 0.65:
+                lines.append(f"R² = {r2:.2f} means the model captures the main seasonal pattern reasonably well.")
+            elif r2 >= 0:
+                lines.append(f"R² = {r2:.2f} suggests the model has limited predictive power.")
+        elif r2 < 0:
             lines.append(f"R² = {r2:.2f} means the model is worse than predicting the mean — it needs improvement.")
 
     if not lines:

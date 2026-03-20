@@ -56,6 +56,8 @@ def main() -> None:
     predictions_df = pd.read_csv(predictions_csv) if predictions_csv.exists() else pd.DataFrame()
     rag_demo_path = out / "rag" / "rag_demo.json"
     rag_demo = load_json(rag_demo_path) if rag_demo_path.exists() else build_demo_payload(out)
+    beam_summary_path = out / "beam" / "beam_summary.json"
+    beam_summary = load_json(beam_summary_path) if beam_summary_path.exists() else None
 
     annual_list = month_annual[["year", "mean_temp_c", "anomaly_c", "zscore"]].round(3).to_dict(orient="records")
     sorted_by_anomaly = month_annual.sort_values("anomaly_c")
@@ -108,6 +110,7 @@ def main() -> None:
             "predictions": _sample_predictions(predictions_df),
         },
         "rag_demo": rag_demo,
+        "beam_regional": beam_summary,
     }
 
     dest = Path(args.frontend_data)

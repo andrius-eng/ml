@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from model import LinearModel
 
+import json
 import os
 import sys
 
@@ -72,6 +73,19 @@ def rag_query(q: str = ''):
 @app.get('/')
 def health():
     return {'status': 'ok', 'model_loaded': get_model() is not None}
+
+
+@app.get('/dashboard')
+def dashboard():
+    """Serve the latest dashboard.json produced by the export pipeline."""
+    dashboard_path = ML_OUTPUT_DIR.parent / 'src' / 'data' / 'dashboard.json'
+    if not dashboard_path.exists():
+        # Fall back to output dir
+        dashboard_path = ML_OUTPUT_DIR / 'dashboard.json'
+    if not dashboard_path.exists():
+        raise HTTPException(status_code=404, detail='Dashboard data not yet generated')
+    with open(dashboard_path, encoding='utf-8') as f:
+        return json.load(f)
 
 
 @app.post('/predict', response_model=PredictionResponse)

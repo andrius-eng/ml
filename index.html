@@ -71,6 +71,24 @@
         </div>
       </section>
 
+      <!-- Regional monthly anomaly heatmap (Beam pipeline) -->
+      <section class="card" id="beam-section">
+        <div class="section-header">
+          <div>
+            <h2>Regional Monthly Anomalies — Apache Beam</h2>
+            <p class="section-desc">
+              Month-by-month temperature anomaly (°C vs 1991–2020 baseline) for
+              Lithuanian and neighbouring cities. Computed by an Apache Beam
+              pipeline. Select a city to view its year × month heatmap.
+            </p>
+          </div>
+        </div>
+        <div class="beam-controls">
+          <select id="beam-city-select" class="beam-select"></select>
+        </div>
+        <div class="heatmap-wrap" id="heatmap-wrap"></div>
+      </section>
+
       <!-- ML model metrics -->
       <section class="card" id="ml-section">
         <h2>ML Model — Regression Performance</h2>

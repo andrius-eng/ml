@@ -319,6 +319,72 @@ a:hover {
   }
 }
 
+/* ── Beam heatmap ───────────────────────────────────────────── */
+.beam-controls {
+  margin: 1rem 0 0.75rem;
+}
+
+.beam-select {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.85rem;
+  color: inherit;
+  font-size: 0.95rem;
+  outline: none;
+  cursor: pointer;
+}
+
+.beam-select:focus {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.heatmap-wrap {
+  overflow-x: auto;
+  margin-top: 0.5rem;
+}
+
+.heatmap-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.heatmap-table thead th {
+  padding: 0.4rem 0.5rem;
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+}
+
+.heatmap-year {
+  font-weight: 600;
+  color: var(--muted);
+  text-align: right;
+  padding-right: 0.7rem;
+  white-space: nowrap;
+}
+
+.heatmap-cell {
+  padding: 0.35rem 0.3rem;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  min-width: 3.2rem;
+  transition: transform 0.15s ease;
+  cursor: default;
+}
+
+.heatmap-cell:hover {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  z-index: 1;
+  position: relative;
+}
+
 /* ── Pipeline cards ─────────────────────────────────────────── */
 .pipeline-grid {
   display: grid;

@@ -6,7 +6,7 @@ import json
 import time
 from datetime import date
 from pathlib import Path
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
@@ -17,6 +17,17 @@ LITHUANIA_PROXY_CITIES = {
     "Vilnius": (54.6872, 25.2797),
     "Kaunas": (54.8985, 23.9036),
     "Klaipeda": (55.7033, 21.1443),
+    "Siauliai": (55.9349, 23.3137),
+    "Panevezys": (55.7348, 24.3575),
+}
+
+# Extended set: Lithuanian cities + neighbouring capitals for regional comparison
+REGION_CITIES = {
+    **LITHUANIA_PROXY_CITIES,
+    "Riga": (56.9496, 24.1052),
+    "Warsaw": (52.2297, 21.0122),
+    "Tallinn": (59.4370, 24.7536),
+    "Minsk": (53.9045, 27.5615),
 }
 
 
@@ -30,15 +41,17 @@ def fetch_daily_weather(lat: float, lon: float, start: str, end: str) -> pd.Data
         "timezone": "Europe/Vilnius",
     }
     url = "https://archive-api.open-meteo.com/v1/archive?" + urlencode(params, doseq=True)
-    for attempt in range(3):
+    for attempt in range(5):
         try:
             with urlopen(url, timeout=60) as response:
                 payload = json.load(response)["daily"]
             break
-        except (TimeoutError, URLError):
-            if attempt == 2:
+        except (TimeoutError, URLError) as e:
+            if attempt == 4:
                 raise
-            time.sleep(2 * (attempt + 1))
+            # Back off longer on rate-limit (429) responses
+            delay = 10 * (attempt + 1) if isinstance(e, HTTPError) and e.code == 429 else 2 * (attempt + 1)
+            time.sleep(delay)
     return pd.DataFrame(payload)
 
 
@@ -85,7 +98,7 @@ def build_daily_climatology(daily: pd.DataFrame, group_cols: list[str] | None = 
     if group_cols is None:
         group_cols = []
 
-    baseline = daily[(daily["year"] >= 1991) & (daily["year"] <= 2020)].copy()
+    baseline = daily[(daily["year"] >= 1991) & (daily["year"] <= 2025)].copy()
     keys = [*group_cols, "month_day"]
     climatology = baseline.groupby(keys, as_index=False).agg(
         climatology_temp_mean=("temperature_2m_mean", "mean"),

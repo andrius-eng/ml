@@ -1,8 +1,11 @@
 import './styles.css';
 import { Chart, registerables } from 'chart.js';
-import data from './data/dashboard.json';
 
 Chart.register(...registerables);
+
+// Dashboard data is fetched dynamically so we always get the latest
+// pipeline output (written by Airflow → export_frontend_data.py).
+let data = null;
 
 let marchChartInstance = null;
 let cityTempChartInstance = null;
@@ -47,6 +50,103 @@ function kpiCard({ label, value, sub, highlight }) {
     el.appendChild(subEl);
   }
   return el;
+}
+
+// ── Regional Beam heatmap ────────────────────────────────────────────────────
+
+function anomalyColor(val) {
+  if (val === null || val === undefined) return 'rgba(255,255,255,0.04)';
+  // Blue for cold, red for warm, white at zero
+  const clamped = Math.max(-6, Math.min(6, val));
+  const t = clamped / 6; // -1 to 1
+  if (t < 0) {
+    const a = -t;
+    return `rgba(59,130,246,${(0.2 + a * 0.7).toFixed(2)})`;
+  }
+  const a = t;
+  return `rgba(239,68,68,${(0.2 + a * 0.7).toFixed(2)})`;
+}
+
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function renderBeamHeatmap(d) {
+  const beam = d.beam_regional;
+  const section = document.getElementById('beam-section');
+  if (!beam || !beam.cities) { section.style.display = 'none'; return; }
+
+  const select = document.getElementById('beam-city-select');
+  const wrap = document.getElementById('heatmap-wrap');
+  const cityNames = Object.keys(beam.cities).sort();
+  if (cityNames.length === 0) { section.style.display = 'none'; return; }
+
+  // Populate select
+  select.innerHTML = '';
+  cityNames.forEach((c) => {
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = c;
+    select.appendChild(opt);
+  });
+
+  function draw(city) {
+    const info = beam.cities[city];
+    if (!info) { wrap.innerHTML = ''; return; }
+
+    const years = info.years;
+    const months = info.months;
+
+    // Build table
+    const table = document.createElement('table');
+    table.className = 'heatmap-table';
+
+    // Header row with month labels
+    const thead = document.createElement('thead');
+    const hRow = document.createElement('tr');
+    const corner = document.createElement('th');
+    corner.textContent = 'Year';
+    hRow.appendChild(corner);
+    months.forEach((m) => {
+      const th = document.createElement('th');
+      th.textContent = MONTH_LABELS[m - 1] || m;
+      hRow.appendChild(th);
+    });
+    thead.appendChild(hRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    years.forEach((yr) => {
+      const row = document.createElement('tr');
+      const yearCell = document.createElement('td');
+      yearCell.className = 'heatmap-year';
+      yearCell.textContent = yr;
+      row.appendChild(yearCell);
+
+      const yearData = info.data[String(yr)] || {};
+      months.forEach((m) => {
+        const cell = document.createElement('td');
+        const entry = yearData[String(m)];
+        const anomaly = entry ? entry.anomaly : null;
+        cell.className = 'heatmap-cell';
+        cell.style.backgroundColor = anomalyColor(anomaly);
+        if (anomaly !== null && anomaly !== undefined) {
+          cell.textContent = (anomaly >= 0 ? '+' : '') + anomaly.toFixed(1);
+          cell.title = `${city} ${MONTH_LABELS[m - 1]} ${yr}: ${anomaly >= 0 ? '+' : ''}${anomaly.toFixed(2)} °C` +
+            (entry.z !== null ? ` (z=${entry.z.toFixed(2)})` : '');
+        } else {
+          cell.textContent = '–';
+        }
+        row.appendChild(cell);
+      });
+      tbody.appendChild(row);
+    });
+    table.appendChild(tbody);
+
+    wrap.innerHTML = '';
+    wrap.appendChild(table);
+  }
+
+  select.addEventListener('change', () => draw(select.value));
+  draw(cityNames[0]);
 }
 
 // ── sections ─────────────────────────────────────────────────────────────────
@@ -405,9 +505,9 @@ function renderPipeline() {
     },
     {
       name: 'lithuania_weather_analysis',
-      desc: 'Fetches ERA5 daily weather for 3 Lithuanian cities, computes YTD anomalies, city rankings, per-city charts, and validates output quality.',
-      steps: ['fetch_weather', 'analyze_anomalies', 'plot_charts', 'quality_gate', 'refresh_rag_context'],
-      tags: ['ERA5', 'Anomaly detection', 'Vega/Matplotlib'],
+      desc: 'Fetches ERA5 daily weather for Lithuanian cities, computes YTD anomalies, city rankings, per-city charts, runs an Apache Beam pipeline for regional monthly anomaly analysis, and validates output quality.',
+      steps: ['fetch_weather', 'analyze_anomalies', 'beam_regional', 'plot_charts', 'quality_gate', 'refresh_rag_context'],
+      tags: ['ERA5', 'Anomaly detection', 'Apache Beam', 'Vega/Matplotlib'],
     },
     {
       name: 'vilnius_march_temperature_anomalies',
@@ -487,17 +587,19 @@ function connectWebSocket() {
 
     try {
       // Re-fetch the latest dashboard data
-      const response = await fetch('/data/dashboard.json');
-      const newData = await response.json();
+      const newData = await fetchDashboardData();
+      if (!newData) return;
+      data = newData;
 
       // Re-render with new data
-      renderHeader(newData);
-      renderKPIs(newData);
-      renderMarchChart(newData);
-      renderCityCharts(newData);
-      renderMLMetrics(newData);
-      renderMLCharts(newData);
-      renderRagDemo(newData);
+      renderHeader(data);
+      renderKPIs(data);
+      renderMarchChart(data);
+      renderCityCharts(data);
+      renderBeamHeatmap(data);
+      renderMLMetrics(data);
+      renderMLCharts(data);
+      renderRagDemo(data);
       renderPipeline();
 
       // Flash update indicator
@@ -541,7 +643,7 @@ document.getElementById('rag-form').addEventListener('submit', async (e) => {
   resultDiv.removeAttribute('hidden');
 
   try {
-    const response = await fetch(`http://localhost:8000/rag/query?q=${encodeURIComponent(question)}`);
+    const response = await fetch(`/api/rag/query?q=${encodeURIComponent(question)}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
 
@@ -564,11 +666,33 @@ document.getElementById('rag-form').addEventListener('submit', async (e) => {
 
 // ── boot ─────────────────────────────────────────────────────────────────────
 
-function init() {
+async function fetchDashboardData() {
+  // Try the nginx-served static file first, fall back to the API
+  for (const url of ['/data/dashboard.json', '/api/dashboard']) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return await res.json();
+    } catch (_) { /* try next */ }
+  }
+  // Last resort: bundled fallback (may be stale)
+  try {
+    const mod = await import('./data/dashboard.json');
+    return mod.default;
+  } catch (_) { return null; }
+}
+
+async function init() {
+  data = await fetchDashboardData();
+  if (!data) {
+    document.getElementById('kpi-row').innerHTML =
+      '<p style="color:var(--muted)">Waiting for first pipeline run…</p>';
+    return;
+  }
   renderHeader(data);
   renderKPIs(data);
   renderMarchChart(data);
   renderCityCharts(data);
+  renderBeamHeatmap(data);
   renderMLMetrics(data);
   renderMLCharts(data);
   renderRagDemo(data);

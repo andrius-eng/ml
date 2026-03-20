@@ -31,6 +31,7 @@ WEATHER_FETCH_SCRIPT = PROJECT_ROOT / "python" / "weather_fetch.py"
 WEATHER_ANALYZE_SCRIPT = PROJECT_ROOT / "python" / "weather_analyze.py"
 WEATHER_PLOT_SCRIPT = PROJECT_ROOT / "python" / "weather_plot.py"
 WEATHER_QUALITY_GATE_SCRIPT = PROJECT_ROOT / "python" / "weather_quality_gate.py"
+BEAM_ANALYSIS_SCRIPT = PROJECT_ROOT / "python" / "beam_analysis.py"
 RAG_PIPELINE_SCRIPT = PROJECT_ROOT / "python" / "rag_pipeline.py"
 
 WEATHER_OUTPUT_DIR = PROJECT_ROOT / "python" / "output" / "weather"
@@ -48,6 +49,7 @@ CITY_RANKINGS_PATH = WEATHER_OUTPUT_DIR / "city_rankings.json"
 WEATHER_PLOT_PATH = WEATHER_OUTPUT_DIR / "weather_anomalies.png"
 WEATHER_REPORT_PATH = WEATHER_OUTPUT_DIR / "weather_summary.md"
 CITY_PLOTS_DIR = WEATHER_OUTPUT_DIR / "cities"
+BEAM_OUTPUT_DIR = PROJECT_ROOT / "python" / "output" / "beam"
 RAG_DEMO_PATH = PROJECT_ROOT / "python" / "output" / "rag" / "rag_demo.json"
 ANALYSIS_END = "{{ ds }}"
 
@@ -121,5 +123,16 @@ with DAG(
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
     )
 
-    fetch_weather >> analyze_weather >> [plot_weather, quality_gate]
-    [plot_weather, quality_gate] >> refresh_rag_context
+    beam_regional_analysis = BashOperator(
+        task_id="beam_regional_analysis",
+        cwd=str(PROJECT_ROOT),
+        bash_command=(
+            "set -euo pipefail\n"
+            f'test -f "{BEAM_ANALYSIS_SCRIPT}"\n'
+            f'{project_python_command(str(BEAM_ANALYSIS_SCRIPT), "--input", str(RAW_WEATHER_PATH), "--output-dir", str(BEAM_OUTPUT_DIR), "--end-date", ANALYSIS_END)}'
+        ),
+        env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+    )
+
+    fetch_weather >> analyze_weather >> [plot_weather, quality_gate, beam_regional_analysis]
+    [plot_weather, quality_gate, beam_regional_analysis] >> refresh_rag_context
