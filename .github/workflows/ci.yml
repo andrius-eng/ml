@@ -56,6 +56,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Prepare bind-mount directories
+        run: |
+          mkdir -p airflow/logs airflow/plugins python/output
+          sudo chown -R 50000:0 airflow/logs airflow/plugins
+
       - name: Build stack images
         run: |
           docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml build airflow-init ws-server frontend ml-server
