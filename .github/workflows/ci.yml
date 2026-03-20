@@ -71,34 +71,54 @@ jobs:
       - name: Wait for healthy endpoints
         run: |
           set -euo pipefail
-          for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:8080/health >/dev/null; then
-              break
-            fi
-            sleep 5
-          done
+          wait_for_url() {
+            local url="$1"
+            local retries="$2"
+            local sleep_s="$3"
 
-          for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:8000/docs >/dev/null; then
-              break
-            fi
-            sleep 5
-          done
+            for i in $(seq 1 "$retries"); do
+              if curl -fsS "$url" >/dev/null; then
+                echo "ready: $url"
+                return 0
+              fi
+              echo "not ready yet ($i/$retries): $url"
+              sleep "$sleep_s"
+            done
 
-          for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:5173 >/dev/null; then
-              break
-            fi
-            sleep 5
-          done
+            echo "timed out waiting for: $url"
+            return 1
+          }
+
+          wait_for_url "http://127.0.0.1:8080/health" 72 5
+          wait_for_url "http://127.0.0.1:8000/docs" 72 5
+          wait_for_url "http://127.0.0.1:5173" 72 5
 
       - name: Stack smoke checks
         run: |
           set -euo pipefail
+
+          retry_cmd() {
+            local retries="$1"
+            local sleep_s="$2"
+            shift 2
+
+            for i in $(seq 1 "$retries"); do
+              if "$@"; then
+                return 0
+              fi
+              echo "retrying ($i/$retries): $*"
+              sleep "$sleep_s"
+            done
+
+            return 1
+          }
+
+          retry_cmd 12 5 curl -fsS http://127.0.0.1:8080/health >/dev/null
+          retry_cmd 12 5 curl -fsS http://127.0.0.1:8000/docs >/dev/null
+          retry_cmd 12 5 bash -lc 'curl -fsS "http://127.0.0.1:8000/rag/query?q=test" | grep -q "answer"'
+          retry_cmd 12 5 curl -fsS http://127.0.0.1:5173 >/dev/null
+
           curl -fsS http://127.0.0.1:8080/health
-          curl -fsS http://127.0.0.1:8000/docs >/dev/null
-          curl -fsS "http://127.0.0.1:8000/rag/query?q=test" | grep -q 'answer'
-          curl -fsS http://127.0.0.1:5173 >/dev/null
           docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml ps
 
       - name: Dump logs on failure
