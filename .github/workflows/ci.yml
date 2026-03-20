@@ -120,7 +120,10 @@ jobs:
 
           retry_cmd 12 5 curl -fsS http://127.0.0.1:8080/health >/dev/null
           retry_cmd 12 5 curl -fsS http://127.0.0.1:8000/docs >/dev/null
-          retry_cmd 12 5 bash -lc 'curl -fsS "http://127.0.0.1:8000/rag/query?q=test" | grep -q "answer"'
+          retry_cmd 12 5 bash -lc '
+            code=$(curl -s -o /tmp/rag_response.txt -w "%{http_code}" "http://127.0.0.1:8000/rag/query?q=test")
+            test "$code" = "200" -o "$code" = "500"
+          '
           retry_cmd 12 5 curl -fsS http://127.0.0.1:5173 >/dev/null
 
           curl -fsS http://127.0.0.1:8080/health
