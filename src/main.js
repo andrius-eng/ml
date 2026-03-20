@@ -93,7 +93,7 @@ function renderBeamHeatmap(d) {
     if (!info) { wrap.innerHTML = ''; return; }
 
     const years = info.years;
-    const months = info.months;
+    const months = Array.from({ length: 12 }, (_v, i) => i + 1);
 
     // Build table
     const table = document.createElement('table');
@@ -130,8 +130,11 @@ function renderBeamHeatmap(d) {
         cell.style.backgroundColor = anomalyColor(anomaly);
         if (anomaly !== null && anomaly !== undefined) {
           cell.textContent = (anomaly >= 0 ? '+' : '') + anomaly.toFixed(1);
+          const zPart = (entry && entry.z !== null && entry.z !== undefined)
+            ? ` (z=${entry.z.toFixed(2)})`
+            : '';
           cell.title = `${city} ${MONTH_LABELS[m - 1]} ${yr}: ${anomaly >= 0 ? '+' : ''}${anomaly.toFixed(2)} °C` +
-            (entry.z !== null ? ` (z=${entry.z.toFixed(2)})` : '');
+            zPart;
         } else {
           cell.textContent = '–';
         }

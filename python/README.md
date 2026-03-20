@@ -58,6 +58,11 @@ uv run python python/<script>.py
 - run_all.py: synthetic local demo workflow
 - check_python.py: runtime version check helper
 
+### LLM fine-tuning
+
+- llama_prepare_sft.py: builds SFT jsonl files from DAG artifacts
+- llama_train_lora.py: trains LoRA adapter on the generated SFT dataset
+
 ## Airflow Integration
 
 Current DAG IDs and major script paths:
@@ -65,6 +70,24 @@ Current DAG IDs and major script paths:
 - climate_temperature_model: climate_data, climate_train, climate_evaluate, plot, diagnostics, quality_gate, rag_pipeline
 - lithuania_weather_analysis: weather_fetch, weather_analyze, weather_plot, weather_quality_gate, rag_pipeline
 - vilnius_march_temperature_anomalies: vilnius_march_fetch, vilnius_march_analyze, vilnius_march_plot, vilnius_march_quality_gate, rag_pipeline
+- llama_dag_finetune: llama_prepare_sft, llama_train_lora
+
+## LoRA Troubleshooting (Airflow)
+
+If `llama_dag_finetune.train_lora_adapter` fails with messages like:
+
+- `Disabling PyTorch because PyTorch >= 2.4 is required`
+- `NameError: LRScheduler is not defined`
+
+the container has an incompatible transformers stack. Rebuild Airflow services to reinstall pinned compatible versions from `python/requirements-llm-train.txt`:
+
+```bash
+cd ml
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml build airflow-init airflow-webserver airflow-scheduler
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d airflow-webserver airflow-scheduler
+```
+
+Then re-run the failed task from Airflow UI or clear it from CLI.
 
 ## FastAPI Server
 

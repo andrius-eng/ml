@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import calendar
 import json
 import math
+import os
 import re
 from datetime import date
 from pathlib import Path
+from urllib import error, request
 
 from collections import Counter
 
@@ -27,6 +30,10 @@ STOP_WORDS = {
     "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "how", "in",
     "is", "it", "its", "of", "on", "or", "that", "the", "this", "to", "vs", "what", "with",
 }
+
+DEFAULT_LLM_PROVIDER = os.environ.get("RAG_LLM_PROVIDER", "extractive").strip().lower()
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 
 
 def load_optional_json(path: Path) -> dict | list | None:
@@ -368,7 +375,110 @@ def _interpret_answer(raw_answer: str) -> str:
     return " ".join(lines)
 
 
+def _answer_month_comparison(question: str, output_dir: Path) -> dict | None:
+    normalized = question.strip().lower()
+    month_names = {name.lower(): idx for idx, name in enumerate(calendar.month_name) if name}
+    month_name = next((name for name in month_names if name in normalized), None)
+    if month_name is None or ("warmer" not in normalized and "colder" not in normalized):
+        return None
+
+    year_match = re.search(r"\b(19|20)\d{2}\b", normalized)
+    if not year_match:
+        return None
+    comparison_year = int(year_match.group(0))
+
+    month_dir = output_dir / f"vilnius_{month_name}"
+    csv_path = month_dir / f"{month_name}_temperature_anomalies.csv"
+    if not csv_path.exists():
+        return None
+
+    annual = pd.read_csv(csv_path)
+    if annual.empty or comparison_year not in set(annual["year"].astype(int)):
+        return None
+
+    latest = annual.sort_values("year").iloc[-1]
+    current_year = int(latest["year"])
+    if "this" not in normalized and str(current_year) not in normalized:
+        return None
+
+    other = annual[annual["year"] == comparison_year].iloc[0]
+    current_mean = float(latest["mean_temp_c"])
+    other_mean = float(other["mean_temp_c"])
+    current_anomaly = float(latest["anomaly_c"])
+    other_anomaly = float(other["anomaly_c"])
+    delta = current_mean - other_mean
+    relation = "warmer" if delta > 0 else "colder" if delta < 0 else "the same temperature as"
+    direction_text = "warmer than" if delta > 0 else "colder than" if delta < 0 else "the same as"
+    month_label = month_name.capitalize()
+
+    answer = (
+        f"Yes. Vilnius {month_label} {current_year} is {direction_text} {comparison_year}. "
+        f"Mean temperature is {current_mean:.2f} C versus {other_mean:.2f} C, "
+        f"a difference of {delta:+.2f} C over the same cutoff window. "
+        f"Anomalies are {current_anomaly:+.2f} C and {other_anomaly:+.2f} C respectively."
+        if delta != 0
+        else f"Vilnius {month_label} {current_year} is the same as {comparison_year} at {current_mean:.2f} C over the same cutoff window. "
+             f"Anomalies are {current_anomaly:+.2f} C and {other_anomaly:+.2f} C respectively."
+    )
+
+    return {
+        "question": question,
+        "answer": answer,
+        "interpretation": f"Vilnius {month_label} {current_year} is {relation} {comparison_year} by {delta:+.2f} C.",
+        "sources": [
+            {
+                "title": f"Vilnius {month_label} anomaly table",
+                "source": f"vilnius_{month_name}/{month_name}_temperature_anomalies.csv",
+                "score": 1.0,
+            }
+        ],
+    }
+
+
+def _answer_with_ollama(question: str, matches: list[dict]) -> str | None:
+    if not matches:
+        return None
+
+    context_lines = []
+    for idx, match in enumerate(matches, start=1):
+        context_lines.append(
+            f"[{idx}] {match['title']} ({match['source']})\n{match['text']}"
+        )
+    context = "\n\n".join(context_lines)
+
+    prompt = (
+        "You are a climate dashboard assistant. Answer using only the provided context. "
+        "If the answer is not in context, say so briefly. Keep answer concise and factual.\n\n"
+        f"Question: {question}\n\n"
+        f"Context:\n{context}\n"
+    )
+
+    payload = {
+        "model": OLLAMA_MODEL,
+        "stream": False,
+        "prompt": prompt,
+    }
+    req = request.Request(
+        f"{OLLAMA_BASE_URL}/api/generate",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(req, timeout=45) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        text = (data.get("response") or "").strip()
+        return text or None
+    except (error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+        return None
+
+
 def answer_question(question: str, output_dir: Path, top_k: int = 3) -> dict:
+    deterministic = _answer_month_comparison(question, output_dir)
+    if deterministic is not None:
+        return deterministic
+
     matches = retrieve(question, output_dir, top_k=top_k)
     if not matches:
         return {
@@ -377,9 +487,17 @@ def answer_question(question: str, output_dir: Path, top_k: int = 3) -> dict:
             "sources": [],
         }
 
-    snippets = [first_sentences(match["text"], limit=1) for match in matches[:2]]
-    snippets = [snippet for snippet in snippets if snippet]
-    answer = "Based on retrieved DAG outputs, " + " ".join(snippets)
+    answer = ""
+    if DEFAULT_LLM_PROVIDER == "ollama":
+        llm_answer = _answer_with_ollama(question, matches)
+        if llm_answer:
+            answer = llm_answer
+
+    if not answer:
+        snippets = [first_sentences(match["text"], limit=1) for match in matches[:2]]
+        snippets = [snippet for snippet in snippets if snippet]
+        answer = "Based on retrieved DAG outputs, " + " ".join(snippets)
+
     interpretation = _interpret_answer(answer)
     return {
         "question": question,

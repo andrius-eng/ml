@@ -28,6 +28,7 @@ Current DAG IDs:
 - climate_temperature_model
 - lithuania_weather_analysis
 - vilnius_march_temperature_anomalies
+- llama_dag_finetune (manual)
 
 Each DAG ends with refresh_rag_context to rebuild retrieval context from latest
 pipeline artifacts.
@@ -160,6 +161,90 @@ Example response:
 Note: the API returns meaningful answers only after DAGs have run and produced
 artifacts under python/output/. Before that, you get "No relevant pipeline
 artifacts were available."
+
+### Local Llama for RAG (Optional)
+
+The full docker stack now includes an `ollama` service and `ml-server` is
+configured to use it for answer synthesis by default.
+
+Start or refresh the relevant services:
+
+```bash
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build ml-server frontend ollama
+```
+
+Pull a local model once:
+
+```bash
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml exec ollama ollama pull llama3.1:8b
+```
+
+Override model/provider if needed:
+
+```bash
+RAG_LLM_PROVIDER=ollama OLLAMA_MODEL=llama3.1:8b \
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d ml-server ollama
+```
+
+## Train Llama On DAG Artifacts (LoRA)
+
+This project now includes a manual Airflow DAG (`llama_dag_finetune`) and scripts to:
+
+1. Build supervised fine-tuning data from pipeline outputs.
+2. Train a LoRA adapter on top of a llama-compatible base model.
+
+The Airflow image installs the LoRA training dependencies automatically when rebuilt.
+
+Compatibility note:
+
+- Airflow runtime is pinned to `torch==2.2.2`.
+- LoRA stack is pinned in `python/requirements-llm-train.txt` to versions compatible with torch 2.2.x.
+- If you install newer `transformers/accelerate/peft`, `train_lora_adapter` can fail at import time.
+
+If `llama_dag_finetune` fails with dependency/import errors, rebuild and restart Airflow services:
+
+```bash
+cd ml
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml build airflow-init airflow-webserver airflow-scheduler
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d airflow-webserver airflow-scheduler
+```
+
+Then clear failed task state and re-run:
+
+```bash
+cd ml
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml exec airflow-webserver \
+  airflow tasks clear llama_dag_finetune train_lora_adapter --yes
+```
+
+For local non-Airflow runs, install training dependencies with:
+
+```bash
+cd ml
+uv pip install -r python/requirements-llm-train.txt
+```
+
+Manual run without Airflow:
+
+```bash
+cd ml
+uv run python python/llama_prepare_sft.py --output-dir python/output
+uv run python python/llama_train_lora.py \
+  --train-jsonl python/output/llm/sft_train.jsonl \
+  --eval-jsonl python/output/llm/sft_eval.jsonl \
+  --output-dir python/output/llm/lora-adapter
+```
+
+Or trigger in Airflow UI:
+
+- DAG: `llama_dag_finetune`
+- Tasks: `prepare_sft_dataset` -> `train_lora_adapter`
+- Default base model: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
+- Override with env var `LLAMA_BASE_MODEL` if you want a different llama-compatible checkpoint.
+
+Expected output path after a successful run:
+
+- `python/output/llm/lora-adapter/`
 
 ## Project Layout
 
