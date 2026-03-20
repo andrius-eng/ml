@@ -233,9 +233,13 @@ def run(
         # Fetch everything via Beam DoFn
         records = None  # will use Beam Create + ParDo
 
-    # ── YTD filter: same day cutoff for every year ──────────────────────
+    # ── YTD filter: full year for completed years, date cutoff for current year ──
+
+    end_year = int(end_date[:4])
 
     def _within_ytd(record):
+        if record["year"] < end_year:
+            return True  # completed years: show all 12 months
         if record["month"] > end_month:
             return False
         if record["month"] == end_month and record["day"] > end_day:

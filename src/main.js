@@ -177,7 +177,7 @@ function renderKPIs(d) {
     {
       label: 'Lithuania YTD temp anomaly',
       value: sign(w.temp_anomaly_c) + w.temp_anomaly_c.toFixed(1) + ' °C',
-      sub: `z = ${w.temp_zscore.toFixed(2)} · vs 1991–2020`,
+      sub: `z = ${w.temp_zscore.toFixed(2)} · vs 1991–2025`,
     },
     {
       label: 'Lithuania last-7d temp signal',
@@ -310,7 +310,7 @@ function renderCityCharts(d) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: { legend: { display: false }, title: { display: true, text: 'YTD Temperature z-score', color: '#f7f7f7' } },
-      scales: baseScaleOpts('z-score vs 1991–2020'),
+      scales: baseScaleOpts('z-score vs 1991–2025'),
     },
   });
 
@@ -330,7 +330,7 @@ function renderCityCharts(d) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: { legend: { display: false }, title: { display: true, text: 'YTD Precipitation z-score', color: '#f7f7f7' } },
-      scales: baseScaleOpts('z-score vs 1991–2020'),
+      scales: baseScaleOpts('z-score vs 1991–2025'),
     },
   });
 }
@@ -660,7 +660,11 @@ document.getElementById('rag-form').addEventListener('submit', async (e) => {
       </div>
     `;
   } catch (err) {
-    resultDiv.textContent = `Error: ${err.message}`;
+    if (err.message.includes('502') || err.message.includes('503')) {
+      resultDiv.innerHTML = '<p style="color:var(--muted)">RAG API is not running. Start it with:<br><code>uv run uvicorn --app-dir python serve:app --host 127.0.0.1 --port 8000</code></p>';
+    } else {
+      resultDiv.textContent = `Error: ${err.message}`;
+    }
   }
 });
 
