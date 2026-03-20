@@ -98,7 +98,7 @@ def build_daily_climatology(daily: pd.DataFrame, group_cols: list[str] | None = 
     if group_cols is None:
         group_cols = []
 
-    baseline = daily[(daily["year"] >= 1991) & (daily["year"] <= 2020)].copy()
+    baseline = daily[(daily["year"] >= 1991) & (daily["year"] <= 2025)].copy()
     keys = [*group_cols, "month_day"]
     climatology = baseline.groupby(keys, as_index=False).agg(
         climatology_temp_mean=("temperature_2m_mean", "mean"),
@@ -153,7 +153,7 @@ def build_monthly_anomalies(daily: pd.DataFrame, group_cols: list[str] | None = 
         days=("time", "count"),
     )
 
-    baseline = monthly_per_year[(monthly_per_year["year"] >= 1991) & (monthly_per_year["year"] <= 2020)].copy()
+    baseline = monthly_per_year[(monthly_per_year["year"] >= 1991) & (monthly_per_year["year"] <= 2025)].copy()
     current_monthly = monthly_per_year[monthly_per_year["year"] == current_year].copy()
 
     keys = [*group_cols, "month"]
@@ -181,8 +181,8 @@ def build_monthly_anomalies(daily: pd.DataFrame, group_cols: list[str] | None = 
 
 
 def compute_weather_summary(annual: pd.DataFrame, current_year: int = 2026) -> dict:
-    baseline = annual[(annual["year"] >= 1991) & (annual["year"] <= 2020)].copy()
-    recent = annual[(annual["year"] >= 2021) & (annual["year"] <= current_year - 1)].copy()
+    baseline = annual[(annual["year"] >= 1991) & (annual["year"] <= 2025)].copy()
+    recent = annual[(annual["year"] >= 2026) & (annual["year"] <= current_year - 1)].copy()
     current = annual[annual["year"] == current_year].iloc[0]
 
     expected = {
@@ -194,7 +194,7 @@ def compute_weather_summary(annual: pd.DataFrame, current_year: int = 2026) -> d
 
     result = {
         "coverage": {
-            "baseline_years": [1991, 2020],
+            "baseline_years": [1991, 2025],
             "proxy_cities": list(LITHUANIA_PROXY_CITIES.keys()),
             "days_observed": int(current["days"]),
         },
