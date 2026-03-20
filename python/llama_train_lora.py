@@ -124,12 +124,24 @@ def main() -> None:
     eval_ds = dataset["eval"].map(tok, remove_columns=dataset["eval"].column_names)
 
     model = AutoModelForCausalLM.from_pretrained(args.base_model)
+
+    # Pick LoRA target modules based on model architecture.
+    # GPT-2 family uses c_attn/c_proj; Llama/Mistral/TinyLlama use q/k/v/o_proj.
+    _model_type = getattr(model.config, "model_type", "").lower()
+    if _model_type in ("gpt2",):
+        _target_modules = ["c_attn", "c_proj"]
+    elif _model_type in ("llama", "mistral", "tinyllama", "qwen2", "phi"):
+        _target_modules = ["q_proj", "k_proj", "v_proj", "o_proj"]
+    else:
+        # Fall back to all linear layers — works across architectures in PEFT ≥0.7
+        _target_modules = "all-linear"
+
     lora_cfg = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
         r=16,
         lora_alpha=32,
         lora_dropout=0.05,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+        target_modules=_target_modules,
     )
     model = get_peft_model(model, lora_cfg)
 
