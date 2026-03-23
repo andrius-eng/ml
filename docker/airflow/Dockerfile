@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gcc \
     libgomp1 \
+    openjdk-17-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 USER airflow
