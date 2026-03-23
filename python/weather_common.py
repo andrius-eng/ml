@@ -98,7 +98,7 @@ def build_daily_climatology(daily: pd.DataFrame, group_cols: list[str] | None = 
     if group_cols is None:
         group_cols = []
 
-    baseline = daily[(daily["year"] >= 1991) & (daily["year"] <= 2025)].copy()
+    baseline = daily[(daily["year"] >= 1991) & (daily["year"] <= 2020)].copy()
     keys = [*group_cols, "month_day"]
     climatology = baseline.groupby(keys, as_index=False).agg(
         climatology_temp_mean=("temperature_2m_mean", "mean"),
