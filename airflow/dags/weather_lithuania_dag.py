@@ -52,6 +52,8 @@ CITY_PLOTS_DIR = WEATHER_OUTPUT_DIR / "cities"
 BEAM_OUTPUT_DIR = PROJECT_ROOT / "python" / "output" / "beam"
 RAG_DEMO_PATH = PROJECT_ROOT / "python" / "output" / "rag" / "rag_demo.json"
 ANALYSIS_END = "{{ ds }}"
+BEAM_RUNNER = os.environ.get("BEAM_RUNNER", "DirectRunner")
+BEAM_PIPELINE_ARGS = os.environ.get("BEAM_PIPELINE_ARGS", "")
 
 
 def project_python_command(*args: str) -> str:
@@ -129,9 +131,14 @@ with DAG(
         bash_command=(
             "set -euo pipefail\n"
             f'test -f "{BEAM_ANALYSIS_SCRIPT}"\n'
-            f'{project_python_command(str(BEAM_ANALYSIS_SCRIPT), "--input", str(RAW_WEATHER_PATH), "--output-dir", str(BEAM_OUTPUT_DIR), "--end-date", ANALYSIS_END)}'
+            f'{project_python_command(str(BEAM_ANALYSIS_SCRIPT), "--input", str(RAW_WEATHER_PATH), "--output-dir", str(BEAM_OUTPUT_DIR), "--end-date", ANALYSIS_END, "--no-fetch-missing-cities", "--runner", BEAM_RUNNER)} ${{BEAM_PIPELINE_ARGS:-}}'
         ),
-        env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+        env={
+            "ML_PROJECT_ROOT": str(PROJECT_ROOT),
+            "TRAIN_PYTHON_BIN": PYTHON_BIN,
+            "BEAM_RUNNER": BEAM_RUNNER,
+            "BEAM_PIPELINE_ARGS": BEAM_PIPELINE_ARGS,
+        },
     )
 
     fetch_weather >> analyze_weather >> [plot_weather, quality_gate, beam_regional_analysis]

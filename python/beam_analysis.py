@@ -18,6 +18,7 @@ from pathlib import Path
 
 import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions
+from apache_beam.options.pipeline_options import SetupOptions
 
 from weather_common import REGION_CITIES, fetch_daily_weather
 
@@ -168,6 +169,10 @@ def run(
     output_dir: str = "python/output/beam",
     cities: dict | None = None,
     input_csv: str | None = None,
+    fetch_missing_cities: bool = True,
+    runner: str = "DirectRunner",
+    streaming: bool = False,
+    beam_args: list[str] | None = None,
 ) -> str:
     """Execute the Beam monthly anomaly pipeline.
 
@@ -183,6 +188,15 @@ def run(
         City name → (lat, lon).  Defaults to REGION_CITIES.
     input_csv : str | None
         If provided, read daily records from this CSV instead of fetching.
+    fetch_missing_cities : bool
+        When input_csv is provided, fetch records for cities not present in the file.
+        Disable to avoid external API calls in constrained or rate-limited environments.
+    runner : str
+        Beam runner name (for example: DirectRunner, FlinkRunner, SparkRunner).
+    streaming : bool
+        Enable Beam streaming mode for runners that support it.
+    beam_args : list[str] | None
+        Additional Beam pipeline args passed through to PipelineOptions.
 
     Returns
     -------
@@ -211,16 +225,23 @@ def run(
 
         # Fetch any cities not already in the file
         extra = {c: coord for c, coord in cities.items() if c not in existing_cities}
-        if extra:
+        if extra and fetch_missing_cities:
             import time as _time
             frames = [raw_df]
             for city_name, (lat, lon) in extra.items():
                 print(f"[Beam] Fetching {city_name}...")
-                df = fetch_daily_weather(lat, lon, start_date, end_date)
-                df["city"] = city_name
-                frames.append(df)
+                try:
+                    df = fetch_daily_weather(lat, lon, start_date, end_date)
+                    df["city"] = city_name
+                    frames.append(df)
+                except Exception as exc:
+                    # External weather API can throttle with HTTP 429.
+                    # Keep pipeline progress by skipping unavailable cities.
+                    print(f"[Beam] WARNING: failed to fetch {city_name}: {exc}")
                 _time.sleep(5)  # rate-limit courtesy
             raw_df = pd.concat(frames, ignore_index=True)
+        elif extra and not fetch_missing_cities:
+            print(f"[Beam] Skipping fetch for {len(extra)} missing cities from input CSV")
         # Filter to only requested cities
         raw_df = raw_df[raw_df["city"].isin(cities)].copy()
         # Ensure consistent types for Beam schema inference
@@ -249,7 +270,20 @@ def run(
     # ── Run Beam pipeline ───────────────────────────────────────────────
 
     tmp_jsonl = str(out / "_anomalies_tmp")
-    options = PipelineOptions(flags=[], runner="DirectRunner")
+    pipeline_args = list(beam_args or [])
+
+    if not any(arg == "--runner" or arg.startswith("--runner=") for arg in pipeline_args):
+        pipeline_args.extend(["--runner", runner])
+    if streaming and "--streaming" not in pipeline_args:
+        pipeline_args.append("--streaming")
+
+    options = PipelineOptions(pipeline_args)
+    options.view_as(SetupOptions).save_main_session = True
+
+    resolved_runner = options.get_all_options().get("runner", runner)
+    print(f"[Beam] Runner: {resolved_runner}")
+    if pipeline_args:
+        print(f"[Beam] Pipeline args: {' '.join(pipeline_args)}")
 
     with beam.Pipeline(options=options) as p:
         if records is not None:
@@ -376,13 +410,32 @@ def main() -> None:
     parser.add_argument("--start-date", default="1991-01-01")
     parser.add_argument("--end-date", default=None)
     parser.add_argument("--output-dir", default="python/output/beam")
-    args = parser.parse_args()
+    parser.add_argument(
+        "--no-fetch-missing-cities",
+        action="store_true",
+        help="Do not fetch missing cities when --input CSV is provided",
+    )
+    parser.add_argument(
+        "--runner",
+        default="DirectRunner",
+        help="Beam runner (DirectRunner, FlinkRunner, SparkRunner, etc.)",
+    )
+    parser.add_argument(
+        "--streaming",
+        action="store_true",
+        help="Enable Beam streaming mode (runner must support streaming)",
+    )
+    args, beam_args = parser.parse_known_args()
 
     run(
         start_date=args.start_date,
         end_date=args.end_date,
         output_dir=args.output_dir,
         input_csv=args.input,
+        fetch_missing_cities=not args.no_fetch_missing_cities,
+        runner=args.runner,
+        streaming=args.streaming,
+        beam_args=beam_args,
     )
 
 

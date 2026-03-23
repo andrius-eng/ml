@@ -78,8 +78,30 @@ Open http://localhost:5173. You will see:
 
 The fastest way to run everything (Airflow + dashboard + RAG API):
 
+Use `docker compose` below. On systems with Docker Compose v2 installed as a
+Docker plugin, `docker-compose` may not exist.
+
 ```bash
 docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
+```
+
+First-time setup:
+
+```bash
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up airflow-init
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
+```
+
+Repeat runs after the admin user already exists:
+
+```bash
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
+```
+
+If you only need to sync the Airflow schema without re-running user creation:
+
+```bash
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml run --rm --entrypoint /bin/bash airflow-init -lc "airflow db migrate"
 ```
 
 To use prebuilt GHCR images (no local image build), pull and run:
@@ -184,6 +206,48 @@ Override model/provider if needed:
 ```bash
 RAG_LLM_PROVIDER=ollama OLLAMA_MODEL=llama3.1:8b \
 docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d ml-server ollama
+```
+
+## Beam Multi-Node Test
+
+The weather DAG already includes a Beam task (`beam_regional_analysis`).
+You can run it with different runners without code changes.
+
+Default behavior is local:
+
+```bash
+BEAM_RUNNER=DirectRunner
+```
+
+For distributed tests, pass runner-specific args via `BEAM_PIPELINE_ARGS`.
+Example for Flink runner:
+
+```bash
+cd ml
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d flink-jobmanager flink-taskmanager
+
+BEAM_RUNNER=FlinkRunner \
+BEAM_PIPELINE_ARGS="--flink_master=flink-jobmanager:8081 --parallelism=4 --environment_type=LOOPBACK" \
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d airflow-scheduler airflow-webserver
+```
+
+The DAG task will execute:
+
+```bash
+python beam_analysis.py --runner "$BEAM_RUNNER" ... $BEAM_PIPELINE_ARGS
+```
+
+You can also run the Beam job directly:
+
+```bash
+cd ml
+python python/beam_analysis.py \
+  --input python/output/weather/raw_daily_weather.csv \
+  --output-dir python/output/beam \
+  --runner FlinkRunner \
+  --flink_master localhost:8081 \
+  --parallelism 4 \
+  --environment_type LOOPBACK
 ```
 
 ## Train Llama On DAG Artifacts (LoRA)
