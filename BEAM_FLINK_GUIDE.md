@@ -238,13 +238,15 @@ Mitigation:
 
 The `lithuania_weather_analysis` DAG contains a `beam_regional_analysis` task that
 should execute the Python Beam pipeline on the Flink cluster. An investigation found
-three issues preventing Flink execution:
+**five issues** preventing successful Flink execution:
 
 | # | Issue | Root Cause | Fix Applied |
 |---|-------|-----------|-------------|
 | 1 | **Wrong runner** | `FlinkRunner` tries to start a local Flink job server inside the Airflow scheduler container. The scheduler image has no Java runtime, so this fails silently and falls through to `DirectRunner`. | Switched to `PortableRunner` with `--job_endpoint=beam-job-server:8099`, which uses the existing dedicated `beam-job-server` container. |
-| 2 | **Worker endpoints resolve to `localhost`** | `beam-job-server` was advertising `localhost:PORT` for per-job control/provisioning endpoints. Worker containers (`beam-worker-pool`) cannot reach `localhost` on a different container. | Added `--job-host=beam-job-server` to the `beam-job-server` command in `docker-compose.full.yml`. |
-| 3 | **Redundant `--flink_master` arg** | `PortableRunner` does not need `--flink_master`; the `beam-job-server` is already configured with `--flink-master=flink-jobmanager:8081`. Passing it as a pipeline arg causes a warning. | Removed from DAG pipeline args. |
+| 2 | **Worker endpoints resolve to `localhost`** | Beam's `ServerFactory` in the Flink TaskManager JVM hard-codes **loopback** (`127.0.0.1`) for its per-task Fn API services (control, logging, artifact, provision). All four endpoints are advertised as `localhost:PORT`. The `--job-host` flag on the job server only affects the top-level gRPC endpoint, not these per-tasked embedded services. | Set `beam-worker-pool` to share the Flink TaskManager's network namespace via `network_mode: "service:flink-taskmanager"` in `docker-compose.full.yml`. Change `--environment_config` to `localhost:50000` so the ExternalEnvironmentFactory contacts the worker pool via the shared loopback. |
+| 3 | **Artifact staging directory not shared** | The beam-job-server stages pipeline artifacts to `/tmp/beam-artifact-staging/` on its own container. The Flink TaskManager's `ArtifactRetrievalService` expects the same files at `/tmp/beam-artifact-staging/` on the TaskManager — but they are on a separate container and unreachable. | Added a shared Docker named volume `beam-artifacts` mounted at `/tmp/beam-artifact-staging` in both `beam-job-server` and `flink-taskmanager` in `docker-compose.full.yml`. |
+| 4 | **Redundant `--flink_master` arg** | `PortableRunner` does not need `--flink_master`; the `beam-job-server` is already configured with `--flink-master=flink-jobmanager:8081`. Passing it as a pipeline arg causes a warning. | Removed from DAG pipeline args. |
+| 5 | **`taskmanager.host` doesn't affect Beam server address** | Adding `taskmanager.host: flink-taskmanager` to Flink config does NOT change how Beam's embedded Fn API server factory selects its bind address — Beam always uses loopback directly. | Not needed once Issue 2 is fixed via network namespace sharing. |
 
 ### Debugging Checklist
 
@@ -264,11 +266,21 @@ Use this when `beam_regional_analysis` falls through to DirectRunner or fails:
   # Fix: ensure docker-compose command includes --job-host=beam-job-server
   ```
 
-- [ ] **Worker pool receives `beam-job-server:PORT` endpoints (not `localhost:PORT`)?**
+- [ ] **Worker pool can reach Fn API endpoints (provision, control, artifact, logging)?**
   ```bash
-  docker logs airflow-beam-worker-pool-1 2>&1 | grep "provision_endpoint" | tail -3
-  # ✅ Good: --provision_endpoint=beam-job-server:NNNNN
-  # ❌ Bad:  --provision_endpoint=localhost:NNNNN
+  docker logs airflow-beam-worker-pool-1 2>&1 | grep -E "Provision info|failed to retrieve|Failed to obtain" | tail -5
+  # ✅ Good: "Provision info:"  followed by "Downloaded: /tmp/staged/pickled_main_session"
+  # ❌ Bad:  "Failed to obtain provisioning information"
+  #          → Fix: ensure beam-worker-pool has network_mode: "service:flink-taskmanager"
+  #          → And pipeline uses --environment_config localhost:50000
+  ```
+
+- [ ] **Artifact staging directory shared between job-server and taskmanager?**
+  ```bash
+  docker exec airflow-flink-taskmanager-1 ls /tmp/beam-artifact-staging/ 2>/dev/null | wc -l
+  # ✅ Good: non-zero (files are present after staging)
+  # ❌ Bad:  0 or error
+  # Fix: add shared volume beam-artifacts:/tmp/beam-artifact-staging to both services
   ```
 
 - [ ] **`beam-job-server` can reach `flink-jobmanager`?**
@@ -321,13 +333,18 @@ Use this when `beam_regional_analysis` falls through to DirectRunner or fails:
 ### ✅ What Works (Proven Configuration)
 - **Beam 2.71.0** with Flink 1.20.1 (`flink:1.20.1-scala_2.12-java11`)
 - **PortableRunner** + dedicated `beam-job-server` (`apache/beam_flink1.20_job_server:2.71.0`)
-- **EXTERNAL worker pool** (`beam-worker-pool:50000`) with `--job-host=beam-job-server` set
-- Flink batch jobs verified finishing in < 500 ms (WordCount JAR, regional weather anomaly pipeline)
+- **EXTERNAL worker pool** sharing Flink TaskManager's network namespace (`network_mode: service:flink-taskmanager`)
+- **Shared artifact volume** `beam-artifacts:/tmp/beam-artifact-staging` on both `beam-job-server` and `flink-taskmanager`
+- **TaskManager JVM guardrail**: `env.java.opts.taskmanager: -XX:MaxDirectMemorySize=512m`
+- **Pipeline arg**: `--environment_config localhost:50000` (worker pool on shared loopback)
+- Flink batch jobs verified FINISHED: WordCount JAR (<500ms), direct script Lithuanian weather anomaly pipeline (85s — **job 87841ef8969fa81dc5400e6b2da74451**), and Airflow DAG `lithuania_weather_analysis` on Flink (**job 36a69bc10c22635740031e5aebe36e24**, FINISHED, 47s)
 - Flink UI at `http://localhost:8082` for job monitoring
 
 ### ⚠️ Known Limitations
 - `FlinkRunner` (not `PortableRunner`) requires Java in the driver process — not present in the Airflow scheduler image
-- EXTERNAL worker pool endpoints default to `localhost` unless `--job-host=<container-name>` is set on `beam-job-server`
+- Beam's `ServerFactory` always binds Fn API services to loopback (`127.0.0.1`); `--job-host` and `taskmanager.host` do NOT fix per-worker endpoints — only network namespace sharing resolves this
+- `beam-worker-pool` must be restarted whenever `flink-taskmanager` is restarted (network namespace sharing ties them together)
+- Repeated failed or interrupted runs can exhaust TaskManager Netty direct buffers (`OutOfMemoryError: Direct buffer memory`). Recovery is: cancel the stuck Flink job, recreate `flink-taskmanager`, recreate `beam-worker-pool`, then re-run.
 - Streaming mode requires different error handling
 - State management needs backups for fault tolerance
 

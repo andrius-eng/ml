@@ -64,8 +64,12 @@ services:
   flink-taskmanager:
     image: flink:1.20.1-scala_2.12-java11
     command: taskmanager
+    volumes:
+      - beam-artifacts:/tmp/beam-artifact-staging
     environment:
       FLINK_PROPERTIES: 'jobmanager.rpc.address: flink-jobmanager
+
+        taskmanager.host: flink-taskmanager
 
         taskmanager.numberOfTaskSlots: 4
 
@@ -74,6 +78,8 @@ services:
         taskmanager.memory.network.min: 268435456
 
         taskmanager.memory.network.max: 1073741824
+
+        env.java.opts.taskmanager: -XX:MaxDirectMemorySize=512m
 
         '
     depends_on:
@@ -84,17 +90,16 @@ services:
   beam-worker-pool:
     image: apache/beam_python3.12_sdk:2.71.0
     command: ["--worker_pool"]
-    ports:
-      - "50001:50000"
-    networks:
-      - default
+    network_mode: "service:flink-taskmanager"
     depends_on:
-      - flink-jobmanager
+      - flink-taskmanager
     restart: unless-stopped
 
   beam-job-server:
     image: apache/beam_flink1.20_job_server:2.71.0
     command: ["--flink-master=flink-jobmanager:8081", "--job-host=beam-job-server"]
+    volumes:
+      - beam-artifacts:/tmp/beam-artifact-staging
     ports:
       - "8100:8098"
       - "8101:8099"
@@ -192,6 +197,8 @@ volumes:
   dashboard-data:
     driver: local
   ollama-data:
+    driver: local
+  beam-artifacts:
     driver: local
 networks:
   default:
