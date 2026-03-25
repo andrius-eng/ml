@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import time
 from datetime import date
+from pathlib import Path
 
 import pandas as pd
 
@@ -20,7 +22,21 @@ def main() -> None:
         default="python/output/weather/raw_daily_weather.csv",
         help="CSV output path for raw city-level daily weather data",
     )
+    parser.add_argument(
+        "--cache-minutes",
+        type=int,
+        default=60,
+        help="Do not fetch if cached data is newer than this many minutes",
+    )
     args = parser.parse_args()
+
+    output_path = Path(args.output)
+    if output_path.exists():
+        age_secs = time.time() - output_path.stat().st_mtime
+        age_minutes = age_secs / 60.0
+        if age_minutes <= args.cache_minutes:
+            print(f"Using cached weather file {output_path} ({age_minutes:.1f} minutes old)")
+            return
 
     frames: list[pd.DataFrame] = []
     for city, (lat, lon) in LITHUANIA_PROXY_CITIES.items():

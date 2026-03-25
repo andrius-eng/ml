@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import os
+import sys
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from airflow import DAG
-from airflow.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator
+from airflow.sensors.python import PythonSensor
+from airflow.utils.trigger_rule import TriggerRule
 
 
 DEFAULT_ARGS = {
@@ -20,13 +24,205 @@ DEFAULT_ARGS = {
 }
 
 
+def check_flink_ready(**context):
+    """Check if Flink is ready with at least one taskmanager registered."""
+    import requests
+    
+    try:
+        response = requests.get("http://flink-jobmanager:8081/v1/overview", timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        
+        taskmanagers = data.get("taskmanagers", 0)
+        slots = data.get("slots-total", 0)
+        
+        if taskmanagers >= 1:
+            context["task_instance"].xcom_push(
+                key="flink_status",
+                value=f"Flink ready: {taskmanagers} taskmanager(s), {slots} slot(s)"
+            )
+            context["logger"].info(f"✓ Flink ready with {taskmanagers} taskmanager(s) and {slots} slot(s)")
+            return True
+        return False
+    except Exception as e:
+        context["logger"].warning(f"Flink health check failed: {e}")
+        return False
+
+
+def run_script(script_path: Path, args: list, logger):
+    """Run a Python script with given arguments and capture output."""
+    if not script_path.exists():
+        raise FileNotFoundError(f"Script not found: {script_path}")
+    
+    cmd = [sys.executable, str(script_path)] + args
+    logger.info(f"Running: {' '.join(cmd)}")
+    
+    try:
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=300)
+        if result.stdout:
+            logger.info(result.stdout)
+        return result
+    except subprocess.TimeoutExpired as e:
+        logger.error(f"Script timeout after 300 seconds: {e}")
+        raise
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Script failed with exit code {e.returncode}")
+        if e.stdout:
+            logger.error(f"stdout: {e.stdout}")
+        if e.stderr:
+            logger.error(f"stderr: {e.stderr}")
+        raise
+
+
+def fetch_weather_data(analysis_end=None, **context):
+    """Fetch weather data with caching (reuse if less than 60 minutes old)."""
+    logger = context["logger"]
+    
+    # Check cache
+    if RAW_WEATHER_PATH.exists():
+        age_seconds = (datetime.now() - datetime.fromtimestamp(RAW_WEATHER_PATH.stat().st_mtime)).total_seconds()
+        if age_seconds < 3600:  # Less than 60 minutes
+            logger.info(f"✓ Using cached raw weather data (age: {age_seconds/60:.0f} minutes)")
+            return
+    
+    logger.info("Fetching fresh weather data...")
+    run_script(
+        WEATHER_FETCH_SCRIPT,
+        ["--start-date", "1991-01-01", "--end-date", analysis_end or "{{ ds }}", "--output", str(RAW_WEATHER_PATH)],
+        logger,
+    )
+
+
+def analyze_weather_data(analysis_end=None, **context):
+    """Analyze weather patterns and generate summaries."""
+    logger = context["logger"]
+    run_script(
+        WEATHER_ANALYZE_SCRIPT,
+        [
+            "--raw-input", str(RAW_WEATHER_PATH),
+            "--country-daily-output", str(COUNTRY_DAILY_PATH),
+            "--annual-output", str(ANNUAL_SUMMARY_PATH),
+            "--city-annual-output", str(CITY_ANNUAL_SUMMARY_PATH),
+            "--summary-output", str(WEATHER_SUMMARY_PATH),
+            "--city-summary-output", str(CITY_WEATHER_SUMMARY_PATH),
+            "--report-output", str(WEATHER_REPORT_PATH),
+            "--country-daily-anomalies-output", str(COUNTRY_DAILY_ANOMALY_PATH),
+            "--city-daily-anomalies-output", str(CITY_DAILY_ANOMALY_PATH),
+            "--country-monthly-output", str(COUNTRY_MONTHLY_PATH),
+            "--city-monthly-output", str(CITY_MONTHLY_PATH),
+            "--city-rankings-output", str(CITY_RANKINGS_PATH),
+            "--current-end", analysis_end or "{{ ds }}",
+        ],
+        logger,
+    )
+
+
+def plot_weather_data(analysis_end=None, **context):
+    """Generate weather visualization plots."""
+    logger = context["logger"]
+    run_script(
+        WEATHER_PLOT_SCRIPT,
+        [
+            "--annual-input", str(ANNUAL_SUMMARY_PATH),
+            "--summary-input", str(WEATHER_SUMMARY_PATH),
+            "--city-summary-input", str(CITY_WEATHER_SUMMARY_PATH),
+            "--country-daily-input", str(COUNTRY_DAILY_ANOMALY_PATH),
+            "--country-monthly-input", str(COUNTRY_MONTHLY_PATH),
+            "--city-daily-input", str(CITY_DAILY_ANOMALY_PATH),
+            "--city-monthly-input", str(CITY_MONTHLY_PATH),
+            "--city-plots-dir", str(CITY_PLOTS_DIR),
+            "--output", str(WEATHER_PLOT_PATH),
+        ],
+        logger,
+    )
+
+
+def validate_weather_summary(analysis_end=None, **context):
+    """Validate weather summary meets quality gates."""
+    logger = context["logger"]
+    run_script(
+        WEATHER_QUALITY_GATE_SCRIPT,
+        [
+            "--summary-input", str(WEATHER_SUMMARY_PATH),
+            "--country-monthly-input", str(COUNTRY_MONTHLY_PATH),
+            "--min-days", "60",
+            "--min-month-days", "5",
+            "--max-monthly-temp-abs-z", "3.5",
+            "--max-monthly-precip-abs-z", "3.5",
+        ],
+        logger,
+    )
+
+
+def refresh_rag_context_data(analysis_end=None, **context):
+    """Refresh RAG pipeline context with latest analysis."""
+    logger = context["logger"]
+    run_script(
+        RAG_PIPELINE_SCRIPT,
+        [
+            "--output-dir", str(PROJECT_ROOT / "python" / "output"),
+            "--demo-output", str(RAG_DEMO_PATH),
+        ],
+        logger,
+    )
+
+
+def run_beam_analysis_with_fallback(analysis_end=None, **context):
+    """Run Beam pipeline with FlinkRunner, fallback to DirectRunner if needed."""
+    logger = context["logger"]
+    
+    # Try FlinkRunner first
+    try:
+        logger.info("Attempting Beam pipeline with FlinkRunner...")
+        cmd = [
+            sys.executable, str(BEAM_ANALYSIS_SCRIPT),
+            "--input", str(RAW_WEATHER_PATH),
+            "--output-dir", str(BEAM_OUTPUT_DIR),
+            "--end-date", analysis_end or "{{ ds }}",
+            "--runner", "FlinkRunner",
+            "--flink_master", "flink-jobmanager:8081",
+            "--parallelism", "2",
+        ]
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=2700)
+        if result.stdout:
+            logger.info(result.stdout)
+        logger.info("✅ Beam pipeline completed successfully with FlinkRunner")
+        return
+    except subprocess.TimeoutExpired:
+        logger.warning("FlinkRunner timeout - falling back to DirectRunner...")
+    except subprocess.CalledProcessError as e:
+        logger.warning(f"FlinkRunner failed (exit {e.returncode})")
+        if e.stderr:
+            logger.warning(f"stderr: {e.stderr}")
+    
+    # Fallback to DirectRunner
+    logger.info("Running Beam pipeline with DirectRunner...")
+    try:
+        cmd = [
+            sys.executable, str(BEAM_ANALYSIS_SCRIPT),
+            "--input", str(RAW_WEATHER_PATH),
+            "--output-dir", str(BEAM_OUTPUT_DIR),
+            "--end-date", analysis_end or "{{ ds }}",
+            "--runner", "DirectRunner",
+        ]
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=2700)
+        if result.stdout:
+            logger.info(result.stdout)
+        logger.warning("⚠️ Beam pipeline completed with DirectRunner (fallback from FlinkRunner)")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"DirectRunner also failed (exit {e.returncode})")
+        if e.stderr:
+            logger.error(f"stderr: {e.stderr}")
+        raise RuntimeError("Both FlinkRunner and DirectRunner failed for Beam pipeline")
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("DirectRunner timeout for Beam pipeline")
+
+
 DAG_DIR = Path(__file__).resolve().parent
 DEFAULT_PROJECT_ROOT = DAG_DIR.parents[1] if len(DAG_DIR.parents) >= 2 else Path("/opt/airflow/project")
 PROJECT_ROOT = Path(os.environ.get("ML_PROJECT_ROOT", str(DEFAULT_PROJECT_ROOT))).resolve()
-PYTHON_BIN = os.environ.get("TRAIN_PYTHON_BIN", "python")
-if PYTHON_BIN != "python" and not Path(PYTHON_BIN).exists():
-    PYTHON_BIN = "python"
 
+# Python script paths
 WEATHER_FETCH_SCRIPT = PROJECT_ROOT / "python" / "weather_fetch.py"
 WEATHER_ANALYZE_SCRIPT = PROJECT_ROOT / "python" / "weather_analyze.py"
 WEATHER_PLOT_SCRIPT = PROJECT_ROOT / "python" / "weather_plot.py"
@@ -34,6 +230,7 @@ WEATHER_QUALITY_GATE_SCRIPT = PROJECT_ROOT / "python" / "weather_quality_gate.py
 BEAM_ANALYSIS_SCRIPT = PROJECT_ROOT / "python" / "beam_analysis.py"
 RAG_PIPELINE_SCRIPT = PROJECT_ROOT / "python" / "rag_pipeline.py"
 
+# Output paths
 WEATHER_OUTPUT_DIR = PROJECT_ROOT / "python" / "output" / "weather"
 RAW_WEATHER_PATH = WEATHER_OUTPUT_DIR / "raw_daily_weather.csv"
 COUNTRY_DAILY_PATH = WEATHER_OUTPUT_DIR / "country_daily_weather.csv"
@@ -49,16 +246,9 @@ CITY_RANKINGS_PATH = WEATHER_OUTPUT_DIR / "city_rankings.json"
 WEATHER_PLOT_PATH = WEATHER_OUTPUT_DIR / "weather_anomalies.png"
 WEATHER_REPORT_PATH = WEATHER_OUTPUT_DIR / "weather_summary.md"
 CITY_PLOTS_DIR = WEATHER_OUTPUT_DIR / "cities"
+
 BEAM_OUTPUT_DIR = PROJECT_ROOT / "python" / "output" / "beam"
 RAG_DEMO_PATH = PROJECT_ROOT / "python" / "output" / "rag" / "rag_demo.json"
-ANALYSIS_END = "{{ ds }}"
-BEAM_RUNNER = os.environ.get("BEAM_RUNNER", "DirectRunner")
-BEAM_PIPELINE_ARGS = os.environ.get("BEAM_PIPELINE_ARGS", "")
-
-
-def project_python_command(*args: str) -> str:
-    quoted_args = " ".join(f'"{arg}"' for arg in args)
-    return f'"{PYTHON_BIN}" {quoted_args}'
 
 
 with DAG(
@@ -70,76 +260,46 @@ with DAG(
     catchup=False,
     tags=["weather", "analytics", "lithuania"],
 ) as dag:
-    fetch_weather = BashOperator(
+    fetch_weather = PythonOperator(
         task_id="fetch_weather_data",
-        cwd=str(PROJECT_ROOT),
-        bash_command=(
-            "set -euo pipefail\n"
-            f'test -f "{WEATHER_FETCH_SCRIPT}"\n'
-            f'{project_python_command(str(WEATHER_FETCH_SCRIPT), "--start-date", "1991-01-01", "--end-date", ANALYSIS_END, "--output", str(RAW_WEATHER_PATH))}'
-        ),
-        env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+        python_callable=fetch_weather_data,
     )
 
-    analyze_weather = BashOperator(
+    analyze_weather = PythonOperator(
         task_id="analyze_weather",
-        cwd=str(PROJECT_ROOT),
-        bash_command=(
-            "set -euo pipefail\n"
-            f'test -f "{WEATHER_ANALYZE_SCRIPT}"\n'
-            f'{project_python_command(str(WEATHER_ANALYZE_SCRIPT), "--raw-input", str(RAW_WEATHER_PATH), "--country-daily-output", str(COUNTRY_DAILY_PATH), "--annual-output", str(ANNUAL_SUMMARY_PATH), "--city-annual-output", str(CITY_ANNUAL_SUMMARY_PATH), "--summary-output", str(WEATHER_SUMMARY_PATH), "--city-summary-output", str(CITY_WEATHER_SUMMARY_PATH), "--report-output", str(WEATHER_REPORT_PATH), "--country-daily-anomalies-output", str(COUNTRY_DAILY_ANOMALY_PATH), "--city-daily-anomalies-output", str(CITY_DAILY_ANOMALY_PATH), "--country-monthly-output", str(COUNTRY_MONTHLY_PATH), "--city-monthly-output", str(CITY_MONTHLY_PATH), "--city-rankings-output", str(CITY_RANKINGS_PATH), "--current-end", ANALYSIS_END)}'
-        ),
-        env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+        python_callable=analyze_weather_data,
     )
 
-    plot_weather = BashOperator(
+    plot_weather = PythonOperator(
         task_id="plot_weather_anomalies",
-        cwd=str(PROJECT_ROOT),
-        bash_command=(
-            "set -euo pipefail\n"
-            f'test -f "{WEATHER_PLOT_SCRIPT}"\n'
-            f'{project_python_command(str(WEATHER_PLOT_SCRIPT), "--annual-input", str(ANNUAL_SUMMARY_PATH), "--summary-input", str(WEATHER_SUMMARY_PATH), "--city-summary-input", str(CITY_WEATHER_SUMMARY_PATH), "--country-daily-input", str(COUNTRY_DAILY_ANOMALY_PATH), "--country-monthly-input", str(COUNTRY_MONTHLY_PATH), "--city-daily-input", str(CITY_DAILY_ANOMALY_PATH), "--city-monthly-input", str(CITY_MONTHLY_PATH), "--city-plots-dir", str(CITY_PLOTS_DIR), "--output", str(WEATHER_PLOT_PATH))}'
-        ),
-        env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+        python_callable=plot_weather_data,
     )
 
-    quality_gate = BashOperator(
+    quality_gate = PythonOperator(
         task_id="validate_weather_summary",
-        cwd=str(PROJECT_ROOT),
-        bash_command=(
-            "set -euo pipefail\n"
-            f'test -f "{WEATHER_QUALITY_GATE_SCRIPT}"\n'
-            f'{project_python_command(str(WEATHER_QUALITY_GATE_SCRIPT), "--summary-input", str(WEATHER_SUMMARY_PATH), "--country-monthly-input", str(COUNTRY_MONTHLY_PATH), "--min-days", "60", "--min-month-days", "5", "--max-monthly-temp-abs-z", "3.5", "--max-monthly-precip-abs-z", "3.5")}'
-        ),
-        env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+        python_callable=validate_weather_summary,
     )
 
-    refresh_rag_context = BashOperator(
+    refresh_rag_context = PythonOperator(
         task_id="refresh_rag_context",
-        cwd=str(PROJECT_ROOT),
-        bash_command=(
-            "set -euo pipefail\n"
-            f'test -f "{RAG_PIPELINE_SCRIPT}"\n'
-            f'{project_python_command(str(RAG_PIPELINE_SCRIPT), "--output-dir", str(PROJECT_ROOT / "python" / "output"), "--demo-output", str(RAG_DEMO_PATH))}'
-        ),
-        env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+        python_callable=refresh_rag_context_data,
     )
 
-    beam_regional_analysis = BashOperator(
+    wait_for_flink = PythonSensor(
+        task_id="wait_for_flink_jobmanager",
+        python_callable=check_flink_ready,
+        poke_interval=5,
+        timeout=600,
+        mode="poke",
+    )
+
+    beam_regional_analysis = PythonOperator(
         task_id="beam_regional_analysis",
-        cwd=str(PROJECT_ROOT),
-        bash_command=(
-            "set -euo pipefail\n"
-            f'test -f "{BEAM_ANALYSIS_SCRIPT}"\n'
-            f'{project_python_command(str(BEAM_ANALYSIS_SCRIPT), "--input", str(RAW_WEATHER_PATH), "--output-dir", str(BEAM_OUTPUT_DIR), "--end-date", ANALYSIS_END, "--no-fetch-missing-cities", "--runner", BEAM_RUNNER)} ${{BEAM_PIPELINE_ARGS:-}}'
-        ),
-        env={
-            "ML_PROJECT_ROOT": str(PROJECT_ROOT),
-            "TRAIN_PYTHON_BIN": PYTHON_BIN,
-            "BEAM_RUNNER": BEAM_RUNNER,
-            "BEAM_PIPELINE_ARGS": BEAM_PIPELINE_ARGS,
-        },
+        python_callable=run_beam_analysis_with_fallback,
+        execution_timeout=timedelta(minutes=50),
+        trigger_rule=TriggerRule.NONE_FAILED,
     )
 
-    fetch_weather >> analyze_weather >> [plot_weather, quality_gate, beam_regional_analysis]
+    fetch_weather >> analyze_weather >> [plot_weather, quality_gate, wait_for_flink]
+    wait_for_flink >> beam_regional_analysis
     [plot_weather, quality_gate, beam_regional_analysis] >> refresh_rag_context
