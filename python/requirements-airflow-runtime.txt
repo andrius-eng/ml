@@ -1,7 +1,7 @@
 numpy<2
 pandas>=2.0.0
 qdrant-client>=1.9.0
-apache-beam==2.53.0
+apache-beam==2.71.0
 matplotlib>=3.8.0
 fastapi>=0.100.0
 uvicorn>=0.23.0
