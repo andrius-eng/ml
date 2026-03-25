@@ -94,7 +94,7 @@ services:
 
   beam-job-server:
     image: apache/beam_flink1.20_job_server:2.71.0
-    command: ["--flink-master=flink-jobmanager:8081"]
+    command: ["--flink-master=flink-jobmanager:8081", "--job-host=beam-job-server"]
     ports:
       - "8100:8098"
       - "8101:8099"

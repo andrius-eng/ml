@@ -188,39 +188,44 @@ def refresh_rag_context_data(analysis_end=None, **context):
 
 def run_beam_analysis_with_fallback(analysis_end=None, **context):
     analysis_end = resolve_analysis_end(context, analysis_end if 'analysis_end' in globals() else None)
-    """Run Beam pipeline with FlinkRunner, fallback to DirectRunner if needed."""
+    """Run Beam pipeline via PortableRunner -> beam-job-server -> Flink cluster.
+
+    Falls back to DirectRunner if the Flink/Beam stack is unavailable.
+    PortableRunner is required (not FlinkRunner) because the Airflow scheduler
+    container has no Java runtime to start a local job server.
+    """
     logger = logging.getLogger(__name__)
-    
-    # Try FlinkRunner first with proper beam worker pool configuration
+
+    # Submit through the dedicated Beam job server -> Flink cluster
     try:
-        logger.info("Attempting Beam pipeline with FlinkRunner...")
+        logger.info("Attempting Beam pipeline with PortableRunner -> Flink...")
         cmd = [
             sys.executable, str(BEAM_ANALYSIS_SCRIPT),
             "--input", str(RAW_WEATHER_PATH),
             "--output-dir", str(BEAM_OUTPUT_DIR),
             "--end-date", analysis_end,
-            "--runner", "FlinkRunner",
-            "--flink_master", "flink-jobmanager:8081",
-            "--parallelism", "2",
+            "--no-fetch-missing-cities",          # avoid external API calls inside Flink
+            "--runner", "PortableRunner",         # uses existing beam-job-server; no Java needed
             "--job_endpoint", "beam-job-server:8099",
             "--artifact_endpoint", "beam-job-server:8098",
             "--environment_type", "EXTERNAL",
             "--environment_config", "beam-worker-pool:50000",
+            "--parallelism", "2",
         ]
         result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=2700)
         if result.stdout:
             logger.info(result.stdout)
-        logger.info("✅ Beam pipeline completed successfully with FlinkRunner")
+        logger.info("✅ Beam pipeline completed successfully on Flink via PortableRunner")
         return
     except subprocess.TimeoutExpired:
-        logger.warning("FlinkRunner timeout - falling back to DirectRunner...")
+        logger.warning("PortableRunner/Flink timeout - falling back to DirectRunner...")
     except subprocess.CalledProcessError as e:
-        logger.warning(f"FlinkRunner failed (exit {e.returncode})")
+        logger.warning(f"PortableRunner/Flink failed (exit {e.returncode})")
         if e.stderr:
             logger.warning(f"stderr: {e.stderr}")
-    
-    # Fallback to DirectRunner
-    logger.info("Running Beam pipeline with DirectRunner...")
+
+    # Fallback to DirectRunner (no Flink dependency)
+    logger.warning("⚠️ Falling back to DirectRunner - results will not use Flink")
     try:
         cmd = [
             sys.executable, str(BEAM_ANALYSIS_SCRIPT),
@@ -232,12 +237,12 @@ def run_beam_analysis_with_fallback(analysis_end=None, **context):
         result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=2700)
         if result.stdout:
             logger.info(result.stdout)
-        logger.warning("⚠️ Beam pipeline completed with DirectRunner (fallback from FlinkRunner)")
+        logger.warning("⚠️ Beam pipeline completed with DirectRunner (fallback - Flink unavailable)")
     except subprocess.CalledProcessError as e:
         logger.error(f"DirectRunner also failed (exit {e.returncode})")
         if e.stderr:
             logger.error(f"stderr: {e.stderr}")
-        raise RuntimeError("Both FlinkRunner and DirectRunner failed for Beam pipeline")
+        raise RuntimeError("Both PortableRunner/Flink and DirectRunner failed for Beam pipeline")
     except subprocess.TimeoutExpired:
         raise RuntimeError("DirectRunner timeout for Beam pipeline")
 

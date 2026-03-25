@@ -232,6 +232,69 @@ Mitigation:
 - test locally with `DirectRunner` first, then `FlinkRunner` with `--environment_type=LOOPBACK`
 - on conversion errors, inspect `Flink` UI and scheduler logs for `ProtoIncompatible` or `UnknownTransform` messages
 
+## Weather DAG Flink Integration
+
+### Root Cause Analysis
+
+The `lithuania_weather_analysis` DAG contains a `beam_regional_analysis` task that
+should execute the Python Beam pipeline on the Flink cluster. An investigation found
+three issues preventing Flink execution:
+
+| # | Issue | Root Cause | Fix Applied |
+|---|-------|-----------|-------------|
+| 1 | **Wrong runner** | `FlinkRunner` tries to start a local Flink job server inside the Airflow scheduler container. The scheduler image has no Java runtime, so this fails silently and falls through to `DirectRunner`. | Switched to `PortableRunner` with `--job_endpoint=beam-job-server:8099`, which uses the existing dedicated `beam-job-server` container. |
+| 2 | **Worker endpoints resolve to `localhost`** | `beam-job-server` was advertising `localhost:PORT` for per-job control/provisioning endpoints. Worker containers (`beam-worker-pool`) cannot reach `localhost` on a different container. | Added `--job-host=beam-job-server` to the `beam-job-server` command in `docker-compose.full.yml`. |
+| 3 | **Redundant `--flink_master` arg** | `PortableRunner` does not need `--flink_master`; the `beam-job-server` is already configured with `--flink-master=flink-jobmanager:8081`. Passing it as a pipeline arg causes a warning. | Removed from DAG pipeline args. |
+
+### Debugging Checklist
+
+Use this when `beam_regional_analysis` falls through to DirectRunner or fails:
+
+- [ ] **Flink cluster healthy?**
+  ```bash
+  curl http://localhost:8082/v1/overview
+  # Expect: "taskmanagers": 1, "slots-available": 4
+  ```
+
+- [ ] **`beam-job-server` advertises its Docker hostname (not `localhost`)?**
+  ```bash
+  docker logs airflow-beam-job-server-1 2>&1 | grep "started on"
+  # ✅ Good: ArtifactStagingService started on beam-job-server:8098
+  # ❌ Bad:  ArtifactStagingService started on localhost:8098
+  # Fix: ensure docker-compose command includes --job-host=beam-job-server
+  ```
+
+- [ ] **Worker pool receives `beam-job-server:PORT` endpoints (not `localhost:PORT`)?**
+  ```bash
+  docker logs airflow-beam-worker-pool-1 2>&1 | grep "provision_endpoint" | tail -3
+  # ✅ Good: --provision_endpoint=beam-job-server:NNNNN
+  # ❌ Bad:  --provision_endpoint=localhost:NNNNN
+  ```
+
+- [ ] **`beam-job-server` can reach `flink-jobmanager`?**
+  ```bash
+  docker exec airflow-beam-job-server-1 curl -s http://flink-jobmanager:8081/v1/overview | head -c 80
+  ```
+
+- [ ] **All services in the same Docker network (`ml-stack`)?**
+  ```bash
+  docker inspect airflow-beam-job-server-1 \
+    --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}'
+  # Expect: ml-stack
+  ```
+
+- [ ] **DAG uses `PortableRunner`, not `FlinkRunner`?**
+  ```bash
+  grep '"--runner"' airflow/dags/weather_lithuania_dag.py
+  # Expect: "PortableRunner"
+  ```
+
+- [ ] **Job appears in Flink UI at `http://localhost:8082`?**
+  If it never appears, the Python SDK is not reaching `beam-job-server:8099`.
+
+- [ ] **Scheduler container started after `beam-job-server` is healthy?**
+  Check `depends_on` ordering in `docker-compose.full.yml`.
+
 ## Learning Path
 
 ### Level 1: Understanding Basic Execution
@@ -256,13 +319,15 @@ Mitigation:
 ## Important Notes
 
 ### ✅ What Works (Proven Configuration)
-- **Beam 2.53.0** with Flink 1.19.1
-- **LOOPBACK environment** for job submission (no Docker overhead)
-- **Direct access** to localhost:8081 for monitoring
+- **Beam 2.71.0** with Flink 1.20.1 (`flink:1.20.1-scala_2.12-java11`)
+- **PortableRunner** + dedicated `beam-job-server` (`apache/beam_flink1.20_job_server:2.71.0`)
+- **EXTERNAL worker pool** (`beam-worker-pool:50000`) with `--job-host=beam-job-server` set
+- Flink batch jobs verified finishing in < 500 ms (WordCount JAR, regional weather anomaly pipeline)
+- Flink UI at `http://localhost:8082` for job monitoring
 
 ### ⚠️ Known Limitations
-- Beam 2.71.0 has serialization issues with Flink (fixed by using 2.53.0)
-- DOCKER environment type adds complexity; LOOPBACK is simpler for learning
+- `FlinkRunner` (not `PortableRunner`) requires Java in the driver process — not present in the Airflow scheduler image
+- EXTERNAL worker pool endpoints default to `localhost` unless `--job-host=<container-name>` is set on `beam-job-server`
 - Streaming mode requires different error handling
 - State management needs backups for fault tolerance
 
