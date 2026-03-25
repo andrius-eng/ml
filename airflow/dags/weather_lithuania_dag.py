@@ -191,7 +191,7 @@ def run_beam_analysis_with_fallback(analysis_end=None, **context):
     """Run Beam pipeline with FlinkRunner, fallback to DirectRunner if needed."""
     logger = logging.getLogger(__name__)
     
-    # Try FlinkRunner first
+    # Try FlinkRunner first with proper beam worker pool configuration
     try:
         logger.info("Attempting Beam pipeline with FlinkRunner...")
         cmd = [
@@ -200,9 +200,12 @@ def run_beam_analysis_with_fallback(analysis_end=None, **context):
             "--output-dir", str(BEAM_OUTPUT_DIR),
             "--end-date", analysis_end,
             "--runner", "FlinkRunner",
-            "--environment_type", "LOOPBACK",
             "--flink_master", "flink-jobmanager:8081",
             "--parallelism", "2",
+            "--job_endpoint", "beam-job-server:8099",
+            "--artifact_endpoint", "beam-job-server:8098",
+            "--environment_type", "EXTERNAL",
+            "--environment_config", "beam-worker-pool:50000",
         ]
         result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=2700)
         if result.stdout:

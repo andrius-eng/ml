@@ -50,10 +50,10 @@ services:
     networks:
       - default
   flink-jobmanager:
-    image: flink:1.18.1-scala_2.12-java11
+    image: flink:1.20.1-scala_2.12-java11
     command: jobmanager
     ports:
-    - 8081:8081
+    - 8082:8081
     environment:
       FLINK_PROPERTIES: 'jobmanager.rpc.address: flink-jobmanager
 
@@ -62,7 +62,7 @@ services:
     networks:
     - default
   flink-taskmanager:
-    image: flink:1.18.1-scala_2.12-java11
+    image: flink:1.20.1-scala_2.12-java11
     command: taskmanager
     environment:
       FLINK_PROPERTIES: 'jobmanager.rpc.address: flink-jobmanager
@@ -85,7 +85,7 @@ services:
     image: apache/beam_python3.12_sdk:2.71.0
     command: ["--worker_pool"]
     ports:
-      - "50000:50000"
+      - "50001:50000"
     networks:
       - default
     depends_on:
@@ -93,11 +93,11 @@ services:
     restart: unless-stopped
 
   beam-job-server:
-    image: apache/beam_flink1.18_job_server:2.71.0
+    image: apache/beam_flink1.20_job_server:2.71.0
     command: ["--flink-master=flink-jobmanager:8081"]
     ports:
-      - "8098:8098"
-      - "8099:8099"
+      - "8100:8098"
+      - "8101:8099"
     networks:
       - default
     depends_on:
