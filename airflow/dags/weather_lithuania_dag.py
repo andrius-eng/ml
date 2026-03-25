@@ -12,6 +12,7 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.sensors.python import PythonSensor
 from airflow.utils.trigger_rule import TriggerRule
+import logging
 
 
 DEFAULT_ARGS = {
@@ -41,11 +42,11 @@ def check_flink_ready(**context):
                 key="flink_status",
                 value=f"Flink ready: {taskmanagers} taskmanager(s), {slots} slot(s)"
             )
-            context["logger"].info(f"✓ Flink ready with {taskmanagers} taskmanager(s) and {slots} slot(s)")
+            logging.getLogger(__name__).info(f"✓ Flink ready with {taskmanagers} taskmanager(s) and {slots} slot(s)")
             return True
         return False
     except Exception as e:
-        context["logger"].warning(f"Flink health check failed: {e}")
+        logging.getLogger(__name__).warning(f"Flink health check failed: {e}")
         return False
 
 
@@ -74,28 +75,43 @@ def run_script(script_path: Path, args: list, logger):
         raise
 
 
-def fetch_weather_data(analysis_end=None, **context):
+def resolve_analysis_end(context: dict, analysis_end: str | None = None):
+    """Resolve analysis end date from context or fallback."""
+    if analysis_end and analysis_end != '{{ ds }}':
+        return analysis_end
+
+    date_str = context.get('ds')
+    if date_str:
+        return date_str
+
+    return datetime.now().strftime('%Y-%m-%d')
+
+def fetch_weather_data(**context):
+    analysis_end = resolve_analysis_end(context, None)
     """Fetch weather data with caching (reuse if less than 60 minutes old)."""
-    logger = context["logger"]
+    logger = logging.getLogger(__name__)
     
+    # Get execution date from Airflow context
+    execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+
     # Check cache
     if RAW_WEATHER_PATH.exists():
-        age_seconds = (datetime.now() - datetime.fromtimestamp(RAW_WEATHER_PATH.stat().st_mtime)).total_seconds()
+        age_seconds = (datetime.now() - datetime.fromtimestamp(RAW_WEATHER_PATH.stat().st_mtime)).total_seconds()       
         if age_seconds < 3600:  # Less than 60 minutes
             logger.info(f"✓ Using cached raw weather data (age: {age_seconds/60:.0f} minutes)")
             return
-    
+
     logger.info("Fetching fresh weather data...")
     run_script(
         WEATHER_FETCH_SCRIPT,
-        ["--start-date", "1991-01-01", "--end-date", analysis_end or "{{ ds }}", "--output", str(RAW_WEATHER_PATH)],
+        ["--start-date", "1991-01-01", "--end-date", execution_date, "--output", str(RAW_WEATHER_PATH)],    
         logger,
     )
 
-
 def analyze_weather_data(analysis_end=None, **context):
+    analysis_end = resolve_analysis_end(context, analysis_end if 'analysis_end' in globals() else None)
     """Analyze weather patterns and generate summaries."""
-    logger = context["logger"]
+    logger = logging.getLogger(__name__)
     run_script(
         WEATHER_ANALYZE_SCRIPT,
         [
@@ -111,15 +127,16 @@ def analyze_weather_data(analysis_end=None, **context):
             "--country-monthly-output", str(COUNTRY_MONTHLY_PATH),
             "--city-monthly-output", str(CITY_MONTHLY_PATH),
             "--city-rankings-output", str(CITY_RANKINGS_PATH),
-            "--current-end", analysis_end or "{{ ds }}",
+            "--current-end", analysis_end,
         ],
         logger,
     )
 
 
 def plot_weather_data(analysis_end=None, **context):
+    analysis_end = resolve_analysis_end(context, analysis_end if 'analysis_end' in globals() else None)
     """Generate weather visualization plots."""
-    logger = context["logger"]
+    logger = logging.getLogger(__name__)
     run_script(
         WEATHER_PLOT_SCRIPT,
         [
@@ -138,8 +155,9 @@ def plot_weather_data(analysis_end=None, **context):
 
 
 def validate_weather_summary(analysis_end=None, **context):
+    analysis_end = resolve_analysis_end(context, analysis_end if 'analysis_end' in globals() else None)
     """Validate weather summary meets quality gates."""
-    logger = context["logger"]
+    logger = logging.getLogger(__name__)
     run_script(
         WEATHER_QUALITY_GATE_SCRIPT,
         [
@@ -155,8 +173,9 @@ def validate_weather_summary(analysis_end=None, **context):
 
 
 def refresh_rag_context_data(analysis_end=None, **context):
+    analysis_end = resolve_analysis_end(context, analysis_end if 'analysis_end' in globals() else None)
     """Refresh RAG pipeline context with latest analysis."""
-    logger = context["logger"]
+    logger = logging.getLogger(__name__)
     run_script(
         RAG_PIPELINE_SCRIPT,
         [
@@ -168,8 +187,9 @@ def refresh_rag_context_data(analysis_end=None, **context):
 
 
 def run_beam_analysis_with_fallback(analysis_end=None, **context):
+    analysis_end = resolve_analysis_end(context, analysis_end if 'analysis_end' in globals() else None)
     """Run Beam pipeline with FlinkRunner, fallback to DirectRunner if needed."""
-    logger = context["logger"]
+    logger = logging.getLogger(__name__)
     
     # Try FlinkRunner first
     try:
@@ -178,8 +198,9 @@ def run_beam_analysis_with_fallback(analysis_end=None, **context):
             sys.executable, str(BEAM_ANALYSIS_SCRIPT),
             "--input", str(RAW_WEATHER_PATH),
             "--output-dir", str(BEAM_OUTPUT_DIR),
-            "--end-date", analysis_end or "{{ ds }}",
+            "--end-date", analysis_end,
             "--runner", "FlinkRunner",
+            "--environment_type", "LOOPBACK",
             "--flink_master", "flink-jobmanager:8081",
             "--parallelism", "2",
         ]
@@ -202,7 +223,7 @@ def run_beam_analysis_with_fallback(analysis_end=None, **context):
             sys.executable, str(BEAM_ANALYSIS_SCRIPT),
             "--input", str(RAW_WEATHER_PATH),
             "--output-dir", str(BEAM_OUTPUT_DIR),
-            "--end-date", analysis_end or "{{ ds }}",
+            "--end-date", analysis_end,
             "--runner", "DirectRunner",
         ]
         result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=2700)
@@ -219,7 +240,12 @@ def run_beam_analysis_with_fallback(analysis_end=None, **context):
 
 
 DAG_DIR = Path(__file__).resolve().parent
-DEFAULT_PROJECT_ROOT = DAG_DIR.parents[1] if len(DAG_DIR.parents) >= 2 else Path("/opt/airflow/project")
+# Discover project root: check /opt/airflow first, then fallback to /opt/airflow/project
+_check_root = DAG_DIR.parent  # /opt/airflow
+if (_check_root / "python").exists():
+    DEFAULT_PROJECT_ROOT = _check_root
+else:
+    DEFAULT_PROJECT_ROOT = Path("/opt/airflow/project")
 PROJECT_ROOT = Path(os.environ.get("ML_PROJECT_ROOT", str(DEFAULT_PROJECT_ROOT))).resolve()
 
 # Python script paths
