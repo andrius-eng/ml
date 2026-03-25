@@ -228,6 +228,14 @@ docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d fl
 
 BEAM_RUNNER=FlinkRunner \
 BEAM_PIPELINE_ARGS="--flink_master=flink-jobmanager:8081 --parallelism=4 --environment_type=LOOPBACK" \
+BEAM_ENVIRONMENT_TYPE=LOOPBACK \
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d airflow-scheduler airflow-webserver
+
+# Kubernetes / Docker environment modes
+# For Kubernetes native Beam execution (when you have an in-cluster Flink and Beam portable env):
+BEAM_RUNNER=FlinkRunner \
+BEAM_ENVIRONMENT_TYPE=KUBERNETES \
+BEAM_PIPELINE_ARGS="--flink_master=http://<flink-jobmanager-host>:8081 --parallelism=4 --no-fetch-missing-cities" \
 docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d airflow-scheduler airflow-webserver
 ```
 

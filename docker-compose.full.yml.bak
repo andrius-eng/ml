@@ -1,0 +1,206 @@
+# Full ML project stack
+# Extends airflow/docker-compose.yml with frontend + websocket services.
+#
+# Usage:
+#   docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml build
+#   docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up airflow-init   # first time only
+#   docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d
+#   docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml down
+#
+# Services:
+#   postgres             — Airflow metadata DB (from airflow compose)
+#   airflow-webserver    — Airflow UI on :8080 (from airflow compose)
+#   airflow-scheduler    — DAG runner (from airflow compose)
+#   ws-server            — WebSocket live-update server on :3000
+#   frontend             — Nginx-served Vite dashboard on :5173
+
+services:
+  airflow-init:
+    build:
+      context: .
+      dockerfile: docker/airflow/Dockerfile
+    image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-airflow-custom:latest}
+    networks:
+      - default
+    environment:
+      BEAM_RUNNER: ${BEAM_RUNNER:-FlinkRunner}
+      BEAM_ENVIRONMENT_TYPE: ${BEAM_ENVIRONMENT_TYPE:-LOOPBACK}
+      BEAM_ENVIRONMENT_CONFIG: ""
+      BEAM_PIPELINE_ARGS: >-
+        --runner=FlinkRunner
+        --flink_master=flink-jobmanager:8081
+        --parallelism=2
+        --environment_type=${BEAM_ENVIRONMENT_TYPE:-LOOPBACK}
+
+  airflow-webserver:
+    image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-airflow-custom:latest}
+    networks:
+      - default
+    environment:
+      BEAM_RUNNER: ${BEAM_RUNNER:-FlinkRunner}
+      BEAM_ENVIRONMENT_TYPE: ${BEAM_ENVIRONMENT_TYPE:-LOOPBACK}
+      BEAM_ENVIRONMENT_CONFIG: ""
+      BEAM_PIPELINE_ARGS: >-
+        --runner=FlinkRunner
+        --flink_master=flink-jobmanager:8081
+        --parallelism=2
+        --environment_type=${BEAM_ENVIRONMENT_TYPE:-LOOPBACK}
+
+  airflow-scheduler:
+    image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-airflow-custom:latest}
+    networks:
+      - default
+    environment:
+      BEAM_RUNNER: ${BEAM_RUNNER:-FlinkRunner}
+      BEAM_ENVIRONMENT_TYPE: ${BEAM_ENVIRONMENT_TYPE:-LOOPBACK}
+      BEAM_ENVIRONMENT_CONFIG: ""
+      BEAM_PIPELINE_ARGS: >-
+        --runner=FlinkRunner
+        --flink_master=flink-jobmanager:8081
+        --parallelism=2
+        --environment_type=${BEAM_ENVIRONMENT_TYPE:-LOOPBACK}
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+      flink-taskmanager:
+        condition: service_started
+
+  flink-jobmanager:
+    image: flink:1.19.1-scala_2.12-java11
+    command: jobmanager
+    ports:
+      - "8081:8081"
+    networks:
+      - default
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/overview"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+  flink-taskmanager:
+    image: flink:1.19.1-scala_2.12-java11
+    user: root
+    command: taskmanager
+    networks:
+      - default
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 2
+        taskmanager.memory.process.size: 1728m
+        taskmanager.memory.network.fraction: 0.1
+        taskmanager.memory.network.min: 134217728
+        taskmanager.memory.network.max: 536870912
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f TaskManagerRunner || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 30s
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ws-server:
+    build:
+      context: .
+      dockerfile: docker/ws-server/Dockerfile
+    image: ${WS_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-ws-server:latest}
+    ports:
+      - "3000:3000"
+    environment:
+      PROJECT_ROOT: /project
+      DASHBOARD_WS_HOST: 0.0.0.0
+      DASHBOARD_WS_TOKEN: "${DASHBOARD_WS_TOKEN:-}"
+      POLL_INTERVAL_MS: "${POLL_INTERVAL_MS:-3600000}"
+    volumes:
+      # Mount project so export_frontend_data.py can read pipeline outputs
+      - .:/project:rw
+      # Shared volume for dashboard.json written by ws-server, served by frontend
+      - dashboard-data:/project/src/data
+    depends_on:
+      - airflow-scheduler
+    restart: unless-stopped
+    networks:
+      - default
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    image: ${FRONTEND_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-frontend:latest}
+    ports:
+      - "5173:80"
+    volumes:
+      # Serve the latest dashboard.json written by ws-server
+      - dashboard-data:/usr/share/nginx/html/data
+    depends_on:
+      - ws-server
+      - ml-server
+    restart: unless-stopped
+    networks:
+      - default
+
+  ml-server:
+    build:
+      context: .
+      dockerfile: docker/ml-pipeline/Dockerfile
+    image: ${PIPELINE_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-ml-pipeline:latest}
+    command: sh -c "cd /app/python && python -m uvicorn serve:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    environment:
+      ML_OUTPUT_DIR: /project/python/output
+      RAG_LLM_PROVIDER: "${RAG_LLM_PROVIDER:-ollama}"
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      OLLAMA_MODEL: "${OLLAMA_MODEL:-llama3.1:8b}"
+      BEAM_RUNNER: ${BEAM_RUNNER:-FlinkRunner}
+      BEAM_ENVIRONMENT_TYPE: ${BEAM_ENVIRONMENT_TYPE:-LOOPBACK}
+      BEAM_ENVIRONMENT_CONFIG: ""
+      BEAM_PIPELINE_ARGS: >-
+        --runner=FlinkRunner
+        --flink_master=flink-jobmanager:8081
+        --parallelism=2
+        --environment_type=${BEAM_ENVIRONMENT_TYPE:-LOOPBACK}
+    volumes:
+      - .:/project:rw
+      - ./python/output/beam:/project/python/output/beam
+      - ./python/output/rag:/project/python/output/rag
+      - dashboard-data:/project/src/data
+    restart: unless-stopped
+    networks:
+      - default
+    depends_on:
+      - ollama
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - default
+
+volumes:
+  dashboard-data:
+    driver: local
+  ollama-data:
+    driver: local
+
+networks:
+  default:
+    name: ml-stack

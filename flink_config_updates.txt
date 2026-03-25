@@ -1,0 +1,28 @@
+# Update flink-jobmanager to add persistence and history server
+sed -i '/flink-jobmanager:/,/restart: unless-stopped/c\
+  flink-jobmanager:\
+    image: flink:1.19.1-scala_2.12-java11\
+    command: jobmanager\
+    ports:\
+      - "8081:8081"\
+      - "8082:8082"\
+    networks:\
+      - default\
+    environment:\
+      FLINK_PROPERTIES: |\
+        jobmanager.rpc.address: flink-jobmanager\
+        jobmanager.memory.process.size: 1024m\
+        jobmanager.archive.fs.dir: file:///flink-archive\
+        historyserver.archive.fs.dir: file:///flink-archive\
+        historyserver.web.address: 0.0.0.0\
+        historyserver.web.port: 8082\
+    healthcheck:\
+      test: ["CMD", "curl", "-f", "http://localhost:8081/overview"]\
+      interval: 10s\
+      timeout: 5s\
+      retries: 10\
+      start_period: 30s\
+    volumes:\
+      - /var/run/docker.sock:/var/run/docker.sock\
+      - flink-archive:/flink-archive\
+    restart: unless-stopped' docker-compose.full.yml
