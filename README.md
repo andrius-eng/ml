@@ -8,6 +8,7 @@ PyTorch training, Qdrant-backed retrieval, and a live dashboard.
 - Python 3.11+ managed by [uv](https://docs.astral.sh/uv/)
 - Node.js 18+ and npm
 - Docker and Docker Compose (for the full stack)
+- kubectl + minikube (optional — for Kubernetes deployment)
 
 ## Stack
 
@@ -20,8 +21,9 @@ PyTorch training, Qdrant-backed retrieval, and a live dashboard.
 | Modeling | PyTorch, MLflow-skinny |
 | LLM fine-tuning | distilgpt2 + LoRA (PEFT), 68 SFT examples |
 | Retrieval | Qdrant local store + lightweight TF-IDF |
-| Frontend | Vite, vanilla JS, Chart.js |
+| Frontend | Vite/nginx, vanilla JS, Chart.js |
 | Live updates | Node 20 WebSocket server + periodic export |
+| Deployment | Docker Compose · Kubernetes (Kustomize) · ArgoCD |
 | CI | GitHub Actions (build + stack-smoke) |
 
 
@@ -226,6 +228,62 @@ allow changing that package back to private.
 
 Once running, trigger DAGs from Airflow UI at http://localhost:8080 (admin / admin).
 The dashboard at http://localhost:5173 updates automatically via WebSocket.
+
+## Kubernetes Deployment
+
+The `kubernetes/` folder contains Kustomize base manifests plus overlays for
+minikube (laptop) and production, with optional ArgoCD GitOps support.
+
+```
+kubernetes/
+├── base/                    # shared manifests for all services
+├── overlays/
+│   ├── minikube/            # standard storageClass, scaled-down resources
+│   └── production/          # nfs-client RWX storageClass placeholder
+├── argocd/
+│   ├── application.yaml             # production — selfHeal=true, prune=true
+│   └── application-minikube.yaml    # dev/minikube
+└── deploy-minikube.sh       # convenience script
+```
+
+### Minikube — standalone (kubectl apply)
+
+```bash
+bash kubernetes/deploy-minikube.sh
+# then add to /etc/hosts: $(minikube ip)  ml-stack.local
+```
+
+### Minikube — via ArgoCD
+
+```bash
+bash kubernetes/deploy-minikube.sh --argocd
+```
+
+### Production — standalone
+
+```bash
+# Edit nfs-client storageClass if needed:
+#   kubernetes/overlays/production/pvc-patch.yaml
+kubectl apply -k kubernetes/overlays/production
+```
+
+### Production — ArgoCD GitOps
+
+```bash
+kubectl apply -n argocd -f kubernetes/argocd/application.yaml
+```
+
+The ArgoCD application tracks the `kubernetes/overlays/production` path on the
+`main` branch and auto-syncs with prune + selfHeal.
+
+### Key architecture notes
+
+- `beam-worker-pool` runs as a **sidecar** in the `flink-taskmanager` pod,
+  sharing the network namespace (equivalent to `network_mode: service:flink-taskmanager` in Compose).
+- All RWX PVCs use `storageClassName: standard` on minikube (hostPath). Swap
+  `nfs-client` in `overlays/production/pvc-patch.yaml` for your RWX class.
+- Services are exposed via a single nginx Ingress at `http://ml-stack.local`.
+
 
 ## Airflow (Local Standalone)
 
@@ -459,6 +517,13 @@ ml/
     frontend/nginx.conf
     ml-pipeline/Dockerfile
     ws-server/Dockerfile
+  kubernetes/
+    base/
+    overlays/
+      minikube/
+      production/
+    argocd/
+    deploy-minikube.sh
   docker-compose.full.yml
   docker-stack.yml
   pyproject.toml
