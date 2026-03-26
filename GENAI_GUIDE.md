@@ -32,7 +32,7 @@ graph TB
     end
 
     subgraph LLM["LLM service (ollama :11434)"]
-        OL["ollama/ollama:latest\nllama3.1:8b (default)"]
+        OL["ollama/ollama:latest\nllama3.2:3b (default)"]
     end
 
     subgraph PipelineOutputs["Pipeline outputs (python/output/)"]
@@ -198,7 +198,7 @@ ml-server:
   environment:
     RAG_LLM_PROVIDER: ${RAG_LLM_PROVIDER:-ollama}
     OLLAMA_BASE_URL: http://ollama:11434
-    OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
+    OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
   depends_on:
     - ollama
 
@@ -217,7 +217,7 @@ The Ollama container starts with no models downloaded. Pull before querying:
 
 ```bash
 docker compose --project-directory . -f docker-compose.full.yml \
-  --profile dashboard exec ollama ollama pull llama3.1:8b
+  --profile dashboard exec ollama ollama pull llama3.2:3b
 ```
 
 To use a different model (e.g. `mistral:7b`):
@@ -235,7 +235,7 @@ OLLAMA_MODEL=mistral:7b docker compose --project-directory . \
 |---|---|---|
 | `RAG_LLM_PROVIDER` | `ollama` | Set to `extractive` to disable Ollama and return snippet text only |
 | `OLLAMA_BASE_URL` | `http://ollama:11434` | Ollama endpoint (override for remote instance) |
-| `OLLAMA_MODEL` | `llama3.1:8b` | Model tag to use for generation |
+| `OLLAMA_MODEL` | `llama3.2:3b` | Model tag to use for generation |
 | `ML_OUTPUT_DIR` | `python/output` | Root of pipeline artifacts read by the RAG engine |
 | `LLAMA_BASE_MODEL` | `distilgpt2` | Base model for LoRA fine-tuning |
 

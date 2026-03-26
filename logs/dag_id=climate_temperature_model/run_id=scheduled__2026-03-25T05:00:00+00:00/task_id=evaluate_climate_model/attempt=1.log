@@ -1,0 +1,26 @@
+[2026-03-26T10:39:46.898+0000] {local_task_job_runner.py:123} INFO - ::group::Pre task execution logs
+[2026-03-26T10:39:46.929+0000] {taskinstance.py:2613} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: climate_temperature_model.evaluate_climate_model scheduled__2026-03-25T05:00:00+00:00 [queued]>
+[2026-03-26T10:39:46.940+0000] {taskinstance.py:2613} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: climate_temperature_model.evaluate_climate_model scheduled__2026-03-25T05:00:00+00:00 [queued]>
+[2026-03-26T10:39:46.940+0000] {taskinstance.py:2866} INFO - Starting attempt 1 of 2
+[2026-03-26T10:39:46.966+0000] {taskinstance.py:2889} INFO - Executing <Task(BashOperator): evaluate_climate_model> on 2026-03-25 05:00:00+00:00
+[2026-03-26T10:39:46.972+0000] {standard_task_runner.py:72} INFO - Started process 331 to run task
+[2026-03-26T10:39:46.976+0000] {standard_task_runner.py:104} INFO - Running: ['***', 'tasks', 'run', 'climate_temperature_model', 'evaluate_climate_model', 'scheduled__2026-03-25T05:00:00+00:00', '--job-id', '19', '--raw', '--subdir', 'DAGS_FOLDER/train_dag.py', '--cfg-path', '/tmp/tmpjpkha_x7']
+[2026-03-26T10:39:46.978+0000] {standard_task_runner.py:105} INFO - Job 19: Subtask evaluate_climate_model
+[2026-03-26T10:39:47.142+0000] {task_command.py:467} INFO - Running <TaskInstance: climate_temperature_model.evaluate_climate_model scheduled__2026-03-25T05:00:00+00:00 [running]> on host 1b3618507d17
+[2026-03-26T10:39:47.293+0000] {taskinstance.py:3132} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='***' AIRFLOW_CTX_DAG_ID='climate_temperature_model' AIRFLOW_CTX_TASK_ID='evaluate_climate_model' AIRFLOW_CTX_EXECUTION_DATE='2026-03-25T05:00:00+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='scheduled__2026-03-25T05:00:00+00:00'
+[2026-03-26T10:39:47.294+0000] {taskinstance.py:731} INFO - ::endgroup::
+[2026-03-26T10:39:47.317+0000] {subprocess.py:78} INFO - Tmp dir root location: /tmp
+[2026-03-26T10:39:47.317+0000] {subprocess.py:88} INFO - Running command: ['/usr/bin/bash', '-c', 'set -euo pipefail\ntest -f "/opt/***/project/python/climate_evaluate.py"\n"/usr/local/bin/python" "/opt/***/project/python/climate_evaluate.py" "--model" "/opt/***/project/python/output/climate/climate_model.pth" "--test-data" "/opt/***/project/python/output/climate/climate_test.csv" "--summary-json" "/opt/***/project/python/output/climate/climate_evaluation.json" "--predictions-csv" "/opt/***/project/python/output/climate/climate_predictions.csv"']
+[2026-03-26T10:39:47.331+0000] {subprocess.py:99} INFO - Output:
+[2026-03-26T10:39:51.115+0000] {subprocess.py:106} INFO - MSE: 16.029488
+[2026-03-26T10:39:51.116+0000] {subprocess.py:106} INFO - RMSE: 4.003684
+[2026-03-26T10:39:51.116+0000] {subprocess.py:106} INFO - MAE: 3.020420
+[2026-03-26T10:39:51.116+0000] {subprocess.py:106} INFO - R2: 0.786164
+[2026-03-26T10:39:51.116+0000] {subprocess.py:106} INFO - RESIDUAL_MEAN: -0.114354
+[2026-03-26T10:39:51.116+0000] {subprocess.py:106} INFO - RESIDUAL_STD: 4.002051
+[2026-03-26T10:39:51.495+0000] {subprocess.py:110} INFO - Command exited with return code 0
+[2026-03-26T10:39:51.546+0000] {taskinstance.py:340} INFO - ::group::Post task execution logs
+[2026-03-26T10:39:51.546+0000] {taskinstance.py:352} INFO - Marking task as SUCCESS. dag_id=climate_temperature_model, task_id=evaluate_climate_model, run_id=scheduled__2026-03-25T05:00:00+00:00, execution_date=20260325T050000, start_date=20260326T103946, end_date=20260326T103951
+[2026-03-26T10:39:51.582+0000] {local_task_job_runner.py:266} INFO - Task exited with return code 0
+[2026-03-26T10:39:51.625+0000] {taskinstance.py:3895} INFO - 2 downstream tasks scheduled from follow-on schedule check
+[2026-03-26T10:39:51.627+0000] {local_task_job_runner.py:245} INFO - ::endgroup::

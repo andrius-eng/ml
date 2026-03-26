@@ -139,6 +139,18 @@ Current DAG IDs:
 - vilnius_march_temperature_anomalies
 - llama_dag_finetune (manual)
 
+## Recent Dashboard Notes
+
+- Heating Degree Days (HDD) use Eurostat's `nrg_chdd_m` dataset, which can lag
+  current time by many months. The dashboard now falls back to the latest year
+  with published data instead of showing zeroes for the current year.
+- Regional Beam heatmaps are backed by full month-by-month anomaly data in
+  `beam_summary.json`. Historical years contain 12 months; only the current
+  in-progress year may have partial months.
+- The live dashboard served through Docker uses the frontend nginx proxy for
+  `/api/*` requests. If `ml-server` is restarted, nginx now re-resolves Docker
+  DNS automatically so RAG queries keep working without a manual frontend restart.
+
 Each DAG ends with refresh_rag_context to rebuild retrieval context from latest
 pipeline artifacts.
 
@@ -363,13 +375,13 @@ docker compose --project-directory . -f airflow/docker-compose.yml -f docker-com
 Pull a local model once:
 
 ```bash
-docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml exec ollama ollama pull llama3.1:8b
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml exec ollama ollama pull llama3.2:3b
 ```
 
 Override model/provider if needed:
 
 ```bash
-RAG_LLM_PROVIDER=ollama OLLAMA_MODEL=llama3.1:8b \
+RAG_LLM_PROVIDER=ollama OLLAMA_MODEL=llama3.2:3b \
 docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d ml-server ollama
 ```
 
@@ -410,7 +422,7 @@ docker compose --project-directory . -f airflow/docker-compose.yml -f docker-com
 ```
 
 > `--parallelism 1` is required with a single Flink TaskManager.
-> See [FLINK_RUNNER_READY.md](FLINK_RUNNER_READY.md) for the full configuration reference.
+> See `BEAM_FLINK_GUIDE.md` for the full PortableRunner / Flink configuration reference.
 
 ## Train Llama On DAG Artifacts (LoRA)
 

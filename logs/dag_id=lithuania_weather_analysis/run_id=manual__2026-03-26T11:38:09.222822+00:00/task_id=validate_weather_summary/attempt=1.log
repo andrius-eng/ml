@@ -1,0 +1,22 @@
+[2026-03-26T11:38:17.377+0000] {local_task_job_runner.py:123} INFO - ::group::Pre task execution logs
+[2026-03-26T11:38:17.435+0000] {taskinstance.py:2613} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: lithuania_weather_analysis.validate_weather_summary manual__2026-03-26T11:38:09.222822+00:00 [queued]>
+[2026-03-26T11:38:17.458+0000] {taskinstance.py:2613} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: lithuania_weather_analysis.validate_weather_summary manual__2026-03-26T11:38:09.222822+00:00 [queued]>
+[2026-03-26T11:38:17.458+0000] {taskinstance.py:2866} INFO - Starting attempt 1 of 2
+[2026-03-26T11:38:17.490+0000] {taskinstance.py:2889} INFO - Executing <Task(PythonOperator): validate_weather_summary> on 2026-03-26 11:38:09.222822+00:00
+[2026-03-26T11:38:17.500+0000] {standard_task_runner.py:72} INFO - Started process 220 to run task
+[2026-03-26T11:38:17.510+0000] {standard_task_runner.py:104} INFO - Running: ['***', 'tasks', 'run', 'lithuania_weather_analysis', 'validate_weather_summary', 'manual__2026-03-26T11:38:09.222822+00:00', '--job-id', '47', '--raw', '--subdir', 'DAGS_FOLDER/weather_lithuania_dag.py', '--cfg-path', '/tmp/tmpsrr1sp02']
+[2026-03-26T11:38:17.514+0000] {standard_task_runner.py:105} INFO - Job 47: Subtask validate_weather_summary
+[2026-03-26T11:38:17.816+0000] {task_command.py:467} INFO - Running <TaskInstance: lithuania_weather_analysis.validate_weather_summary manual__2026-03-26T11:38:09.222822+00:00 [running]> on host 1b3618507d17
+[2026-03-26T11:38:18.401+0000] {taskinstance.py:3132} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='***' AIRFLOW_CTX_DAG_ID='lithuania_weather_analysis' AIRFLOW_CTX_TASK_ID='validate_weather_summary' AIRFLOW_CTX_EXECUTION_DATE='2026-03-26T11:38:09.222822+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='manual__2026-03-26T11:38:09.222822+00:00'
+[2026-03-26T11:38:18.403+0000] {taskinstance.py:731} INFO - ::endgroup::
+[2026-03-26T11:38:18.521+0000] {weather_lithuania_dag.py:59} INFO - Running: /home/***/.local/bin/python /opt/***/project/python/weather_quality_gate.py --summary-input /opt/***/project/python/output/weather/ytd_summary.json --country-monthly-input /opt/***/project/python/output/weather/country_monthly_anomalies.csv --min-days 60 --min-month-days 5 --max-monthly-temp-abs-z 3.5 --max-monthly-precip-abs-z 3.5
+[2026-03-26T11:38:21.741+0000] {weather_lithuania_dag.py:64} INFO - Weather quality checks: days=85 temp_z=-1.431 precip_z=-0.908
+Monthly checks: min_days=5 temp_threshold=3.50 precip_threshold=3.50
+Weather quality gate passed.
+
+[2026-03-26T11:38:21.742+0000] {python.py:240} INFO - Done. Returned value was: None
+[2026-03-26T11:38:21.780+0000] {taskinstance.py:340} INFO - ::group::Post task execution logs
+[2026-03-26T11:38:21.781+0000] {taskinstance.py:352} INFO - Marking task as SUCCESS. dag_id=lithuania_weather_analysis, task_id=validate_weather_summary, run_id=manual__2026-03-26T11:38:09.222822+00:00, execution_date=20260326T113809, start_date=20260326T113817, end_date=20260326T113821
+[2026-03-26T11:38:21.860+0000] {local_task_job_runner.py:266} INFO - Task exited with return code 0
+[2026-03-26T11:38:21.938+0000] {taskinstance.py:3895} INFO - 0 downstream tasks scheduled from follow-on schedule check
+[2026-03-26T11:38:21.941+0000] {local_task_job_runner.py:245} INFO - ::endgroup::
