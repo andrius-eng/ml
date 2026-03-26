@@ -219,6 +219,30 @@ Repeat runs after the admin user already exists:
 docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
 ```
 
+### Built vs external images
+
+The `Docker Images` GitHub Actions workflow builds and publishes only the
+project-owned images from this repository:
+
+- `ghcr.io/<owner>/ml-airflow-custom`
+- `ghcr.io/<owner>/ml-ws-server`
+- `ghcr.io/<owner>/ml-frontend`
+- `ghcr.io/<owner>/ml-ml-pipeline`
+
+These correspond to the four Dockerfiles under `docker/`.
+
+The full stack also uses several upstream runtime images that are **not** built
+by this repository and are pulled directly from their original registries:
+
+- `postgres:16-alpine`
+- `flink:1.20.1-scala_2.12-java11`
+- `apache/beam_python3.12_sdk:2.71.0`
+- `apache/beam_flink1.20_job_server:2.71.0`
+- `ollama/ollama:latest`
+
+So the Docker publishing workflow covers all custom repo-owned images, but not
+every image referenced by Compose or Kubernetes manifests.
+
 If you only need to sync the Airflow schema without re-running user creation:
 
 ```bash
