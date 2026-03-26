@@ -1,5 +1,5 @@
 # WebSocket live-update server
-FROM node:22-alpine
+FROM node:25-alpine
 
 WORKDIR /app
 
