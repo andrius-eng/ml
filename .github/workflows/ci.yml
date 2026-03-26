@@ -58,8 +58,8 @@ jobs:
 
       - name: Prepare bind-mount directories
         run: |
-          mkdir -p airflow/logs airflow/plugins python/output
-          sudo chown -R 50000:0 airflow/logs airflow/plugins
+          mkdir -p logs plugins python/output airflow/dags
+          sudo chown -R 50000:0 logs plugins
 
       - name: Build stack images
         run: |
