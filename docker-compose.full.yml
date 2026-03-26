@@ -8,6 +8,8 @@ services:
     command:
       - -c
       - |
+        mkdir -p /opt/airflow/logs/dag_processor_manager
+        chmod -R 777 /opt/airflow/logs
         airflow db migrate
         airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true
     environment:
