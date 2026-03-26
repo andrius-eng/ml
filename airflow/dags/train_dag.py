@@ -1,9 +1,8 @@
 """Airflow DAG – Climate temperature model trained on real ERA5 daily weather.
 
-Trains a PyTorch MLP to predict daily mean temperature for Lithuania using
-real ERA5 data (1991–present) fetched by the lithuania_weather_analysis DAG.
-
-Pipeline
+Trains a PyTorch residual MLP (BatchNorm + skip connection + Dropout) to predict
+daily mean temperature for Lithuania using real ERA5 data (1991–present) fetched
+by the lithuania_weather_analysis DAG.
 --------
 prepare_data        climate_data.py     feature engineering + train/test split
     ↓
@@ -76,7 +75,7 @@ with DAG(
     dag_id="climate_temperature_model",
     default_args=DEFAULT_ARGS,
     description=(
-        "Train a PyTorch MLP on real ERA5 Lithuania daily weather data (1991–2022) "
+        "Train a PyTorch residual MLP on real ERA5 Lithuania daily weather data (1991–2022) "
         "and evaluate on held-out 2023+ years, logging metrics to MLflow."
     ),
     schedule="0 5 * * *",

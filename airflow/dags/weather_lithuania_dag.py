@@ -348,6 +348,6 @@ with DAG(
     )
 
     fetch_weather >> analyze_weather >> [plot_weather, quality_gate, wait_for_flink]
-    fetch_eurostat_hdd >> refresh_rag_context
+    fetch_eurostat_hdd >> beam_regional_analysis >> refresh_rag_context
     wait_for_flink >> beam_regional_analysis
     [plot_weather, quality_gate, beam_regional_analysis] >> refresh_rag_context
