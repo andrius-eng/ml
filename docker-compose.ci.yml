@@ -1,0 +1,21 @@
+# CI overrides: swap heavy images that would exhaust runner disk space.
+#
+# Usage:
+#   docker compose -f airflow/docker-compose.yml \
+#                  -f docker-compose.full.yml \
+#                  -f docker-compose.ci.yml \
+#                  --profile dashboard up -d
+#
+# Why: ollama/ollama:latest is ~3.5 GB compressed / ~10 GB extracted.
+# GitHub Actions ubuntu-latest runners have ~14 GB total, so pulling the real
+# image causes "no space left on device". A lightweight stub satisfies the
+# depends_on ordering for ml-server; the RAG smoke check accepts HTTP 500.
+
+services:
+  ollama:
+    image: alpine:3.19
+    command: tail -f /dev/null
+    volumes: []
+    ports: []
+    healthcheck:
+      disable: true

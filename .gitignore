@@ -17,3 +17,4 @@ python/output/
 
 airflow/logs/
 airflow/.airflow/
+airflow/airflow/

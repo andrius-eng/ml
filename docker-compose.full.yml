@@ -1,7 +1,7 @@
 services:
   airflow-init:
     build:
-      context: ..
+      context: .
       dockerfile: docker/airflow/Dockerfile
     image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-airflow-custom:latest}
     entrypoint: /bin/bash
@@ -12,13 +12,13 @@ services:
         airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true
     environment:
       BEAM_RUNNER: PortableRunner
-      BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=2 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities
+      BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities
     volumes: &id001
     - airflow-data:/opt/airflow
-    - ./airflow/dags:/opt/airflow/dags
-    - ./airflow/logs:/opt/airflow/logs
-    - ./airflow/plugins:/opt/airflow/plugins
-    - .:/opt/airflow/project
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    - ..:/opt/airflow/project
   airflow-webserver:
     image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-airflow-custom:latest}
     command: webserver
@@ -26,7 +26,7 @@ services:
     - 8080:8080
     environment:
       BEAM_RUNNER: PortableRunner
-      BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=2 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities
+      BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities
     depends_on:
     - airflow-init
     volumes: *id001
@@ -44,7 +44,7 @@ services:
       - beam-worker-pool
     environment:
       BEAM_RUNNER: PortableRunner
-      BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=2 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities
+      BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities
     volumes: *id001
     restart: unless-stopped
     networks:
@@ -57,7 +57,11 @@ services:
     environment:
       FLINK_PROPERTIES: 'jobmanager.rpc.address: flink-jobmanager
 
+        jobmanager.archive.fs.dir: file:///opt/flink/job-archives
+
         '
+    volumes:
+      - flink-job-archives:/opt/flink/job-archives
     restart: unless-stopped
     networks:
     - default
@@ -110,21 +114,29 @@ services:
       - beam-worker-pool
     restart: unless-stopped
 
-  beam-submitter:
-    image: apache/beam_python3.12_sdk:2.71.0
+  flink-history-server:
+    image: flink:1.20.1-scala_2.12-java11
+    command: history-server
+    ports:
+      - "8083:8082"
+    environment:
+      FLINK_PROPERTIES: |
+        historyserver.web.address: 0.0.0.0
+        historyserver.web.port: 8082
+        historyserver.archive.fs.dir: file:///opt/flink/job-archives
+        historyserver.archive.fs.expiry-time: 604800000
     volumes:
-      - .:/workspace
-    working_dir: /workspace
-    command: tail -f /dev/null
-    networks:
-      - default
+      - flink-job-archives:/opt/flink/job-archives
     depends_on:
       - flink-jobmanager
-      - beam-worker-pool
+    restart: unless-stopped
+    networks:
+      - default
 
   ws-server:
+    profiles: [dashboard]
     build:
-      context: ..
+      context: .
       dockerfile: docker/ws-server/Dockerfile
     image: ${WS_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-ws-server:latest}
     ports:
@@ -143,8 +155,9 @@ services:
     networks:
     - default
   frontend:
+    profiles: [dashboard]
     build:
-      context: ..
+      context: .
       dockerfile: docker/frontend/Dockerfile
     image: ${FRONTEND_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-frontend:latest}
     ports:
@@ -158,8 +171,9 @@ services:
     networks:
     - default
   ml-server:
+    profiles: [dashboard]
     build:
-      context: ..
+      context: .
       dockerfile: docker/ml-pipeline/Dockerfile
     image: ${PIPELINE_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-ml-pipeline:latest}
     command: sh -c "cd /app/python && python -m uvicorn serve:app --host 0.0.0.0 --port
@@ -182,6 +196,7 @@ services:
     depends_on:
     - ollama
   ollama:
+    profiles: [dashboard]
     image: ollama/ollama:latest
     container_name: ollama
     ports:
@@ -199,6 +214,8 @@ volumes:
   ollama-data:
     driver: local
   beam-artifacts:
+    driver: local
+  flink-job-archives:
     driver: local
 networks:
   default:
