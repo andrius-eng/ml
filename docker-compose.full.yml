@@ -190,8 +190,6 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
     volumes:
     - .:/project:rw
-    - ./python/output/beam:/project/python/output/beam
-    - ./python/output/rag:/project/python/output/rag
     - dashboard-data:/project/src/data
     restart: unless-stopped
     networks:
