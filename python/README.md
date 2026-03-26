@@ -39,6 +39,7 @@ uv run python python/<script>.py
 - weather_analyze.py: build summaries and anomaly artifacts
 - weather_plot.py: render charts
 - weather_quality_gate.py: validate data quality thresholds
+- eurostat_fetch.py: fetch monthly heating degree days from Eurostat
 
 ### Vilnius March anomaly pipeline
 
@@ -55,8 +56,6 @@ uv run python python/<script>.py
 ### Services and local orchestration
 
 - serve.py: FastAPI app with predict and rag query endpoints
-- run_all.py: synthetic local demo workflow
-- check_python.py: runtime version check helper
 
 ### LLM fine-tuning
 
@@ -117,4 +116,4 @@ curl "http://127.0.0.1:8000/rag/query?q=Is+Lithuania+currently+warmer+or+colder+
 uv run python -m pytest python/tests -q
 ```
 
-Current verified status: 30 passed.
+Current verified status: 45 passed.

@@ -14,7 +14,7 @@ PyTorch training, Qdrant-backed retrieval, and a live dashboard.
 | Layer | Technology |
 |---|---|
 | Orchestration | Apache Airflow 2.10.3 + PostgreSQL 16 |
-| Data | Open-Meteo ERA5 reanalysis |
+| Data | Open-Meteo ERA5 reanalysis · Eurostat HDD |
 | Distributed processing | Apache Beam 2.71.0 · PortableRunner → Flink 1.20.1 |
 | Local processing | Python 3.11, pandas, numpy |
 | Modeling | PyTorch, MLflow-skinny |
@@ -149,7 +149,7 @@ npm install       # JS deps
 uv run python -m pytest python/tests -q
 ```
 
-Current verified status: 30 passed.
+Current verified status: 45 passed.
 
 ### 3. Export dashboard data
 
@@ -434,11 +434,11 @@ ml/
     vilnius_march_quality_gate.py
     rag_pipeline.py
     export_frontend_data.py
+    eurostat_fetch.py
     serve.py
     quality_gate.py
     plot.py
     diagnostics.py
-    run_all.py
     tests/
   server/
     dashboard-ws.js
