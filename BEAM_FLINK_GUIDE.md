@@ -44,7 +44,7 @@ The updated architecture in this repository uses Airflow scheduling, Beam portab
 ```
 
 Notes:
-- `BEAM_RUNNER=FlinkRunner` sends the pipeline to Flink via the portable API.
+- `BEAM_RUNNER=PortableRunner` submits the pipeline via `beam-job-server` to Flink.
 - `beam-worker-pool` is referenced by `--environment_config=beam-worker-pool:50000`.
 - Python-to-Java conversion happens in the `Portable Pipeline` stage; runtime workers are Python processes.
 
@@ -79,8 +79,8 @@ Apache Beam supports multiple runners (execution engines):
 ### Prerequisites (Already Configured)
 ```
 ✅ Apache Airflow 2.10.3     (Workflow orchestration)
-✅ Apache Flink 1.19.1        (Distributed execution engine)
-✅ Apache Beam 2.53.0         (Pipeline SDK - fixed for FlinkRunner)
+✅ Apache Flink 1.20.1        (Distributed execution engine)
+✅ Apache Beam 2.71.0         (Pipeline SDK)
 ✅ Docker Compose             (Infrastructure)
 ```
 
@@ -88,13 +88,15 @@ Apache Beam supports multiple runners (execution engines):
 
 Updated `docker-compose.full.yml` with:
 ```yaml
-BEAM_RUNNER: FlinkRunner
-BEAM_ENVIRONMENT_TYPE: LOOPBACK
+BEAM_RUNNER: PortableRunner
 BEAM_PIPELINE_ARGS: >-
-  --runner=FlinkRunner
+  --runner=PortableRunner
+  --job_endpoint=beam-job-server:8099
+  --artifact_endpoint=beam-job-server:8098
   --flink_master=flink-jobmanager:8081
-  --parallelism=2
-  --environment_type=LOOPBACK
+  --parallelism=1
+  --environment_type=EXTERNAL
+  --environment_config=beam-worker-pool:50000
 ```
 
 ## Running Distributed Jobs
@@ -355,7 +357,7 @@ Your current setup is fully compatible:
 Component	Version	Status
 - Flink	1.18.1-scala_2.12-java11	✅ Supported by Beam 2.71.0
 - Beam Python SDK	apache/beam_python3.12_sdk:2.71.0	✅ Official Docker image
-- Beam Job Server	apache/beam_flink1.18_job_server:2.71.0	✅ Official Docker image
+- Beam Job Server	apache/beam_flink1.20_job_server:2.71.0	✅ Official Docker image
 - Beam Runner	beam-runners-flink-1.18	✅ Maven artifact exists
 
 ### Official Compatibility Matrix [Beam Docs]
@@ -370,7 +372,7 @@ Why Flink 1.18.1 works perfectly:
 ### Docker Images Confirmed
 - ✅ flink:1.18.1-scala_2.12-java11 (~600MB)
 - ✅ apache/beam_python3.12_sdk:2.71.0 (~1.8GB)
-- ✅ apache/beam_flink1.18_job_server:2.71.0 (~600MB)
+- ✅ apache/beam_flink1.20_job_server:2.71.0 (~600MB)
 
 Your compose will work. Currently pulling the ~1.8GB worker pool image (normal). Flink UI at localhost:8081 in ~5 minutes.
 
@@ -385,18 +387,19 @@ Status: Production-ready versions. Deploy complete.
 
 ### 🔧 Troubleshooting
 
-**Problem**: FlinkRunner still fails with serialization error
-```
-Solution: Verify using LOOPBACK environment:
-docker compose exec airflow-scheduler python -c "
-import apache_beam as beam
-p = beam.Pipeline(argv=[
-  '--runner=FlinkRunner',
-  '--flink_master=flink-jobmanager:8081',
-  '--environment_type=LOOPBACK'
-])
-print('Pipeline initialized OK')
-" 2>&1 | grep -i error
+**Problem**: PortableRunner job fails or falls through to DirectRunner
+```bash
+# Verify Beam version inside scheduler
+docker exec airflow-airflow-scheduler-1 python3 -c \
+  "import apache_beam; print(apache_beam.__version__)"
+# expects: 2.71.0
+
+# Check beam-job-server is reachable
+docker exec airflow-airflow-scheduler-1 \
+  curl -s http://beam-job-server:8099
+
+# Check Flink job manager
+curl -s http://localhost:8082/v1/overview | python3 -m json.tool
 ```
 
 **Problem**: Jobs stuck in "INITIALIZING" status
