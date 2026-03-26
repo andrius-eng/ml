@@ -34,12 +34,15 @@ uv run python python/<script>.py
 
 ### Lithuania weather pipeline
 
+Note on HDD: Eurostat publishes monthly heating degree day data with a lag, so `eurostat_fetch.py` now reports the latest published full year / heating season instead of returning zeros for the current year.
+
 - weather_common.py: shared fetch and anomaly utilities
 - weather_fetch.py: fetch daily weather data
 - weather_analyze.py: build summaries and anomaly artifacts
 - weather_plot.py: render charts
 - weather_quality_gate.py: validate data quality thresholds
 - eurostat_fetch.py: fetch monthly heating degree days from Eurostat
+- beam_analysis.py: generate regional month-by-month anomaly matrices for the dashboard heatmap
 
 ### Vilnius March anomaly pipeline
 
@@ -51,11 +54,13 @@ uv run python python/<script>.py
 ### Retrieval and dashboard bridge
 
 - rag_pipeline.py: builds retrieval corpus and answers questions
+- Structured RAG queries (year-vs-year, warmest/coldest year, year-month extremes) are answered directly from source artifacts before falling back to vector retrieval
 - export_frontend_data.py: creates src/data/dashboard.json
 
 ### Services and local orchestration
 
 - serve.py: FastAPI app with predict and rag query endpoints
+- Docker frontend proxies `/api/*` to FastAPI; if you restart `ml-server`, reload or rebuild the frontend only if nginx config changed
 
 ### LLM fine-tuning
 

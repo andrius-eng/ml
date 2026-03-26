@@ -1,0 +1,22 @@
+[2026-03-26T10:39:04.308+0000] {local_task_job_runner.py:123} INFO - ::group::Pre task execution logs
+[2026-03-26T10:39:04.355+0000] {taskinstance.py:2613} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: vilnius_march_temperature_anomalies.validate_vilnius_march_output scheduled__2026-03-25T07:00:00+00:00 [queued]>
+[2026-03-26T10:39:04.372+0000] {taskinstance.py:2613} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: vilnius_march_temperature_anomalies.validate_vilnius_march_output scheduled__2026-03-25T07:00:00+00:00 [queued]>
+[2026-03-26T10:39:04.373+0000] {taskinstance.py:2866} INFO - Starting attempt 1 of 2
+[2026-03-26T10:39:04.397+0000] {taskinstance.py:2889} INFO - Executing <Task(BashOperator): validate_vilnius_march_output> on 2026-03-25 07:00:00+00:00
+[2026-03-26T10:39:04.405+0000] {standard_task_runner.py:72} INFO - Started process 254 to run task
+[2026-03-26T10:39:04.411+0000] {standard_task_runner.py:104} INFO - Running: ['***', 'tasks', 'run', 'vilnius_march_temperature_anomalies', 'validate_vilnius_march_output', 'scheduled__2026-03-25T07:00:00+00:00', '--job-id', '13', '--raw', '--subdir', 'DAGS_FOLDER/vilnius_march_temperature_dag.py', '--cfg-path', '/tmp/tmpipap_z1p']
+[2026-03-26T10:39:04.415+0000] {standard_task_runner.py:105} INFO - Job 13: Subtask validate_vilnius_march_output
+[2026-03-26T10:39:04.552+0000] {task_command.py:467} INFO - Running <TaskInstance: vilnius_march_temperature_anomalies.validate_vilnius_march_output scheduled__2026-03-25T07:00:00+00:00 [running]> on host 1b3618507d17
+[2026-03-26T10:39:04.787+0000] {taskinstance.py:3132} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='***' AIRFLOW_CTX_DAG_ID='vilnius_march_temperature_anomalies' AIRFLOW_CTX_TASK_ID='validate_vilnius_march_output' AIRFLOW_CTX_EXECUTION_DATE='2026-03-25T07:00:00+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='scheduled__2026-03-25T07:00:00+00:00'
+[2026-03-26T10:39:04.789+0000] {taskinstance.py:731} INFO - ::endgroup::
+[2026-03-26T10:39:04.826+0000] {subprocess.py:78} INFO - Tmp dir root location: /tmp
+[2026-03-26T10:39:04.827+0000] {subprocess.py:88} INFO - Running command: ['/usr/bin/bash', '-c', 'set -euo pipefail\ntest -f "/opt/***/project/python/vilnius_march_quality_gate.py"\n"/usr/local/bin/python" "/opt/***/project/python/vilnius_march_quality_gate.py" "--annual-input" "/opt/***/project/python/output/vilnius_march/march_temperature_anomalies.csv" "--summary-input" "/opt/***/project/python/output/vilnius_march/summary.json" "--expected-years" "30" "--min-days" "10" "--max-abs-z" "4.0"']
+[2026-03-26T10:39:04.847+0000] {subprocess.py:99} INFO - Output:
+[2026-03-26T10:39:07.049+0000] {subprocess.py:106} INFO - Vilnius March quality checks: years=30 min_days=25 max_abs_z=2.419
+[2026-03-26T10:39:07.050+0000] {subprocess.py:106} INFO - Vilnius March quality gate passed.
+[2026-03-26T10:39:07.240+0000] {subprocess.py:110} INFO - Command exited with return code 0
+[2026-03-26T10:39:07.379+0000] {taskinstance.py:340} INFO - ::group::Post task execution logs
+[2026-03-26T10:39:07.380+0000] {taskinstance.py:352} INFO - Marking task as SUCCESS. dag_id=vilnius_march_temperature_anomalies, task_id=validate_vilnius_march_output, run_id=scheduled__2026-03-25T07:00:00+00:00, execution_date=20260325T070000, start_date=20260326T103904, end_date=20260326T103907
+[2026-03-26T10:39:07.463+0000] {local_task_job_runner.py:266} INFO - Task exited with return code 0
+[2026-03-26T10:39:07.555+0000] {taskinstance.py:3895} INFO - 0 downstream tasks scheduled from follow-on schedule check
+[2026-03-26T10:39:07.559+0000] {local_task_job_runner.py:245} INFO - ::endgroup::

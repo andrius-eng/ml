@@ -61,6 +61,11 @@ The full compose setup wires:
 - frontend nginx serving dashboard
 - ml-server for FastAPI predict and rag query endpoints
 
+
+The frontend container proxies `/api/*` to `ml-server`. That proxy now uses
+Docker DNS re-resolution so `ml-server` can restart without leaving nginx pinned
+to a stale upstream container IP.
+
 Start stack:
 
 ```bash
@@ -79,6 +84,21 @@ lsof -nP -iTCP:3000 -sTCP:LISTEN
 RAG endpoint import error:
 
 - If you see Could not import module serve, start uvicorn with app-dir python.
+
+
+RAG query returns 503 or the UI says the API is not running:
+
+- Check `docker ps` for `ml-ml-server-1` and `ml-frontend-1`.
+- The frontend proxy route is `/api/rag/query`, which forwards to FastAPI
+  `/rag/query` after stripping the `/api` prefix.
+- If you changed nginx config but did not rebuild the frontend image yet, reload
+  nginx inside the running container.
+
+Structured RAG queries still bypass vector search when appropriate:
+
+- year-vs-year month comparisons are answered directly from anomaly CSVs
+- warmest/coldest year questions are answered directly from Vilnius month CSVs
+- year-month extreme questions are answered directly from `beam_summary.json`
 
 Port already in use on 8000:
 

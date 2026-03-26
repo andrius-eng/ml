@@ -1,0 +1,20 @@
+[2026-03-26T11:38:47.698+0000] {local_task_job_runner.py:123} INFO - ::group::Pre task execution logs
+[2026-03-26T11:38:47.766+0000] {taskinstance.py:2613} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: lithuania_weather_analysis.refresh_rag_context manual__2026-03-26T11:33:38.211028+00:00 [queued]>
+[2026-03-26T11:38:47.789+0000] {taskinstance.py:2613} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: lithuania_weather_analysis.refresh_rag_context manual__2026-03-26T11:33:38.211028+00:00 [queued]>
+[2026-03-26T11:38:47.789+0000] {taskinstance.py:2866} INFO - Starting attempt 1 of 2
+[2026-03-26T11:38:47.815+0000] {taskinstance.py:2889} INFO - Executing <Task(PythonOperator): refresh_rag_context> on 2026-03-26 11:33:38.211028+00:00
+[2026-03-26T11:38:47.825+0000] {standard_task_runner.py:72} INFO - Started process 301 to run task
+[2026-03-26T11:38:47.832+0000] {standard_task_runner.py:104} INFO - Running: ['***', 'tasks', 'run', 'lithuania_weather_analysis', 'refresh_rag_context', 'manual__2026-03-26T11:33:38.211028+00:00', '--job-id', '52', '--raw', '--subdir', 'DAGS_FOLDER/weather_lithuania_dag.py', '--cfg-path', '/tmp/tmpj2rvkjlv']
+[2026-03-26T11:38:47.837+0000] {standard_task_runner.py:105} INFO - Job 52: Subtask refresh_rag_context
+[2026-03-26T11:38:47.965+0000] {task_command.py:467} INFO - Running <TaskInstance: lithuania_weather_analysis.refresh_rag_context manual__2026-03-26T11:33:38.211028+00:00 [running]> on host 1b3618507d17
+[2026-03-26T11:38:48.205+0000] {taskinstance.py:3132} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='***' AIRFLOW_CTX_DAG_ID='lithuania_weather_analysis' AIRFLOW_CTX_TASK_ID='refresh_rag_context' AIRFLOW_CTX_EXECUTION_DATE='2026-03-26T11:33:38.211028+00:00' AIRFLOW_CTX_TRY_NUMBER='1' AIRFLOW_CTX_DAG_RUN_ID='manual__2026-03-26T11:33:38.211028+00:00'
+[2026-03-26T11:38:48.207+0000] {taskinstance.py:731} INFO - ::endgroup::
+[2026-03-26T11:38:48.237+0000] {weather_lithuania_dag.py:59} INFO - Running: /home/***/.local/bin/python /opt/***/project/python/rag_pipeline.py --output-dir /opt/***/project/python/output --demo-output /opt/***/project/python/output/rag/rag_demo.json
+[2026-03-26T11:38:58.030+0000] {weather_lithuania_dag.py:64} INFO - Vector RAG demo written to /opt/***/project/python/output/rag/rag_demo.json
+
+[2026-03-26T11:38:58.032+0000] {python.py:240} INFO - Done. Returned value was: None
+[2026-03-26T11:38:58.067+0000] {taskinstance.py:340} INFO - ::group::Post task execution logs
+[2026-03-26T11:38:58.068+0000] {taskinstance.py:352} INFO - Marking task as SUCCESS. dag_id=lithuania_weather_analysis, task_id=refresh_rag_context, run_id=manual__2026-03-26T11:33:38.211028+00:00, execution_date=20260326T113338, start_date=20260326T113847, end_date=20260326T113858
+[2026-03-26T11:38:58.129+0000] {local_task_job_runner.py:266} INFO - Task exited with return code 0
+[2026-03-26T11:38:58.166+0000] {taskinstance.py:3895} INFO - 0 downstream tasks scheduled from follow-on schedule check
+[2026-03-26T11:38:58.168+0000] {local_task_job_runner.py:245} INFO - ::endgroup::

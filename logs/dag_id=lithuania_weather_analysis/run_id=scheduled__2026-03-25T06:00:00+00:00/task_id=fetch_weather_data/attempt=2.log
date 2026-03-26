@@ -1,0 +1,18 @@
+[2026-03-26T10:45:49.809+0000] {local_task_job_runner.py:123} INFO - ::group::Pre task execution logs
+[2026-03-26T10:45:49.842+0000] {taskinstance.py:2613} INFO - Dependencies all met for dep_context=non-requeueable deps ti=<TaskInstance: lithuania_weather_analysis.fetch_weather_data scheduled__2026-03-25T06:00:00+00:00 [queued]>
+[2026-03-26T10:45:49.855+0000] {taskinstance.py:2613} INFO - Dependencies all met for dep_context=requeueable deps ti=<TaskInstance: lithuania_weather_analysis.fetch_weather_data scheduled__2026-03-25T06:00:00+00:00 [queued]>
+[2026-03-26T10:45:49.856+0000] {taskinstance.py:2866} INFO - Starting attempt 2 of 2
+[2026-03-26T10:45:49.873+0000] {taskinstance.py:2889} INFO - Executing <Task(PythonOperator): fetch_weather_data> on 2026-03-25 06:00:00+00:00
+[2026-03-26T10:45:49.878+0000] {standard_task_runner.py:72} INFO - Started process 766 to run task
+[2026-03-26T10:45:49.882+0000] {standard_task_runner.py:104} INFO - Running: ['***', 'tasks', 'run', 'lithuania_weather_analysis', 'fetch_weather_data', 'scheduled__2026-03-25T06:00:00+00:00', '--job-id', '30', '--raw', '--subdir', 'DAGS_FOLDER/weather_lithuania_dag.py', '--cfg-path', '/tmp/tmpe_zosp0a']
+[2026-03-26T10:45:49.884+0000] {standard_task_runner.py:105} INFO - Job 30: Subtask fetch_weather_data
+[2026-03-26T10:45:49.973+0000] {task_command.py:467} INFO - Running <TaskInstance: lithuania_weather_analysis.fetch_weather_data scheduled__2026-03-25T06:00:00+00:00 [running]> on host 1b3618507d17
+[2026-03-26T10:45:50.104+0000] {taskinstance.py:3132} INFO - Exporting env vars: AIRFLOW_CTX_DAG_OWNER='***' AIRFLOW_CTX_DAG_ID='lithuania_weather_analysis' AIRFLOW_CTX_TASK_ID='fetch_weather_data' AIRFLOW_CTX_EXECUTION_DATE='2026-03-25T06:00:00+00:00' AIRFLOW_CTX_TRY_NUMBER='2' AIRFLOW_CTX_DAG_RUN_ID='scheduled__2026-03-25T06:00:00+00:00'
+[2026-03-26T10:45:50.106+0000] {taskinstance.py:731} INFO - ::endgroup::
+[2026-03-26T10:45:50.120+0000] {weather_lithuania_dag.py:101} INFO - ✓ Using cached raw weather data (age: 4 minutes)
+[2026-03-26T10:45:50.121+0000] {python.py:240} INFO - Done. Returned value was: None
+[2026-03-26T10:45:50.140+0000] {taskinstance.py:340} INFO - ::group::Post task execution logs
+[2026-03-26T10:45:50.140+0000] {taskinstance.py:352} INFO - Marking task as SUCCESS. dag_id=lithuania_weather_analysis, task_id=fetch_weather_data, run_id=scheduled__2026-03-25T06:00:00+00:00, execution_date=20260325T060000, start_date=20260326T104549, end_date=20260326T104550
+[2026-03-26T10:45:50.178+0000] {local_task_job_runner.py:266} INFO - Task exited with return code 0
+[2026-03-26T10:45:50.224+0000] {taskinstance.py:3895} INFO - 1 downstream tasks scheduled from follow-on schedule check
+[2026-03-26T10:45:50.226+0000] {local_task_job_runner.py:245} INFO - ::endgroup::
