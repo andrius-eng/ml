@@ -63,15 +63,15 @@ jobs:
 
       - name: Build stack images
         run: |
-          docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml -f docker-compose.ci.yml --profile dashboard build airflow-init ws-server frontend ml-server
+          docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml -f docker-compose.ci.yml --profile dashboard build airflow-init ws-server frontend ml-server
 
       - name: Initialize Airflow DB
         run: |
-          docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml -f docker-compose.ci.yml up airflow-init
+          docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml -f docker-compose.ci.yml up airflow-init
 
       - name: Start full stack
         run: |
-          docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml -f docker-compose.ci.yml --profile dashboard up -d
+          docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml -f docker-compose.ci.yml --profile dashboard up -d
 
       - name: Wait for healthy endpoints
         run: |
@@ -127,14 +127,14 @@ jobs:
           retry_cmd 12 5 curl -fsS http://127.0.0.1:5173 >/dev/null
 
           curl -fsS http://127.0.0.1:8080/health
-          docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml -f docker-compose.ci.yml ps
+          docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml -f docker-compose.ci.yml ps
 
       - name: Dump logs on failure
         if: failure()
         run: |
-          docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml -f docker-compose.ci.yml --profile dashboard logs --tail=200
+          docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml -f docker-compose.ci.yml --profile dashboard logs --tail=200
 
       - name: Stop stack
         if: always()
         run: |
-          docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml -f docker-compose.ci.yml --profile dashboard down -v
+          docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml -f docker-compose.ci.yml --profile dashboard down -v
