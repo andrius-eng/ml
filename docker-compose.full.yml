@@ -187,7 +187,7 @@ services:
       ML_OUTPUT_DIR: /project/python/output
       RAG_LLM_PROVIDER: ${RAG_LLM_PROVIDER:-ollama}
       OLLAMA_BASE_URL: http://ollama:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
     volumes:
     - .:/project:rw
     - dashboard-data:/project/src/data
