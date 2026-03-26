@@ -39,9 +39,36 @@ Notes:
 ### 1. **Runners**
 Apache Beam supports multiple runners (execution engines):
 - **DirectRunner**: Single-machine, for testing (default in Beam)
-- **FlinkRunner**: Distributed, clusters of machines
+- **FlinkRunner**: Distributed, clusters of machines — **requires a JVM in the driver process**
+- **PortableRunner**: Delegates job submission to an external job server — **driver only needs Python**
 - **SparkRunner**: Hadoop ecosystem alternative
 - **DataflowRunner**: Google Cloud native
+
+#### Why this stack uses PortableRunner, not FlinkRunner
+
+`FlinkRunner` works by embedding a lightweight Flink client inside the driver process.
+That client is written in Java — it needs a JVM to start. When the Beam pipeline is
+triggered from an Airflow DAG, the driver *is* the Python Airflow task running inside
+the scheduler container. That container has **no JVM installed**. `FlinkRunner` silently
+falls back to `DirectRunner` (single-machine) and the job never reaches the cluster.
+
+`PortableRunner` instead hands off job submission to the `beam-job-server` container,
+which is a Java process that already has a JVM and knows how to translate the portable
+pipeline IR into a Flink job graph. The Python DAG only speaks gRPC to that service —
+no JVM required on the Python side at all.
+
+```
+Python Airflow task (no JVM needed)
+         │  gRPC
+         ▼
+beam-job-server:8099   ← Java, has JVM, submits to Flink
+         │
+         ▼
+Flink JobManager:8081
+         │
+         ▼
+Flink TaskManager ── beam-worker-pool (Python SDK harness, shared network)
+```
 
 ### 2. **Environment Types** (for PortableRunner with beam-job-server)
 - **LOOPBACK**: Python worker runs in same process (not used — requires Java in driver)
@@ -346,7 +373,7 @@ Use this when `beam_regional_analysis` falls through to DirectRunner or fails:
 - Flink UI at `http://localhost:8082` for job monitoring
 
 ### ⚠️ Known Limitations
-- `FlinkRunner` (not `PortableRunner`) requires Java in the driver process — not present in the Airflow scheduler image
+- `FlinkRunner` requires a JVM in the **driver process** (the process executing the Beam SDK). The Airflow scheduler container is a pure Python image with no JVM — so `FlinkRunner` silently falls back to `DirectRunner`. `PortableRunner` offloads all Java work to the `beam-job-server` container, keeping the DAG driver pure Python.
 - Beam's `ServerFactory` always binds Fn API services to loopback (`127.0.0.1`); `--job-host` and `taskmanager.host` do NOT fix per-worker endpoints — only network namespace sharing resolves this
 - `beam-worker-pool` must be restarted whenever `flink-taskmanager` is restarted (network namespace sharing ties them together)
 - Repeated failed or interrupted runs can exhaust TaskManager Netty direct buffers (`OutOfMemoryError: Direct buffer memory`). Recovery is: cancel the stuck Flink job, recreate `flink-taskmanager`, recreate `beam-worker-pool`, then re-run.
