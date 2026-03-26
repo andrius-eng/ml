@@ -1,0 +1,174 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-server
+  namespace: ml-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ml-server
+  template:
+    metadata:
+      labels:
+        app: ml-server
+    spec:
+      containers:
+        - name: ml-server
+          image: ghcr.io/andrius-eng/ml-ml-pipeline:latest
+          command: ["sh", "-c", "cd /app/python && python -m uvicorn serve:app --host 0.0.0.0 --port 8000"]
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: ml-server-config
+          volumeMounts:
+            - name: project
+              mountPath: /project
+            - name: ml-output
+              mountPath: /project/python/output
+            - name: dashboard-data
+              mountPath: /project/src/data
+          readinessProbe:
+            httpGet:
+              path: /docs
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+      volumes:
+        - name: project
+          persistentVolumeClaim:
+            claimName: airflow-data
+        - name: ml-output
+          persistentVolumeClaim:
+            claimName: ml-output
+        - name: dashboard-data
+          persistentVolumeClaim:
+            claimName: dashboard-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ws-server
+  namespace: ml-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ws-server
+  template:
+    metadata:
+      labels:
+        app: ws-server
+    spec:
+      containers:
+        - name: ws-server
+          image: ghcr.io/andrius-eng/ml-ws-server:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: PROJECT_ROOT
+              value: /project
+            - name: DASHBOARD_WS_HOST
+              value: "0.0.0.0"
+            - name: POLL_INTERVAL_MS
+              value: "3600000"
+            - name: DASHBOARD_WS_TOKEN
+              value: ""
+          volumeMounts:
+            - name: project
+              mountPath: /project
+            - name: dashboard-data
+              mountPath: /project/src/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: project
+          persistentVolumeClaim:
+            claimName: airflow-data
+        - name: dashboard-data
+          persistentVolumeClaim:
+            claimName: dashboard-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: ml-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/andrius-eng/ml-frontend:latest
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: dashboard-data
+              mountPath: /usr/share/nginx/html/data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+      volumes:
+        - name: dashboard-data
+          persistentVolumeClaim:
+            claimName: dashboard-data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: ml-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+        - name: ollama
+          image: ollama/ollama:latest
+          ports:
+            - containerPort: 11434
+          volumeMounts:
+            - name: ollama-data
+              mountPath: /root/.ollama
+          resources:
+            requests:
+              cpu: 1
+              memory: 4Gi
+            limits:
+              cpu: 4
+              memory: 8Gi
+      volumes:
+        - name: ollama-data
+          persistentVolumeClaim:
+            claimName: ollama-data

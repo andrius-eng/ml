@@ -1,0 +1,185 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-jobmanager
+  namespace: ml-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flink-jobmanager
+  template:
+    metadata:
+      labels:
+        app: flink-jobmanager
+    spec:
+      containers:
+        - name: jobmanager
+          image: flink:1.20.1-scala_2.12-java11
+          args: ["jobmanager"]
+          ports:
+            - containerPort: 8081
+            - containerPort: 6123
+            - containerPort: 6124
+          env:
+            - name: FLINK_PROPERTIES
+              valueFrom:
+                configMapKeyRef:
+                  name: flink-config
+                  key: flink-conf.yaml
+          volumeMounts:
+            - name: job-archives
+              mountPath: /opt/flink/job-archives
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2
+              memory: 2Gi
+      volumes:
+        - name: job-archives
+          persistentVolumeClaim:
+            claimName: flink-job-archives
+---
+# Flink TaskManager + Beam worker-pool run as sidecars in the same pod
+# so they share the network namespace (worker-pool listens on :50000)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-taskmanager
+  namespace: ml-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flink-taskmanager
+  template:
+    metadata:
+      labels:
+        app: flink-taskmanager
+    spec:
+      containers:
+        - name: taskmanager
+          image: flink:1.20.1-scala_2.12-java11
+          args: ["taskmanager"]
+          env:
+            - name: FLINK_PROPERTIES
+              valueFrom:
+                configMapKeyRef:
+                  name: flink-config
+                  key: flink-conf.yaml
+          volumeMounts:
+            - name: beam-artifacts
+              mountPath: /tmp/beam-artifact-staging
+            - name: ml-output
+              mountPath: /opt/airflow/project/python/output
+          resources:
+            requests:
+              cpu: 1
+              memory: 2Gi
+            limits:
+              cpu: 4
+              memory: 4Gi
+        - name: beam-worker-pool
+          image: apache/beam_python3.12_sdk:2.71.0
+          args: ["--worker_pool"]
+          volumeMounts:
+            - name: ml-output
+              mountPath: /opt/airflow/project/python/output
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2
+              memory: 2Gi
+      volumes:
+        - name: beam-artifacts
+          persistentVolumeClaim:
+            claimName: beam-artifacts
+        - name: ml-output
+          persistentVolumeClaim:
+            claimName: ml-output
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-history-server
+  namespace: ml-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: flink-history-server
+  template:
+    metadata:
+      labels:
+        app: flink-history-server
+    spec:
+      containers:
+        - name: history-server
+          image: flink:1.20.1-scala_2.12-java11
+          args: ["history-server"]
+          ports:
+            - containerPort: 8082
+          env:
+            - name: FLINK_PROPERTIES
+              valueFrom:
+                configMapKeyRef:
+                  name: flink-config
+                  key: flink-conf.yaml
+          volumeMounts:
+            - name: job-archives
+              mountPath: /opt/flink/job-archives
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: job-archives
+          persistentVolumeClaim:
+            claimName: flink-job-archives
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: beam-job-server
+  namespace: ml-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: beam-job-server
+  template:
+    metadata:
+      labels:
+        app: beam-job-server
+    spec:
+      containers:
+        - name: job-server
+          image: apache/beam_flink1.20_job_server:2.71.0
+          args:
+            - "--flink-master=flink-jobmanager:8081"
+            - "--job-host=beam-job-server"
+          ports:
+            - containerPort: 8098
+            - containerPort: 8099
+          volumeMounts:
+            - name: beam-artifacts
+              mountPath: /tmp/beam-artifact-staging
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
+      volumes:
+        - name: beam-artifacts
+          persistentVolumeClaim:
+            claimName: beam-artifacts

@@ -1,0 +1,25 @@
+# ArgoCD Application — minikube / local development
+# kubectl apply -n argocd -f kubernetes/argocd/application-minikube.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ml-stack-dev
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/andrius-eng/ml.git
+    targetRevision: HEAD
+    path: kubernetes/overlays/minikube
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ml-stack
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: false
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

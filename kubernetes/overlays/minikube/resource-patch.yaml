@@ -1,0 +1,75 @@
+# Scale down resources for a laptop minikube (--cpus=4 --memory=8192)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-webserver
+  namespace: ml-stack
+spec:
+  template:
+    spec:
+      containers:
+        - name: webserver
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: 500m, memory: 512Mi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-scheduler
+  namespace: ml-stack
+spec:
+  template:
+    spec:
+      containers:
+        - name: scheduler
+          resources:
+            requests: {cpu: 200m, memory: 512Mi}
+            limits: {cpu: 1, memory: 1Gi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-jobmanager
+  namespace: ml-stack
+spec:
+  template:
+    spec:
+      containers:
+        - name: jobmanager
+          resources:
+            requests: {cpu: 200m, memory: 512Mi}
+            limits: {cpu: 1, memory: 1Gi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flink-taskmanager
+  namespace: ml-stack
+spec:
+  template:
+    spec:
+      containers:
+        - name: taskmanager
+          resources:
+            requests: {cpu: 500m, memory: 1Gi}
+            limits: {cpu: 2, memory: 2Gi}
+        - name: beam-worker-pool
+          resources:
+            requests: {cpu: 200m, memory: 256Mi}
+            limits: {cpu: 1, memory: 1Gi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: ml-stack
+spec:
+  template:
+    spec:
+      containers:
+        - name: ollama
+          resources:
+            requests: {cpu: 500m, memory: 2Gi}
+            limits: {cpu: 2, memory: 4Gi}
