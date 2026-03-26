@@ -120,6 +120,8 @@ def build_documents(output_dir: Path) -> list[dict]:
 
     weather_summary = load_optional_json(output_dir / "weather" / "ytd_summary.json")
     city_rankings = load_optional_json(output_dir / "weather" / "city_rankings.json")
+    heat_stress = load_optional_json(output_dir / "weather" / "heat_stress.json")
+    hdd = load_optional_json(output_dir / "weather" / "hdd.json")
     climate_eval = load_optional_json(output_dir / "climate" / "climate_evaluation.json")
     if climate_eval is None:
         climate_eval = load_optional_json(output_dir / "evaluation.json")
@@ -226,6 +228,62 @@ def build_documents(output_dir: Path) -> list[dict]:
                 f"That indicates {quality} predictive skill for climate anomaly briefing rather than exact deterministic weather forecasting."
             ),
         )
+
+    if isinstance(heat_stress, dict) and heat_stress.get("frost_days"):
+        period = heat_stress.get("period", "YTD")
+        year = heat_stress.get("current_year", "")
+        fragments: list[str] = [
+            f"Lithuania {period} {year} heat and frost day counts versus the 1991-2020 baseline:"
+        ]
+        for metric, label in (
+            ("frost_days", "frost days (Tmin < 0 °C)"),
+            ("hot_days", "hot days (Tmax > 25 °C)"),
+            ("tropical_nights", "tropical nights (Tmin > 20 °C)"),
+            ("cold_nights", "cold nights (Tmin < -15 °C)"),
+        ):
+            entry = heat_stress.get(metric, {})
+            if isinstance(entry, dict):
+                fragments.append(
+                    f"{label.capitalize()}: {entry.get('current', 0)} "
+                    f"(baseline {entry.get('baseline_mean_1991_2020', 0):.1f}, "
+                    f"anomaly {entry.get('anomaly', 0):+.1f})."
+                )
+        add_document(
+            documents,
+            "heat-stress",
+            f"Lithuania {year} heat and frost stress",
+            "weather/heat_stress.json",
+            " ".join(fragments),
+        )
+
+    if isinstance(hdd, dict):
+        ytd_hdd = hdd.get("ytd", {})
+        season_hdd = hdd.get("heating_season", {})
+        parts: list[str] = []
+        if ytd_hdd:
+            parts.append(
+                f"Lithuania Heating Degree Days {ytd_hdd.get('label', '')}: "
+                f"{ytd_hdd.get('total_hdd', 0):.1f} HDD total, "
+                f"versus a 1991-2020 baseline of {ytd_hdd.get('baseline_mean_1991_2020', 0):.1f} HDD "
+                f"(anomaly {ytd_hdd.get('anomaly', 0):+.1f} HDD). "
+                "A negative anomaly indicates lower heating demand than the historical average, "
+                "consistent with a warmer-than-normal winter."
+            )
+        if season_hdd and season_hdd.get("months_included", 0) > 0:
+            parts.append(
+                f"Heating season {season_hdd.get('label', '')}: "
+                f"{season_hdd.get('total_hdd', 0):.1f} HDD so far "
+                f"(baseline {season_hdd.get('baseline_mean_1991_2020', 0):.1f}, "
+                f"anomaly {season_hdd.get('anomaly', 0):+.1f} HDD)."
+            )
+        if parts:
+            add_document(
+                documents,
+                "heating-degree-days",
+                "Lithuania Heating Degree Days (Eurostat)",
+                "weather/hdd.json",
+                " ".join(parts),
+            )
 
     vilnius_report_paths = [
         Path(month_dir.name) / "report.md"

@@ -37,7 +37,7 @@ def fetch_daily_weather(lat: float, lon: float, start: str, end: str) -> pd.Data
         "longitude": lon,
         "start_date": start,
         "end_date": end,
-        "daily": ["temperature_2m_mean", "precipitation_sum"],
+        "daily": ["temperature_2m_mean", "temperature_2m_min", "temperature_2m_max", "precipitation_sum"],
         "timezone": "Europe/Vilnius",
     }
     url = "https://archive-api.open-meteo.com/v1/archive?" + urlencode(params, doseq=True)
@@ -307,6 +307,68 @@ def build_city_rankings(city_summaries: list[dict]) -> dict[str, list[dict]]:
         "precipitation": precip_rank,
         "combined": combined,
     }
+
+
+def build_heat_stress_summary(
+    raw_daily: pd.DataFrame,
+    current_year: int,
+    current_end: date,
+) -> dict:
+    """Count frost/heat threshold days for current year vs 1991-2020 baseline.
+
+    Requires ``temperature_2m_min`` and ``temperature_2m_max`` columns in
+    *raw_daily* (added by Open-Meteo fetch since this feature was introduced).
+    Returns an empty dict if those columns are absent (e.g. old cached CSV).
+    """
+    if "temperature_2m_min" not in raw_daily.columns or "temperature_2m_max" not in raw_daily.columns:
+        return {}
+
+    df = raw_daily.copy()
+    df["time"] = pd.to_datetime(df["time"])
+    df["year"] = df["time"].dt.year
+    df["month_day"] = df["time"].dt.strftime("%m-%d")
+    cutoff = current_end.strftime("%m-%d")
+    ytd = df[df["month_day"] <= cutoff].copy()
+
+    # Country-average Tmin/Tmax per day (mean over proxy cities)
+    daily_avg = ytd.groupby(["year", "time", "month_day"], as_index=False).agg(
+        tmin=("temperature_2m_min", "mean"),
+        tmax=("temperature_2m_max", "mean"),
+    )
+
+    def _counts(subset: pd.DataFrame) -> dict:
+        return {
+            "frost_days": int((subset["tmin"] < 0).sum()),
+            "hot_days": int((subset["tmax"] > 25).sum()),
+            "tropical_nights": int((subset["tmin"] > 20).sum()),
+            "cold_nights": int((subset["tmin"] < -15).sum()),
+        }
+
+    current_counts = _counts(daily_avg[daily_avg["year"] == current_year])
+    per_year_baseline = {
+        yr: _counts(grp)
+        for yr, grp in daily_avg[
+            (daily_avg["year"] >= 1991) & (daily_avg["year"] <= 2020)
+        ].groupby("year")
+    }
+
+    result: dict = {
+        "current_year": current_year,
+        "period": f"01-01 to {current_end.strftime('%m-%d')}",
+    }
+    for metric in ("frost_days", "hot_days", "tropical_nights", "cold_nights"):
+        current_val = current_counts.get(metric, 0)
+        baseline_mean = (
+            float(pd.Series([v[metric] for v in per_year_baseline.values()]).mean())
+            if per_year_baseline
+            else 0.0
+        )
+        result[metric] = {
+            "current": current_val,
+            "baseline_mean_1991_2020": round(baseline_mean, 1),
+            "anomaly": round(current_val - baseline_mean, 1),
+        }
+    return result
 
 
 def ensure_parent(path: str | Path) -> None:
