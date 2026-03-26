@@ -15,10 +15,10 @@ services:
       BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities
     volumes: &id001
     - airflow-data:/opt/airflow
-    - ./dags:/opt/airflow/dags
+    - ./airflow/dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ./plugins:/opt/airflow/plugins
-    - ..:/opt/airflow/project
+    - .:/opt/airflow/project
   airflow-webserver:
     image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-airflow-custom:latest}
     command: webserver
@@ -147,7 +147,7 @@ services:
       DASHBOARD_WS_TOKEN: ${DASHBOARD_WS_TOKEN:-}
       POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-3600000}
     volumes:
-    - ..:/project:rw
+    - .:/project:rw
     - dashboard-data:/project/src/data
     depends_on:
     - airflow-scheduler
@@ -186,9 +186,9 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
     volumes:
-    - ..:/project:rw
-    - ../python/output/beam:/project/python/output/beam
-    - ../python/output/rag:/project/python/output/rag
+    - .:/project:rw
+    - ./python/output/beam:/project/python/output/beam
+    - ./python/output/rag:/project/python/output/rag
     - dashboard-data:/project/src/data
     restart: unless-stopped
     networks:
