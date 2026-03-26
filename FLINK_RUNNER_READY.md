@@ -1,253 +1,159 @@
-# ✅ FlinkRunner Setup Complete - Distributed Beam Computing Ready
+# ✅ Flink + Beam PortableRunner Setup
 
-## What Was Fixed
+## Current Working Configuration
 
-Your original error was:
+| Component | Version |
+|-----------|---------|
+| Apache Beam | 2.71.0 |
+| Apache Flink | 1.20.1 |
+| Beam job server image | `apache/beam_flink1.20_job_server:2.71.0` |
+| Beam worker pool image | `apache/beam_python3.12_sdk:2.71.0` |
+| Runner | `PortableRunner` (not `FlinkRunner`) |
+| Environment type | `EXTERNAL` |
+
+## Architecture
+
+Pipelines run as **Beam PortableRunner → beam-job-server → Flink 1.20.1**.
+The `beam-worker-pool` container runs Python SDK harness code and shares the
+network namespace of `flink-taskmanager` so `localhost:50000` is reachable from
+inside the TaskManager JVM.
+
 ```
-java.io.InvalidClassException: Missing class file for apache.beam...
-FlinkRunner failed, falling back to DirectRunner
+Airflow scheduler
+  └── beam_analysis.py  (PortableRunner)
+        └── beam-job-server:8099  (job submission)
+              └── Flink JobManager:8081
+                    └── Flink TaskManager
+                          └── beam-worker-pool:50000  (Python harness, same netns)
 ```
 
-### Root Cause
-- **Beam 2.71.0** ← Had serialization incompatibility with Flink 1.19.1
-- **Docker environment mode** ← Added unnecessary complexity
+## Key Docker Compose Settings
 
-### Solution Implemented
-
-#### 1. **Pinned Beam to 2.53.0** ✅
-```diff
-# python/requirements-airflow-runtime.txt
-- apache-beam>=2.55.0
-+ apache-beam==2.53.0
-```
-- Last stable version for Flink 1.19.1
-- No serialization issues
-
-#### 2. **Switched to LOOPBACK Environment** ✅
 ```yaml
-# docker-compose.full.yml
-- BEAM_ENVIRONMENT_TYPE: DOCKER
-+ BEAM_ENVIRONMENT_TYPE: LOOPBACK
+# flink-taskmanager
+flink-taskmanager:
+  image: flink:1.20.1-scala_2.12-java11
+  environment:
+    FLINK_PROPERTIES: |
+      taskmanager.numberOfTaskSlots: 4
+      taskmanager.memory.process.size: 2g
+      env.java.opts.taskmanager: -XX:MaxDirectMemorySize=512m
 
-- BEAM_ENVIRONMENT_CONFIG: "apache/beam_python3.12_sdk:2.71.0"
-+ BEAM_ENVIRONMENT_CONFIG: ""
-```
-- Simpler job submission
-- Reliably works with Flink  
-- Better for learning distributed computing
+# beam-worker-pool — must share TM network namespace
+beam-worker-pool:
+  image: apache/beam_python3.12_sdk:2.71.0
+  command: --worker_pool
+  network_mode: "service:flink-taskmanager"
 
-#### 3. **Created Learning Resources** ✅
-- `test_flink_runner.py`: Simple word-count pipeline to demo distributed execution
-- `BEAM_FLINK_GUIDE.md`: Complete guide for learning Beam + Flink
-
-## What You Now Have
-
-### Verified Working Setup
-```
-✅ Apache Beam 2.53.0
-✅ Apache Flink 1.19.1
-✅ DirectRunner (single machine)
-✅ FlinkRunner (distributed) - Now Ready!
-✅ LOOPBACK environment (reliable job submission)
+# beam-job-server
+beam-job-server:
+  image: apache/beam_flink1.20_job_server:2.71.0
+  command: ["--flink-master=flink-jobmanager:8081", "--job-host=beam-job-server"]
 ```
 
-### Test Results
+## Pipeline Args (used in `beam_analysis.py`)
 
-**DirectRunner Test** (Passed ✅):
-```
-🚀 Starting Beam pipeline with DirectRunner
-   Option: --runner=DirectRunner
-   Flink: localhost:8081
-   Parallelism: 2 workers
-   Environment: LOOPBACK
-
-computing       :   4 occurrences
-learning        :   2 occurrences  
-distributed     :   4 occurrences
-beam            :   5 occurrences
-flink           :   5 occurrences
-
-✅ Pipeline completed successfully!
+```python
+beam_args = [
+    "--runner", "PortableRunner",
+    "--job_endpoint", "beam-job-server:8099",
+    "--artifact_endpoint", "beam-job-server:8098",
+    "--environment_type", "EXTERNAL",
+    "--environment_config", "localhost:50000",
+    "--parallelism", "1",   # CRITICAL — see note below
+]
 ```
 
-**FlinkRunner Test** (In Progress):
-- Running in distributed mode across Flink cluster
-- Job server downloading on first run (~30-60 seconds)
-- Will execute same pipeline using 2 parallel taskmanagers
-- Monitor at: `http://localhost:8081`
+### Why `--parallelism 1`
 
-## How to Use FlinkRunner
+A single Flink TaskManager with default network buffers cannot sustain
+`--parallelism 2` for this pipeline:
 
-### Quick Start: Test Script
+```
+java.io.IOException: Insufficient number of network buffers: required 512, but only 473 available
+```
+
+Increase parallelism only when you have multiple TaskManagers.
+
+## Starting the Stack
+
 ```bash
-# Terminal 1: Watch Flink Dashboard
-open http://localhost:8081
-
-# Terminal 2: Run distributed test
-docker exec airflow-airflow-scheduler-1 python3 /tmp/test_flink_runner.py \
-  --runner FlinkRunner \
-  --flink-master flink-jobmanager:8081 \
-  --parallelism 2
+cd ~/Development/ml
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d
 ```
 
-### Real-World: Your Weather DAG
-The `lithuania_weather_analysis` DAG now uses FlinkRunner:
+Wait for `airflow-init` to exit 0, then the scheduler becomes healthy (~60 s).
+
+Verify:
+
 ```bash
-# Trigger DAG (Beam task will run distributed)
+docker ps --format "table {{.Names}}\t{{.Status}}"
+curl -s http://localhost:8082/v1/overview | python3 -c \
+  "import sys,json; o=json.load(sys.stdin); print('JM OK, slots:', o['slots-available'])"
+```
+
+## Triggering a Beam DAG
+
+```bash
+# From inside the scheduler container
 docker exec airflow-airflow-scheduler-1 \
   airflow dags trigger lithuania_weather_analysis
 
-# Monitor Flink jobs: http://localhost:8081/jobs
+# Monitor Flink jobs
+open http://localhost:8082
 ```
 
-## What Happens Under the Hood
+> **Note**: Flink REST is exposed on host port **8082** (not 8081).
+> Inside containers, use `flink-jobmanager:8081`.
 
-When you run with FlinkRunner:
+## Monitoring
 
-```
-┌─ Your Python Code
-│  (Describes the pipeline)
-│
-├─ Beam SDK reads pipeline definition
-│
-├─ Beam communicates with Flink Jobmanager
-│  └─ Submits job graph over REST API
-│
-├─ Flink Jobmanager:
-│  ├─ Validates job graph
-│  ├─ Assigns tasks to available slots
-│  │  └─ Slot = 1 parallel execution unit
-│  └─ Schedules across 2 TaskManagers
-│
-├─ TaskManagers:
-│  ├─ TaskManager 1: Executes 1 parallel task
-│  ├─ TaskManager 2: Executes 1 parallel task
-│  └─ Communicate for data exchange
-│
-└─ Results collected back to Python
-```
-
-## Key Learning Points
-
-1. **Same Code, Different Engines**
-   - `DirectRunner`: Single machine (good for testing)
-   - `FlinkRunner`: Cluster distributed (scales with data)
-
-2. **Parallelism**
-   - `--parallelism=1`: Sequential (no parallelism)
-   - `--parallelism=2`: 2 parallel workers (current setup)
-   - `--parallelism=4`: 4 workers (if you add more TaskManagers)
-
-3. **Environment Modes** (for LOOPBACK vs DOCKER)
-   - **LOOPBACK**: Workers run in same JVM as job server (simpler, faster)
-   - **DOCKER**: Spins up Docker containers for each worker (complex, slower)
-
-## Files Updated
-
-```
-✅ python/requirements-airflow-runtime.txt  (Beam 2.53.0)
-✅ docker-compose.full.yml                   (LOOPBACK config)
-✅ test_flink_runner.py                      (Learning sample)
-✅ BEAM_FLINK_GUIDE.md                       (Comprehensive guide)
-✅ FLINK_RUNNER_READY.md                     (This file)
-```
-
-## What Happens Next Time You Run
-
-**First Execution:**
-- Takes 30-60 seconds (downloads Flink job server JAR)
-- ~200 MB download to `~/.apache_beam/cache/jars/`
-
-**Subsequent Executions:**
-- ~2-3 seconds (reuses cached job server)
-- Job submits immediately to running Flink cluster
-
-## Monitoring Flink Jobs
-
-### Web Dashboard (Recommended)
-```
-URL: http://localhost:8081
-- Overview: Cluster health
-- Jobs: Running/completed jobs
-- Task Managers: Worker nodes
-- Logs: Debug information
-```
-
-### CLI Commands
 ```bash
 # List running jobs
-docker exec flink-jobmanager \
-  /opt/flink/bin/flink list
+docker exec flink-jobmanager /opt/flink/bin/flink list
 
-# Get job details
-docker exec flink-jobmanager \
-  /opt/flink/bin/flink info <JOB_ID>
+# REST API
+curl -s http://localhost:8082/v1/jobs | python3 -m json.tool
 
-# REST API (JSON)
-curl -s http://localhost:8081/v1/jobs
+# Logs
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml \
+  logs --tail=50 flink-taskmanager beam-worker-pool beam-job-server
 ```
 
 ## Troubleshooting
 
-### Problem: FlinkRunner Still Not Working
+### Check Beam version inside scheduler
 ```bash
-# Check Beam is 2.53.0
 docker exec airflow-airflow-scheduler-1 python3 -c \
   "import apache_beam; print(apache_beam.__version__)"
-# Should output: 2.53.0
-
-# Check Flink is reachable
-docker exec airflow-airflow-scheduler-1 \
-  curl -s http://flink-jobmanager:8081/v1/overview
+# expects: 2.71.0
 ```
 
-### Problem: Jobs Stuck in "INITIALIZING"
+### gRPC connection dies after idle
+WSL2 memory balloon kills gRPC streams. Add to `%UserProfile%\.wslconfig`:
+
+```ini
+[wsl2]
+memory=6GB
+swap=8GB
+autoMemoryReclaim=gradual
+```
+
+### Jobs stuck in INITIALIZING
 ```bash
-# Check TaskManager health
-docker compose ps | grep taskmanager
-# Should show: Up ... (healthy)
-
-# View logs
-docker compose logs flink-taskmanager | tail -30
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml \
+  logs flink-taskmanager | tail -30
 ```
 
-### Problem: "Connection refused" to flink-jobmanager
+### Weather CSV cache stale (HTTP 429 from API)
 ```bash
-# Test network connectivity
-docker exec airflow-airflow-scheduler-1 \
-  ping -c 3 flink-jobmanager
-
-# Verify services are running
-docker compose ps | grep flink
+touch ~/Development/ml/python/output/weather/raw_daily_weather.csv
+docker exec airflow-airflow-scheduler-1 airflow dags trigger lithuania_weather_analysis
 ```
 
-## Next Steps
+## See Also
 
-1. **Observe** the test script execution on Flink dashboard
-2. **Modify** `test_flink_runner.py` with your own data
-3. **Monitor** task execution in real-time
-4. **Scale** by increasing parallelism or cluster size
-5. **Integrate** into production DAGs
-
-## Learn More
-
-- See `BEAM_FLINK_GUIDE.md` for comprehensive documentation
-- See `test_flink_runner.py` source code for Beam API examples
-- Apache Beam docs: https://beam.apache.org
-- Flink docs: https://flink.apache.org
-
----
-
-## Summary
-
-You now have a **fully functional FlinkRunner setup** for learning distributed Beam job computing.
-
-The fixes were:
-1. ✅ Beam 2.53.0 (stable with Flink)
-2. ✅ LOOPBACK environment (simpler, more reliable)
-3. ✅ Updated docker-compose configuration
-4. ✅ Created test scripts and documentation
-
-**You're ready to run distributed Beam jobs! 🚀**
-
-Next: `docker exec airflow-airflow-scheduler-1 python3 /tmp/test_flink_runner.py --runner FlinkRunner --flink-master flink-jobmanager:8081`
+- `BEAM_FLINK_GUIDE.md` — comprehensive Beam + Flink learning guide
+- `python/beam_analysis.py` — the main Beam pipeline implementation
+- Apache Beam docs: <https://beam.apache.org>
+- Flink docs: <https://flink.apache.org>

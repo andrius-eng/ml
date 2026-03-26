@@ -13,13 +13,113 @@ PyTorch training, Qdrant-backed retrieval, and a live dashboard.
 
 | Layer | Technology |
 |---|---|
-| Orchestration | Apache Airflow 2.10 + PostgreSQL |
+| Orchestration | Apache Airflow 2.10.3 + PostgreSQL 16 |
 | Data | Open-Meteo ERA5 reanalysis |
-| Processing | Python 3.11, pandas, numpy |
+| Distributed processing | Apache Beam 2.71.0 · PortableRunner → Flink 1.20.1 |
+| Local processing | Python 3.11, pandas, numpy |
 | Modeling | PyTorch, MLflow-skinny |
+| LLM fine-tuning | distilgpt2 + LoRA (PEFT), 68 SFT examples |
 | Retrieval | Qdrant local store + lightweight TF-IDF |
 | Frontend | Vite, vanilla JS, Chart.js |
-| Live updates | Node WebSocket server + periodic export |
+| Live updates | Node 20 WebSocket server + periodic export |
+| CI | GitHub Actions (build + stack-smoke) |
+
+
+## Architecture
+
+```mermaid
+graph TB
+    subgraph Orch["Orchestration — Airflow 2.10.3"]
+        SCHED[Scheduler]
+        WEB[Webserver :8080]
+    end
+
+    subgraph DAGs["DAG Pipelines"]
+        D1[climate_temperature_model]
+        D2[lithuania_weather_analysis]
+        D3[vilnius_march_temperature_anomalies]
+        D4[llama_dag_finetune]
+    end
+
+    subgraph Beam["Distributed Processing"]
+        BSDK[Beam SDK — PortableRunner]
+        JOB[beam-job-server :8099]
+        JM[Flink JobManager :8081]
+        TM[Flink TaskManager]
+        WP[beam-worker-pool :50000]
+    end
+
+    subgraph Store["Storage"]
+        PG[(PostgreSQL 16)]
+        QD[(Qdrant)]
+        FS[/python/output/]
+    end
+
+    subgraph Svc["Dashboard Services — profile: dashboard"]
+        ML[ml-server FastAPI :8000]
+        WS[ws-server :3000]
+        FE[frontend Vite :5173]
+        OLL[Ollama LLM]
+    end
+
+    SCHED --> D1 & D2 & D3 & D4
+    D2 & D3 --> BSDK --> JOB --> JM --> TM
+    TM <--> WP
+    D1 & D2 & D3 & D4 --> FS
+    SCHED --- PG
+    FS --> ML & WS
+    ML --> QD & OLL
+    WS --> FE
+    ML --> FE
+```
+
+## Data Flow
+
+```mermaid
+flowchart LR
+    API([Open-Meteo
+ERA5 API])
+
+    subgraph Ingest
+        FETCH[fetch scripts]
+    end
+
+    subgraph Analyse
+        AN[analyze
+anomalies · z-scores]
+        TR[train
+PyTorch model]
+        QG[quality gate]
+    end
+
+    subgraph Artifacts["python/output/"]
+        CSV[(CSVs)]
+        JSON2[(JSON summaries)]
+        MD[(Markdown reports)]
+        LORA[(LoRA adapter)]
+    end
+
+    subgraph LLM["LLM Pipeline"]
+        SFT[prepare SFT
+68 examples]
+        FTRAIN[train LoRA
+distilgpt2]
+    end
+
+    subgraph Serve
+        RAG[RAG context
+TF-IDF + Qdrant]
+        FAST[FastAPI :8000]
+        UI[Dashboard :5173]
+    end
+
+    API --> FETCH --> AN --> TR & QG
+    AN --> CSV & JSON2 & MD
+    TR --> JSON2
+    CSV & JSON2 & MD --> SFT --> FTRAIN --> LORA
+    CSV & JSON2 & MD --> RAG --> FAST --> UI
+    CSV & JSON2 --> UI
+```
 
 ## DAGs
 
@@ -82,26 +182,26 @@ Use `docker compose` below. On systems with Docker Compose v2 installed as a
 Docker plugin, `docker-compose` may not exist.
 
 ```bash
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
 ```
 
 First-time setup:
 
 ```bash
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up airflow-init
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up airflow-init
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
 ```
 
 Repeat runs after the admin user already exists:
 
 ```bash
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
 ```
 
 If you only need to sync the Airflow schema without re-running user creation:
 
 ```bash
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml run --rm --entrypoint /bin/bash airflow-init -lc "airflow db migrate"
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml run --rm --entrypoint /bin/bash airflow-init -lc "airflow db migrate"
 ```
 
 To use prebuilt GHCR images (no local image build), pull and run:
@@ -109,8 +209,8 @@ To use prebuilt GHCR images (no local image build), pull and run:
 ```bash
 export GHCR_OWNER=andrius
 echo <github_pat> | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml pull
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml pull
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d
 ```
 
 The GHCR images are intended to stay private. Authenticate before pulling them
@@ -192,20 +292,20 @@ configured to use it for answer synthesis by default.
 Start or refresh the relevant services:
 
 ```bash
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build ml-server frontend ollama
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build ml-server frontend ollama
 ```
 
 Pull a local model once:
 
 ```bash
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml exec ollama ollama pull llama3.1:8b
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml exec ollama ollama pull llama3.1:8b
 ```
 
 Override model/provider if needed:
 
 ```bash
 RAG_LLM_PROVIDER=ollama OLLAMA_MODEL=llama3.1:8b \
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d ml-server ollama
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d ml-server ollama
 ```
 
 ## Beam Multi-Node Test
@@ -224,19 +324,19 @@ Example for Flink runner:
 
 ```bash
 cd ml
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d flink-jobmanager flink-taskmanager
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d flink-jobmanager flink-taskmanager
 
 BEAM_RUNNER=FlinkRunner \
 BEAM_PIPELINE_ARGS="--flink_master=flink-jobmanager:8081 --parallelism=4 --environment_type=LOOPBACK" \
 BEAM_ENVIRONMENT_TYPE=LOOPBACK \
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d airflow-scheduler airflow-webserver
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d airflow-scheduler airflow-webserver
 
 # Kubernetes / Docker environment modes
 # For Kubernetes native Beam execution (when you have an in-cluster Flink and Beam portable env):
 BEAM_RUNNER=FlinkRunner \
 BEAM_ENVIRONMENT_TYPE=KUBERNETES \
 BEAM_PIPELINE_ARGS="--flink_master=http://<flink-jobmanager-host>:8081 --parallelism=4 --no-fetch-missing-cities" \
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d airflow-scheduler airflow-webserver
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d airflow-scheduler airflow-webserver
 ```
 
 The DAG task will execute:
@@ -277,15 +377,15 @@ If `llama_dag_finetune` fails with dependency/import errors, rebuild and restart
 
 ```bash
 cd ml
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml build airflow-init airflow-webserver airflow-scheduler
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d airflow-webserver airflow-scheduler
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml build airflow-init airflow-webserver airflow-scheduler
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d airflow-webserver airflow-scheduler
 ```
 
 Then clear failed task state and re-run:
 
 ```bash
 cd ml
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml exec airflow-webserver \
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml exec airflow-webserver \
   airflow tasks clear llama_dag_finetune train_lora_adapter --yes
 ```
 
