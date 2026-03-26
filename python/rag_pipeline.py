@@ -31,9 +31,9 @@ STOP_WORDS = {
     "is", "it", "its", "of", "on", "or", "that", "the", "this", "to", "vs", "what", "with",
 }
 
-DEFAULT_LLM_PROVIDER = os.environ.get("RAG_LLM_PROVIDER", "extractive").strip().lower()
+DEFAULT_LLM_PROVIDER = os.environ.get("RAG_LLM_PROVIDER", "ollama").strip().lower()
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
 
 
 def load_optional_json(path: Path) -> dict | list | None:
@@ -433,6 +433,78 @@ def _interpret_answer(raw_answer: str) -> str:
     return " ".join(lines)
 
 
+def _answer_extremes_question(question: str, output_dir: Path) -> dict | None:
+    """Handle questions like 'which year was the coldest/warmest March'."""
+    normalized = question.strip().lower()
+
+    # Detect coldest / warmest intent
+    if "coldest" in normalized or "lowest" in normalized or "least warm" in normalized:
+        extreme = "coldest"
+    elif "warmest" in normalized or "hottest" in normalized or "highest" in normalized:
+        extreme = "warmest"
+    else:
+        return None
+
+    # Detect month name
+    month_names = {name.lower(): name for idx, name in enumerate(calendar.month_name) if name}
+    month_name = next((name for name in month_names if name in normalized), None)
+    if month_name is None:
+        return None
+
+    month_label = month_names[month_name]
+    month_dir = output_dir / f"vilnius_{month_name}"
+    csv_path = month_dir / f"{month_name}_temperature_anomalies.csv"
+    if not csv_path.exists():
+        return None
+
+    annual = pd.read_csv(csv_path)
+    if annual.empty:
+        return None
+
+    annual = annual.copy()
+    annual["year"] = annual["year"].astype(int)
+    annual["anomaly_c"] = annual["anomaly_c"].astype(float)
+    annual["mean_temp_c"] = annual["mean_temp_c"].astype(float)
+
+    if extreme == "coldest":
+        row = annual.loc[annual["anomaly_c"].idxmin()]
+        superlative = "coldest"
+    else:
+        row = annual.loc[annual["anomaly_c"].idxmax()]
+        superlative = "warmest"
+
+    year = int(row["year"])
+    anomaly = float(row["anomaly_c"])
+    mean_temp = float(row["mean_temp_c"])
+    zscore = float(row.get("zscore", 0.0)) if "zscore" in row.index else 0.0
+
+    # Also include second extreme for context
+    other = annual.loc[annual["anomaly_c"].idxmax()] if extreme == "coldest" else annual.loc[annual["anomaly_c"].idxmin()]
+    other_year = int(other["year"])
+    other_anomaly = float(other["anomaly_c"])
+
+    answer = (
+        f"The {superlative} {month_label} in the record was {year}, "
+        f"with a mean temperature of {mean_temp:.1f} °C and anomaly {anomaly:+.2f} °C"
+        f" (z-score {zscore:+.2f}). "
+        f"For comparison, the {'warmest' if extreme == 'coldest' else 'coldest'} was {other_year} "
+        f"with anomaly {other_anomaly:+.2f} °C."
+    )
+
+    return {
+        "question": question,
+        "answer": answer,
+        "interpretation": f"{year} was the {superlative} {month_label} in the dataset.",
+        "sources": [
+            {
+                "title": f"Vilnius {month_label} anomaly table",
+                "source": f"vilnius_{month_name}/{month_name}_temperature_anomalies.csv",
+                "score": 1.0,
+            }
+        ],
+    }
+
+
 def _answer_month_comparison(question: str, output_dir: Path) -> dict | None:
     normalized = question.strip().lower()
     month_names = {name.lower(): idx for idx, name in enumerate(calendar.month_name) if name}
@@ -533,6 +605,10 @@ def _answer_with_ollama(question: str, matches: list[dict]) -> str | None:
 
 
 def answer_question(question: str, output_dir: Path, top_k: int = 3) -> dict:
+    deterministic = _answer_extremes_question(question, output_dir)
+    if deterministic is not None:
+        return deterministic
+
     deterministic = _answer_month_comparison(question, output_dir)
     if deterministic is not None:
         return deterministic
