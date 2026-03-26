@@ -43,7 +43,7 @@ jobs:
         run: uv sync --frozen
 
       - name: Smoke test ML dependencies
-        run: uv run python python/train.py --dry-run
+        run: uv run python python/climate_train.py --dry-run
 
       - name: Run Python tests
         run: uv run python -m pytest python/tests/ -v
