@@ -9,6 +9,6 @@
   },
   "keywords": ["dashboard", "websocket", "updates"],
   "dependencies": {
-    "ws": "^8.14.2"
+    "ws": "^8.20.0"
   }
 }
