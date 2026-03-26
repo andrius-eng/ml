@@ -65,6 +65,10 @@ def main() -> None:
     rag_demo = load_json(rag_demo_path) if rag_demo_path.exists() else build_demo_payload(out)
     beam_summary_path = out / "beam" / "beam_summary.json"
     beam_summary = load_json(beam_summary_path) if beam_summary_path.exists() else None
+    heat_stress_path = out / "weather" / "heat_stress.json"
+    heat_stress = load_json(heat_stress_path) if heat_stress_path.exists() else None
+    hdd_path = out / "weather" / "hdd.json"
+    hdd = load_json(hdd_path) if hdd_path.exists() else None
 
     annual_list = month_annual[["year", "mean_temp_c", "anomaly_c", "zscore"]].round(3).to_dict(orient="records")
     sorted_by_anomaly = month_annual.sort_values("anomaly_c")
@@ -118,6 +122,8 @@ def main() -> None:
         },
         "rag_demo": rag_demo,
         "beam_regional": beam_summary,
+        "heat_stress": heat_stress,
+        "heating_degree_days": hdd,
     }
 
     dest = Path(args.frontend_data)

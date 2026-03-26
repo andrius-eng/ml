@@ -52,6 +52,94 @@ function kpiCard({ label, value, sub, highlight }) {
   return el;
 }
 
+// ── Climate Stress (Eurostat HDD + heat stress) ─────────────────────────────
+
+let hddChartInstance = null;
+
+function renderClimateStress(d) {
+  const kpiRow = document.getElementById("stress-kpi-row");
+  const hs = d.heat_stress;
+  const hdd = d.heating_degree_days;
+
+  if (!kpiRow) return;
+  kpiRow.innerHTML = "";
+
+  if (hs) {
+    const items = [
+      {
+        label: `Frost days ${hs.current_year} YTD`,
+        value: hs.frost_days.current,
+        sub: `baseline ${hs.frost_days.baseline_mean_1991_2020.toFixed(1)} · anomaly ${sign(hs.frost_days.anomaly)}${hs.frost_days.anomaly.toFixed(1)}`,
+        highlight: Math.abs(hs.frost_days.anomaly) > 5,
+      },
+      {
+        label: `Cold nights (<−15 °C)`,
+        value: hs.cold_nights.current,
+        sub: `baseline ${hs.cold_nights.baseline_mean_1991_2020.toFixed(1)} · anomaly ${sign(hs.cold_nights.anomaly)}${hs.cold_nights.anomaly.toFixed(1)}`,
+      },
+      {
+        label: `Hot days (>25 °C)`,
+        value: hs.hot_days.current,
+        sub: `baseline ${hs.hot_days.baseline_mean_1991_2020.toFixed(1)} · anomaly ${sign(hs.hot_days.anomaly)}${hs.hot_days.anomaly.toFixed(1)}`,
+      },
+      {
+        label: `Tropical nights (>20 °C)`,
+        value: hs.tropical_nights.current,
+        sub: `baseline ${hs.tropical_nights.baseline_mean_1991_2020.toFixed(1)} · anomaly ${sign(hs.tropical_nights.anomaly)}${hs.tropical_nights.anomaly.toFixed(1)}`,
+      },
+    ];
+    items.forEach((item) => kpiRow.appendChild(kpiCard(item)));
+  } else {
+    kpiRow.innerHTML = "<p style=\"opacity:.5\">Heat stress data not yet available.</p>";
+  }
+
+  // HDD bar chart
+  const wrap = document.getElementById("hdd-chart-wrap");
+  if (!hdd || !Array.isArray(hdd.recent_months) || hdd.recent_months.length === 0) {
+    if (wrap) wrap.style.display = "none";
+    return;
+  }
+  if (wrap) wrap.style.display = "";
+
+  const labels = hdd.recent_months.map((r) => r.month);
+  const values = hdd.recent_months.map((r) => r.hdd);
+
+  const ctx = document.getElementById("hddChart");
+  if (!ctx) return;
+  if (hddChartInstance) hddChartInstance.destroy();
+  hddChartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Monthly HDD (Eurostat)",
+          data: values,
+          backgroundColor: values.map((v) =>
+            v > 300 ? "rgba(59,130,246,0.7)" : v > 100 ? "rgba(99,179,237,0.6)" : "rgba(186,230,253,0.5)"
+          ),
+          borderRadius: 3,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.parsed.y.toFixed(1)} HDD`,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: "#94a3b8", font: { size: 11 } }, grid: { color: "rgba(255,255,255,0.05)" } },
+        y: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(255,255,255,0.05)" }, title: { display: true, text: "Heating Degree Days", color: "#94a3b8" } },
+      },
+    },
+  });
+}
+
 // ── Regional Beam heatmap ────────────────────────────────────────────────────
 
 function anomalyColor(val) {
@@ -721,6 +809,7 @@ function connectWebSocket() {
       renderKPIs(data);
       renderMarchChart(data);
       renderCityCharts(data);
+      renderClimateStress(data);
       renderBeamHeatmap(data);
       renderMLMetrics(data);
       renderMLCharts(data);
@@ -830,6 +919,7 @@ async function init() {
   renderKPIs(data);
   renderMarchChart(data);
   renderCityCharts(data);
+  renderClimateStress(data);
   renderBeamHeatmap(data);
   renderMLMetrics(data);
   renderMLCharts(data);
