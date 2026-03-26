@@ -62,7 +62,7 @@ def run_script(script_path: Path, args: list, logger):
         result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=300)
         if result.stdout:
             logger.info(result.stdout)
-        return result
+        return None
     except subprocess.TimeoutExpired as e:
         logger.error(f"Script timeout after 300 seconds: {e}")
         raise
