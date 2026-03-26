@@ -917,7 +917,7 @@ document.getElementById("rag-form").addEventListener("submit", async (e) => {
       <p>${data.answer}</p>
       ${interpHtml}
       <div class="rag-sources">
-        ${data.sources.map((s) => `<span>${s.title} (${s.score.toFixed(2)})</span>`).join("")}
+        ${(data.sources || []).map((s) => `<span>${s.title} (${s.score.toFixed(2)})</span>`).join("")}
       </div>
     `;
   } catch (err) {
