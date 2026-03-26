@@ -1,5 +1,5 @@
 # ── Stage 1: build Vite app ──────────────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM node:25-alpine AS builder
 
 WORKDIR /app
 
