@@ -433,6 +433,104 @@ def _interpret_answer(raw_answer: str) -> str:
     return " ".join(lines)
 
 
+def _answer_year_month_extreme(question: str, output_dir: Path) -> dict | None:
+    """Handle: 'which month in 1995 was the warmest/coldest in Kaunas'."""
+    normalized = question.strip().lower()
+
+    # Need a 4-digit year
+    year_match = re.search(r"\b(1[89]\d{2}|20\d{2})\b", normalized)
+    if not year_match:
+        return None
+    year = int(year_match.group(0))
+
+    # coldest or warmest
+    if any(w in normalized for w in ("coldest", "lowest", "least warm", "most cold")):
+        extreme = "coldest"
+    elif any(w in normalized for w in ("warmest", "hottest", "highest", "most warm")):
+        extreme = "warmest"
+    else:
+        return None
+
+    # Optional city name
+    beam_path = output_dir / "beam" / "beam_summary.json"
+    if not beam_path.exists():
+        return None
+    with open(beam_path, encoding="utf-8") as fh:
+        beam = json.load(fh)
+    cities_data = beam.get("cities", {})
+    city_names = list(cities_data.keys())
+
+    chosen_city = None
+    for c in city_names:
+        if c.lower() in normalized:
+            chosen_city = c
+            break
+    if chosen_city is None:
+        # Default to the first city (usually Kaunas/Vilnius alphabetically)
+        chosen_city = city_names[0] if city_names else None
+    if chosen_city is None:
+        return None
+
+    year_data = cities_data[chosen_city].get("data", {}).get(str(year))
+    if not year_data:
+        available = sorted(cities_data[chosen_city]["data"].keys())
+        return {
+            "question": question,
+            "answer": f"No data for {chosen_city} in {year}. Available years: {available[0]}–{available[-1]}.",
+            "interpretation": "",
+            "sources": [],
+        }
+
+    MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    months_with_data = {int(m): v for m, v in year_data.items()
+                        if v.get("anomaly") is not None}
+    if not months_with_data:
+        return None
+
+    if extreme == "warmest":
+        best_m = max(months_with_data, key=lambda m: months_with_data[m]["anomaly"])
+    else:
+        best_m = min(months_with_data, key=lambda m: months_with_data[m]["anomaly"])
+
+    entry = months_with_data[best_m]
+    month_label = MONTH_NAMES[best_m - 1]
+    anomaly = entry["anomaly"]
+    temp = entry["temp"]
+    z = entry.get("z", 0.0)
+
+    # Runner-up for context
+    sorted_months = sorted(months_with_data.items(),
+                           key=lambda kv: kv[1]["anomaly"],
+                           reverse=(extreme == "warmest"))
+    runner = sorted_months[1] if len(sorted_months) > 1 else None
+    runner_text = ""
+    if runner:
+        rm, rv = runner
+        runner_text = (f" Runner-up: {MONTH_NAMES[rm - 1]} "
+                       f"(anomaly {rv['anomaly']:+.2f} °C).")
+
+    answer = (
+        f"The {extreme} month in {chosen_city} {year} was {month_label}, "
+        f"with mean temperature {temp:.1f} °C and anomaly {anomaly:+.2f} °C "
+        f"(z-score {z:+.2f} vs 1991–2025 baseline).{runner_text}"
+    )
+
+    return {
+        "question": question,
+        "answer": answer,
+        "interpretation": f"{month_label} {year} was the {extreme} month in {chosen_city} that year.",
+        "sources": [
+            {
+                "title": f"{chosen_city} regional anomalies (Beam)",
+                "source": "beam/beam_summary.json",
+                "score": 1.0,
+            }
+        ],
+    }
+
+
 def _answer_extremes_question(question: str, output_dir: Path) -> dict | None:
     """Handle questions like 'which year was the coldest/warmest March'."""
     normalized = question.strip().lower()
@@ -605,6 +703,10 @@ def _answer_with_ollama(question: str, matches: list[dict]) -> str | None:
 
 
 def answer_question(question: str, output_dir: Path, top_k: int = 3) -> dict:
+    deterministic = _answer_year_month_extreme(question, output_dir)
+    if deterministic is not None:
+        return deterministic
+
     deterministic = _answer_extremes_question(question, output_dir)
     if deterministic is not None:
         return deterministic
