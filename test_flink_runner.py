@@ -1,120 +1,133 @@
 #!/usr/bin/env python3
 """
-FlinkRunner Distributed Beam Job Test for Learning Distributed Computing
+PortableRunner + Flink: distributed Beam word-count demo.
 
-This script demonstrates how to use Apache Beam with Flink for distributed data processing.
-It shows:
-  - How to submit jobs to Flink
-  - Monitoring job execution on the Flink jobmanager
-  - Understanding parallelism and task distribution
+Submits a simple word-count pipeline to Flink via beam-job-server (PortableRunner).
 
-Run with:
-  python test_flink_runner.py --runner FlinkRunner --flink-master flink-jobmanager:8081
+Prerequisites — stack must already be running:
+  docker compose --project-directory . \
+    -f airflow/docker-compose.yml -f docker-compose.full.yml up -d
+
+Run from inside the scheduler container:
+  docker exec airflow-airflow-scheduler-1 \
+    python3 /opt/airflow/project/test_flink_runner.py
+
+Or override endpoints for local testing:
+  python test_flink_runner.py \
+    --job-endpoint beam-job-server:8099 \
+    --artifact-endpoint beam-job-server:8098 \
+    --environment-config localhost:50000
 """
 
 import argparse
-import sys
-from datetime import datetime
 import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import SetupOptions
 
 
-def run_word_count_pipeline(runner: str, flink_master: str, parallelism: int = 2):
+def run_word_count_pipeline(
+    runner: str,
+    job_endpoint: str,
+    artifact_endpoint: str,
+    environment_config: str,
+    parallelism: int = 1,
+):
     """
-    Simple word count pipeline for learning distributed Beam + Flink.
-    
-    This pipeline:
-    1. Creates sample data (wordswith their frequencies)
-    2. Parallelizes processing across Flink task managers
-    3. Aggregates results showing distributed execution
-    
-    Visit Flink UI while running: http://flink-jobmanager:8081
+    Simple word-count pipeline that runs distributed on Flink via PortableRunner.
+
+    Pipeline flow:
+      1. Create sample word data
+      2. Combine counts per word (distributed across Flink task slots)
+      3. Print results
+
+    Monitor at: http://localhost:8082  (Flink UI, host port)
     """
-    
-    # Configure pipeline for Flink
     pipeline_args = [
         f"--runner={runner}",
-        f"--flink_master={flink_master}",
-        f"--parallelism={parallelism}",
-        "--environment_type=LOOPBACK",  # Use LOOPBACK for reliable job submission
     ]
-    
+
+    if runner == "PortableRunner":
+        pipeline_args += [
+            f"--job_endpoint={job_endpoint}",
+            f"--artifact_endpoint={artifact_endpoint}",
+            "--environment_type=EXTERNAL",
+            f"--environment_config={environment_config}",
+            f"--parallelism={parallelism}",
+        ]
+
     options = PipelineOptions(pipeline_args)
     options.view_as(SetupOptions).save_main_session = True
-    
-    print(f"🚀 Starting Beam pipeline with {runner}")
-    print(f"   Option: --runner={runner}")
-    print(f"   Flink: {flink_master}")
-    print(f"   Parallelism: {parallelism} workers")
-    print(f"   Environment: LOOPBACK")
-    print("\n📊 Watch the job execute at: http://flink-jobmanager:8081/jobs")
-    print("=" * 60)
-    
+
+    print(f"Runner         : {runner}")
+    if runner == "PortableRunner":
+        print(f"Job endpoint   : {job_endpoint}")
+        print(f"Artifact ep    : {artifact_endpoint}")
+        print(f"Env config     : {environment_config}")
+        print(f"Parallelism    : {parallelism}")
+        print("Monitor jobs   : http://localhost:8082")
+    print("-" * 50)
+
     with beam.Pipeline(options=options) as p:
-        # 1. CREATE: Generate sample words with counts
-        wordswith_count = (
+        words = (
             p
             | "CreateSampleData" >> beam.Create([
                 ("distributed", 3),
-                ("beam", 5),  
+                ("beam", 5),
                 ("flink", 2),
                 ("computing", 4),
-                ("distributed", 1),  # Duplicate to show aggregation
+                ("distributed", 1),
                 ("flink", 3),
                 ("learning", 2),
             ])
         )
-        
-        # 2. AGGREGATE: Group by word and sum counts (distributed across workers)
-        aggregated = (
-            wordswith_count
-            | "GroupByWord" >> beam.CombinePerKey(sum)
+
+        aggregated = words | "SumPerWord" >> beam.CombinePerKey(sum)
+
+        aggregated | "Print" >> beam.Map(
+            lambda item: print(f"{item[0]:15} : {item[1]:3} occurrences")
         )
-        
-        # 3. FORMAT: Convert to readable output
-        formatted = (
-            aggregated
-            | "FormatOutput" >> beam.Map(lambda item: f"{item[0]:15} : {item[1]:3} occurrences")
-        )
-        
-        # 4. OUTPUT: Print results
-        formatted | "PrintResults" >> beam.Map(print)
-    
-    print("\n" + "=" * 60)
-    print("✅ Pipeline completed successfully!")
-    print("\nThis demonstrates:")
-    print("  • Job submission to Flink cluster")
-    print("  • Parallel task execution across taskmanagers")
-    print("  • Distributed data aggregation")
-    print("  • Flink monitoring via REST API (port 8081)")
+
+    print("-" * 50)
+    print("Pipeline completed.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Test FlinkRunner with Apache Beam for distributed computing"
+        description="Word-count demo via PortableRunner → beam-job-server → Flink"
     )
     parser.add_argument(
         "--runner",
-        default="DirectRunner",
-        help="Beam runner: DirectRunner or FlinkRunner",
+        default="PortableRunner",
+        choices=["PortableRunner", "DirectRunner"],
+        help="Beam runner (default: PortableRunner)",
     )
     parser.add_argument(
-        "--flink-master",
-        default="localhost:8081",
-        help="Flink jobmanager address (jobmanager-service:port)",
+        "--job-endpoint",
+        default="beam-job-server:8099",
+        help="beam-job-server gRPC endpoint",
+    )
+    parser.add_argument(
+        "--artifact-endpoint",
+        default="beam-job-server:8098",
+        help="beam-job-server artifact endpoint",
+    )
+    parser.add_argument(
+        "--environment-config",
+        default="localhost:50000",
+        help="beam-worker-pool address (localhost:50000 inside shared netns)",
     )
     parser.add_argument(
         "--parallelism",
         type=int,
-        default=2,
-        help="Parallelism level (number of parallel workers)",
+        default=1,
+        help="Flink parallelism — keep at 1 with a single TaskManager",
     )
-    
+
     args = parser.parse_args()
-    
     run_word_count_pipeline(
         runner=args.runner,
-        flink_master=args.flink_master,
-        parallelism=args.parallelism
+        job_endpoint=args.job_endpoint,
+        artifact_endpoint=args.artifact_endpoint,
+        environment_config=args.environment_config,
+        parallelism=args.parallelism,
     )
