@@ -199,6 +199,27 @@ beam-worker-pool:
   restart: unless-stopped
 ```
 In `BEAM_PIPELINE_ARGS` use `--environment_type=EXTERNAL --environment_config=beam-worker-pool:50000`.
+### Kubernetes equivalent
+
+In Kubernetes the `beam-worker-pool` runs as a **sidecar container** in the same
+pod as `flink-taskmanager` (same network namespace). The `--environment_config`
+value is still `localhost:50000`:
+
+```yaml
+# kubernetes/base/flink-beam.yaml — flink-taskmanager pod
+containers:
+  - name: taskmanager
+    image: flink:1.20.1-scala_2.12-java11
+    args: ["taskmanager"]
+  - name: beam-worker-pool          # sidecar — shares pod network
+    image: apache/beam_python3.12_sdk:2.71.0
+    args: ["--worker_pool"]
+```
+
+The `BEAM_PIPELINE_ARGS` ConfigMap includes `--environment_config=beam-worker-pool:50000`
+which resolves to the sidecar via the shared pod network.
+
+
 The worker pool must share the TaskManager network namespace so `localhost:50000` is reachable from inside the Flink JVM.
 
 ## Python-to-Java Conversion / PortableRunner Interop Notes
@@ -332,40 +353,20 @@ Use this when `beam_regional_analysis` falls through to DirectRunner or fails:
 - Streaming mode requires different error handling
 - State management needs backups for fault tolerance
 
-## Beam + Flink Compatible Versions (Your Working Stack)
+## Beam + Flink Compatible Versions
 
-Your current setup is fully compatible:
+| Component | Version | Status |
+|---|---|---|
+| Flink | `flink:1.20.1-scala_2.12-java11` | ✅ Confirmed working |
+| Beam Python SDK | `apache/beam_python3.12_sdk:2.71.0` | ✅ Official image |
+| Beam Job Server | `apache/beam_flink1.20_job_server:2.71.0` | ✅ Official image |
+| Runner | `PortableRunner` (not `FlinkRunner`) | ✅ Required for containerised Airflow |
 
-Component	Version	Status
-- Flink	1.18.1-scala_2.12-java11	✅ Supported by Beam 2.71.0
-- Beam Python SDK	apache/beam_python3.12_sdk:2.71.0	✅ Official Docker image
-- Beam Job Server	apache/beam_flink1.20_job_server:2.71.0	✅ Official Docker image
-- Beam Runner	beam-runners-flink-1.18	✅ Maven artifact exists
+### Official Compatibility Matrix
 
-### Official Compatibility Matrix [Beam Docs]
-- Beam 2.71.0 → Flink 1.18.x ✅ (your exact versions)
-- Beam 2.71.0 → Flink 1.19.x ✅ (newer option)
-- Beam 2.71.0 → Flink 1.20.x ❌ (unsupported)
-
-Why Flink 1.18.1 works perfectly:
-- Beam 2.57.0+ → Flink 1.18.x (stable)
-- Your: Beam 2.71.0 + Flink 1.18.1 = ✅ Perfect match
-
-### Docker Images Confirmed
-- ✅ flink:1.18.1-scala_2.12-java11 (~600MB)
-- ✅ apache/beam_python3.12_sdk:2.71.0 (~1.8GB)
-- ✅ apache/beam_flink1.20_job_server:2.71.0 (~600MB)
-
-Your compose will work. Currently pulling the ~1.8GB worker pool image (normal). Flink UI at localhost:8081 in ~5 minutes.
-
-Status: Production-ready versions. Deploy complete.
-
-### Follow-ups
-- How to build Beam pipeline for Flink 1.18
-- Sample docker-compose for Flink 1.18 and Beam 2.57
-- Common errors with Beam Flink version mismatch
-- Flink Operator compatible Beam versions
-- Next steps after picking compatible versions
+- Beam 2.71.0 → Flink 1.18.x ✅
+- Beam 2.71.0 → Flink 1.19.x ✅
+- Beam 2.71.0 → Flink 1.20.x ✅ (confirmed working in this repo)
 
 ### 🔧 Troubleshooting
 

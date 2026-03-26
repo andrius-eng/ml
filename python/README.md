@@ -62,6 +62,17 @@ uv run python python/<script>.py
 - llama_prepare_sft.py: builds SFT jsonl files from DAG artifacts
 - llama_train_lora.py: trains LoRA adapter on the generated SFT dataset
 
+## Kubernetes Deployment
+
+In the Kubernetes setup, scripts run inside the Airflow containers that are
+orchestrated by the `kubernetes/` manifests. Output data lands on the shared
+`ml-output` PVC, which is also mounted into `ml-server` and `ws-server` pods.
+
+No script changes are needed — the same DAGs and scripts run identically. The
+volume paths (`/opt/airflow/project/python/output`) are preserved in the K8s
+ConfigMap (`airflow-config`).
+
+
 ## Airflow Integration
 
 Current DAG IDs and major script paths:

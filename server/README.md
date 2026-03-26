@@ -43,6 +43,16 @@ cd ml
 uv run uvicorn --app-dir python serve:app --host 127.0.0.1 --port 8000
 ```
 
+## Kubernetes Deployment
+
+In Kubernetes the `ws-server` runs as a `Deployment` (`kubernetes/base/dashboard.yaml`).
+It mounts the `airflow-data` and `dashboard-data` PVCs in place of the Docker
+Compose volume mounts. The WebSocket endpoint is exposed via the nginx Ingress at
+`ws://ml-stack.local/ws`.
+
+No code changes are required — the same `dashboard-ws.js` runs in the container.
+
+
 ## Docker Compose Full Stack
 
 The full compose setup wires:
