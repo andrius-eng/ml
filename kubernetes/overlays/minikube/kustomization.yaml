@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ml-stack
+
+resources:
+  - ../../base
+
+patches:
+  - path: pvc-patch.yaml
+    target:
+      kind: PersistentVolumeClaim
+  - path: resource-patch.yaml
+    target:
+      kind: Deployment
+
+# Uncomment to use locally-built images after: eval $(minikube docker-env)
+# images:
+#   - name: ghcr.io/andrius-eng/ml-airflow-custom
+#     newName: ml-airflow-custom
+#     newTag: dev
+#   - name: ghcr.io/andrius-eng/ml-ml-pipeline
+#     newName: ml-ml-pipeline
+#     newTag: dev
+#   - name: ghcr.io/andrius-eng/ml-ws-server
+#     newName: ml-ws-server
+#     newTag: dev
+#   - name: ghcr.io/andrius-eng/ml-frontend
+#     newName: ml-frontend
+#     newTag: dev

@@ -1,0 +1,31 @@
+# ArgoCD Application — production GitOps deployment
+# kubectl apply -n argocd -f kubernetes/argocd/application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ml-stack
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/andrius-eng/ml.git
+    targetRevision: main
+    path: kubernetes/overlays/production
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ml-stack
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

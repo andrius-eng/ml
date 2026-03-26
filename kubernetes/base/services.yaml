@@ -1,0 +1,143 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: ml-stack
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+  clusterIP: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airflow-webserver
+  namespace: ml-stack
+spec:
+  selector:
+    app: airflow-webserver
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink-jobmanager
+  namespace: ml-stack
+spec:
+  selector:
+    app: flink-jobmanager
+  ports:
+    - name: rest
+      port: 8081
+      targetPort: 8081
+    - name: rpc
+      port: 6123
+      targetPort: 6123
+    - name: blob
+      port: 6124
+      targetPort: 6124
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink-history-server
+  namespace: ml-stack
+spec:
+  selector:
+    app: flink-history-server
+  ports:
+    - name: http
+      port: 8082
+      targetPort: 8082
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: beam-job-server
+  namespace: ml-stack
+spec:
+  selector:
+    app: beam-job-server
+  ports:
+    - name: artifact
+      port: 8098
+      targetPort: 8098
+    - name: job
+      port: 8099
+      targetPort: 8099
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: flink-taskmanager
+  namespace: ml-stack
+spec:
+  selector:
+    app: flink-taskmanager
+  ports:
+    - name: worker-pool
+      port: 50000
+      targetPort: 50000
+    - name: tm-rpc
+      port: 6122
+      targetPort: 6122
+  clusterIP: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-server
+  namespace: ml-stack
+spec:
+  selector:
+    app: ml-server
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ws-server
+  namespace: ml-stack
+spec:
+  selector:
+    app: ws-server
+  ports:
+    - name: ws
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: ml-stack
+spec:
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: ml-stack
+spec:
+  selector:
+    app: ollama
+  ports:
+    - name: http
+      port: 11434
+      targetPort: 11434

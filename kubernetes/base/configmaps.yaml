@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: airflow-config
+  namespace: ml-stack
+data:
+  AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+  AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+  AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+  AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+  AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: "300"
+  AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth"
+  PYTHONWARNINGS: "ignore::SyntaxWarning"
+  ML_PROJECT_ROOT: "/opt/airflow/project"
+  BEAM_RUNNER: "PortableRunner"
+  BEAM_PIPELINE_ARGS: "--flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flink-config
+  namespace: ml-stack
+data:
+  flink-conf.yaml: |
+    jobmanager.rpc.address: flink-jobmanager
+    jobmanager.archive.fs.dir: file:///opt/flink/job-archives
+    taskmanager.host: flink-taskmanager
+    taskmanager.numberOfTaskSlots: 4
+    taskmanager.memory.network.fraction: 0.2
+    taskmanager.memory.network.min: 268435456
+    taskmanager.memory.network.max: 1073741824
+    env.java.opts.taskmanager: -XX:MaxDirectMemorySize=512m
+    historyserver.web.address: 0.0.0.0
+    historyserver.web.port: 8082
+    historyserver.archive.fs.dir: file:///opt/flink/job-archives
+    historyserver.archive.fs.expiry-time: 604800000
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ml-server-config
+  namespace: ml-stack
+data:
+  ML_OUTPUT_DIR: "/project/python/output"
+  RAG_LLM_PROVIDER: "ollama"
+  OLLAMA_BASE_URL: "http://ollama:11434"
+  OLLAMA_MODEL: "llama3.1:8b"

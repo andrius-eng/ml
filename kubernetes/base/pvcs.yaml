@@ -1,0 +1,87 @@
+# storageClassName: "" = cluster default. Patch per overlay.
+# RWX required for: airflow-data, ml-output, dashboard-data, beam-artifacts, flink-job-archives
+# RWO sufficient for: postgres-data, ollama-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: airflow-data
+  namespace: ml-stack
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ml-output
+  namespace: ml-stack
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dashboard-data
+  namespace: ml-stack
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 512Mi
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: ml-stack
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: beam-artifacts
+  namespace: ml-stack
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flink-job-archives
+  namespace: ml-stack
+spec:
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-data
+  namespace: ml-stack
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: ""

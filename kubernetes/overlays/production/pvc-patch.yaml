@@ -1,0 +1,52 @@
+# Production PVC patch — set storageClassName to your cluster's RWX class.
+# Common options: nfs-client, efs-sc (AWS), azurefile (Azure), cephfs (Rook)
+# RWO claims (postgres, ollama) use cluster default block class ("").
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: airflow-data
+spec:
+  storageClassName: nfs-client   # replace with your RWX class
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ml-output
+spec:
+  storageClassName: nfs-client
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dashboard-data
+spec:
+  storageClassName: nfs-client
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: beam-artifacts
+spec:
+  storageClassName: nfs-client
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flink-job-archives
+spec:
+  storageClassName: nfs-client
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+spec:
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-data
+spec:
+  storageClassName: ""
