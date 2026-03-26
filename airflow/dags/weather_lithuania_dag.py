@@ -127,6 +127,7 @@ def analyze_weather_data(analysis_end=None, **context):
             "--country-monthly-output", str(COUNTRY_MONTHLY_PATH),
             "--city-monthly-output", str(CITY_MONTHLY_PATH),
             "--city-rankings-output", str(CITY_RANKINGS_PATH),
+            "--heat-stress-output", str(HEAT_STRESS_PATH),
             "--current-end", analysis_end,
         ],
         logger,
@@ -263,6 +264,7 @@ WEATHER_PLOT_SCRIPT = PROJECT_ROOT / "python" / "weather_plot.py"
 WEATHER_QUALITY_GATE_SCRIPT = PROJECT_ROOT / "python" / "weather_quality_gate.py"
 BEAM_ANALYSIS_SCRIPT = PROJECT_ROOT / "python" / "beam_analysis.py"
 RAG_PIPELINE_SCRIPT = PROJECT_ROOT / "python" / "rag_pipeline.py"
+EUROSTAT_FETCH_SCRIPT = PROJECT_ROOT / "python" / "eurostat_fetch.py"
 
 # Output paths
 WEATHER_OUTPUT_DIR = PROJECT_ROOT / "python" / "output" / "weather"
@@ -280,6 +282,8 @@ CITY_RANKINGS_PATH = WEATHER_OUTPUT_DIR / "city_rankings.json"
 WEATHER_PLOT_PATH = WEATHER_OUTPUT_DIR / "weather_anomalies.png"
 WEATHER_REPORT_PATH = WEATHER_OUTPUT_DIR / "weather_summary.md"
 CITY_PLOTS_DIR = WEATHER_OUTPUT_DIR / "cities"
+HEAT_STRESS_PATH = WEATHER_OUTPUT_DIR / "heat_stress.json"
+HDD_PATH = WEATHER_OUTPUT_DIR / "hdd.json"
 
 BEAM_OUTPUT_DIR = PROJECT_ROOT / "python" / "output" / "beam"
 RAG_DEMO_PATH = PROJECT_ROOT / "python" / "output" / "rag" / "rag_demo.json"
@@ -334,6 +338,16 @@ with DAG(
         trigger_rule=TriggerRule.NONE_FAILED,
     )
 
+    fetch_eurostat_hdd = PythonOperator(
+        task_id="fetch_eurostat_hdd",
+        python_callable=lambda **ctx: run_script(
+            EUROSTAT_FETCH_SCRIPT,
+            ["--output", str(HDD_PATH)],
+            logging.getLogger(__name__),
+        ),
+    )
+
     fetch_weather >> analyze_weather >> [plot_weather, quality_gate, wait_for_flink]
+    fetch_eurostat_hdd >> refresh_rag_context
     wait_for_flink >> beam_regional_analysis
     [plot_weather, quality_gate, beam_regional_analysis] >> refresh_rag_context

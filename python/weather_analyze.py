@@ -14,9 +14,10 @@ from weather_common import (
     build_annual_summary,
     build_city_annual_summary,
     build_city_daily,
-    build_country_daily,
     build_city_rankings,
+    build_country_daily,
     build_daily_climatology,
+    build_heat_stress_summary,
     build_monthly_anomalies,
     compute_city_weather_summary,
     compute_weather_summary,
@@ -147,6 +148,12 @@ def main() -> None:
     )
     parser.add_argument("--current-year", type=int, default=None)
     parser.add_argument("--current-end", type=str, default=date.today().isoformat())
+    parser.add_argument(
+        "--heat-stress-output",
+        type=str,
+        default="python/output/weather/heat_stress.json",
+        help="JSON output for frost/heat day counts vs 1991-2020 baseline",
+    )
     args = parser.parse_args()
 
     raw = pd.read_csv(args.raw_input)
@@ -210,6 +217,13 @@ def main() -> None:
     with open(args.city_rankings_output, "w", encoding="utf-8") as handle:
         json.dump(city_rankings, handle, indent=2, sort_keys=True)
     Path(args.report_output).write_text(report, encoding="utf-8")
+
+    heat_stress = build_heat_stress_summary(raw, current_year, current_end)
+    if heat_stress:
+        ensure_parent(args.heat_stress_output)
+        with open(args.heat_stress_output, "w", encoding="utf-8") as handle:
+            json.dump(heat_stress, handle, indent=2, sort_keys=True)
+        print(f"Saved heat stress summary to {args.heat_stress_output}")
 
     print(json.dumps(summary, indent=2, sort_keys=True))
     print(f"Saved city summaries to {args.city_summary_output}")
