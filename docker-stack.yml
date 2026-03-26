@@ -48,7 +48,7 @@ x-airflow-common: &airflow-common
   environment: &airflow-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD:-airflow}@postgres:5432/airflow
     AIRFLOW__CORE__FERNET_KEY: "${AIRFLOW_FERNET_KEY:-}"
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
@@ -70,7 +70,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airflow}
       POSTGRES_DB: airflow
     volumes:
       - postgres-db-volume:/var/lib/postgresql/data
@@ -105,7 +105,7 @@ services:
         airflow db migrate
         airflow users create \
           --username admin \
-          --password admin \
+          --password ${AIRFLOW_ADMIN_PASSWORD:-admin} \
           --firstname Airflow \
           --lastname Admin \
           --role Admin \
