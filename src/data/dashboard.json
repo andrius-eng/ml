@@ -214,7 +214,7 @@
   },
   "lithuania_weather": {
     "year": 2026,
-    "period": "01-01 to 03-25",
+    "period": "01-01 to 03-26",
     "cities": [
       "Vilnius",
       "Kaunas",
@@ -222,96 +222,96 @@
       "Siauliai",
       "Panevezys"
     ],
-    "temp_anomaly_c": -3.29,
-    "temp_zscore": -1.45,
-    "precip_anomaly_mm": -32.5,
-    "precip_zscore": -0.94,
-    "latest_7d_temp_anomaly": 3.98,
+    "temp_anomaly_c": -3.21,
+    "temp_zscore": -1.43,
+    "precip_anomaly_mm": -31.9,
+    "precip_zscore": -0.91,
+    "latest_7d_temp_anomaly": 4.29,
     "city_rankings": {
       "combined": [
         {
           "city": "Klaipeda",
-          "combined_score": 1.758855391283489,
-          "precipitation_z": -0.2554635129140571,
-          "temperature_z": -1.758855391283489
-        },
-        {
-          "city": "Vilnius",
-          "combined_score": 1.6539262061559008,
-          "precipitation_z": -1.6539262061559008,
-          "temperature_z": -1.1662423641948172
+          "combined_score": 1.7438156668880447,
+          "precipitation_z": -0.2716867944288858,
+          "temperature_z": -1.7438156668880447
         },
         {
           "city": "Panevezys",
-          "combined_score": 1.599843132354134,
-          "precipitation_z": -1.2427812535940708,
-          "temperature_z": -1.599843132354134
+          "combined_score": 1.5726057771114055,
+          "precipitation_z": -1.2469734588600323,
+          "temperature_z": -1.5726057771114055
+        },
+        {
+          "city": "Vilnius",
+          "combined_score": 1.5515262598582404,
+          "precipitation_z": -1.5515262598582404,
+          "temperature_z": -1.1391735209502414
         },
         {
           "city": "Siauliai",
-          "combined_score": 1.4748530880822621,
-          "precipitation_z": -0.8470765029396911,
-          "temperature_z": -1.4748530880822621
+          "combined_score": 1.4486005640039157,
+          "precipitation_z": -0.8186966140109333,
+          "temperature_z": -1.4486005640039157
         },
         {
           "city": "Kaunas",
-          "combined_score": 1.2848282963234803,
-          "precipitation_z": -0.8743584377339082,
-          "temperature_z": -1.2848282963234803
+          "combined_score": 1.2634587200963265,
+          "precipitation_z": -0.8136937127731406,
+          "temperature_z": -1.2634587200963265
         }
       ],
       "precipitation": [
         {
-          "anomaly": -57.09142857142854,
+          "anomaly": -54.49428571428572,
           "city": "Vilnius",
-          "z_score": -1.6539262061559008
+          "z_score": -1.5515262598582404
         },
         {
-          "anomaly": -36.131428571428586,
+          "anomaly": -36.64571428571429,
           "city": "Panevezys",
-          "z_score": -1.2427812535940708
+          "z_score": -1.2469734588600323
         },
         {
-          "anomaly": -30.70571428571428,
-          "city": "Kaunas",
-          "z_score": -0.8743584377339082
-        },
-        {
-          "anomaly": -25.805714285714274,
+          "anomaly": -25.21142857142857,
           "city": "Siauliai",
-          "z_score": -0.8470765029396911
+          "z_score": -0.8186966140109333
         },
         {
-          "anomaly": -12.871428571428567,
+          "anomaly": -29.285714285714306,
+          "city": "Kaunas",
+          "z_score": -0.8136937127731406
+        },
+        {
+          "anomaly": -13.80857142857144,
           "city": "Klaipeda",
-          "z_score": -0.2554635129140571
+          "z_score": -0.2716867944288858
         }
       ],
       "temperature": [
         {
-          "anomaly": -3.6091684673869553,
+          "anomaly": -3.5482431111979675,
           "city": "Klaipeda",
-          "z_score": -1.758855391283489
+          "z_score": -1.7438156668880447
         },
         {
-          "anomaly": -3.6661368547418967,
+          "anomaly": -3.5765155364471375,
           "city": "Panevezys",
-          "z_score": -1.599843132354134
+          "z_score": -1.5726057771114055
         },
         {
-          "anomaly": -3.4836286514605845,
+          "anomaly": -3.397142466288841,
           "city": "Siauliai",
-          "z_score": -1.4748530880822621
+          "z_score": -1.4486005640039157
         },
         {
-          "anomaly": -3.020280912364946,
+          "anomaly": -2.94717412546414,
           "city": "Kaunas",
-          "z_score": -1.2848282963234803
+          "z_score": -1.2634587200963265
         },
         {
-          "anomaly": -2.6460980392156865,
+          "anomaly": -2.5685616572210277,
           "city": "Vilnius",
-          "z_score": -1.1662423641948172
+          "z_score": -1.1391735209502414
         }
       ]
     }
@@ -1126,7 +1126,7 @@
   "rag_demo": {
     "generated_at": "2026-03-26",
     "collection": "climate_dashboard_docs",
-    "corpus_size": 12,
+    "corpus_size": 13,
     "questions": [
       {
         "question": "Is Lithuania currently warmer or colder than normal?",
@@ -1136,17 +1136,17 @@
           {
             "title": "Lithuania Heating Degree Days (Eurostat)",
             "source": "weather/hdd.json",
-            "score": 0.2434
+            "score": 0.2513
           },
           {
             "title": "weather_summary narrative 1",
             "source": "weather/weather_summary.md",
-            "score": 0.136
+            "score": 0.1147
           },
           {
             "title": "Climate model evaluation",
             "source": "climate/climate_evaluation.json",
-            "score": 0.0484
+            "score": 0.0495
           }
         ]
       },
@@ -1158,17 +1158,17 @@
           {
             "title": "report narrative 1",
             "source": "vilnius_march/report.md",
-            "score": 0.4252
+            "score": 0.4286
           },
           {
             "title": "Vilnius March anomaly overview",
             "source": "vilnius_march/summary.json",
-            "score": 0.1287
+            "score": 0.1345
           },
           {
             "title": "report narrative 2",
             "source": "vilnius_march/report.md",
-            "score": 0.0991
+            "score": 0.0997
           }
         ]
       },
@@ -1180,7 +1180,7 @@
           {
             "title": "Climate model evaluation",
             "source": "climate/climate_evaluation.json",
-            "score": 0.3145
+            "score": 0.3155
           }
         ]
       }
@@ -12416,8 +12416,8 @@
     },
     "current_year": 2026,
     "frost_days": {
-      "anomaly": 7.9,
-      "baseline_mean_1991_2020": 63.1,
+      "anomaly": 7.2,
+      "baseline_mean_1991_2020": 63.8,
       "current": 71
     },
     "hot_days": {
@@ -12425,7 +12425,7 @@
       "baseline_mean_1991_2020": 0.0,
       "current": 0
     },
-    "period": "01-01 to 03-25",
+    "period": "01-01 to 03-26",
     "tropical_nights": {
       "anomaly": 0.0,
       "baseline_mean_1991_2020": 0.0,

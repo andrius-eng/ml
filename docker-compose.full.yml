@@ -70,6 +70,7 @@ services:
     command: taskmanager
     volumes:
       - beam-artifacts:/tmp/beam-artifact-staging
+      - ./python/output:/opt/airflow/project/python/output
     environment:
       FLINK_PROPERTIES: 'jobmanager.rpc.address: flink-jobmanager
 
@@ -95,6 +96,8 @@ services:
     image: apache/beam_python3.12_sdk:2.71.0
     command: ["--worker_pool"]
     network_mode: "service:flink-taskmanager"
+    volumes:
+      - ./python/output:/opt/airflow/project/python/output
     depends_on:
       - flink-taskmanager
     restart: unless-stopped
