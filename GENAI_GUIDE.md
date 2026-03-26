@@ -36,7 +36,7 @@ graph TB
     end
 
     subgraph PipelineOutputs["Pipeline outputs (python/output/)"]
-        WJ["weather/ytd_summary.json"]
+        WJ["weather/ytd_summary.json\nheat_stress.json · hdd.json"]
         CJ["climate/climate_evaluation.json"]
         VJ["vilnius_march/summary.json\n+ anomalies CSV"]
         MD["weather_summary.md\nreport.md"]
