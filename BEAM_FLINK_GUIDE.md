@@ -459,3 +459,162 @@ if __name__ == '__main__':
 3. ✅ Experiment with different parallelism settings
 4. ✅ Modify `test_flink_runner.py` to process your own data
 5. ✅ Integrate into production Airflow DAGs
+
+---
+
+## PROVEN WORKING CONFIGURATION (2026-03-25)
+
+> **This section supersedes earlier configuration notes.** The setup below is confirmed running end-to-end with all Airflow tasks showing `success`.
+
+### Proof of Execution
+
+**Flink job**: `f788f3970448530508285c69c891eae4`  
+**Job name**: `BeamApp-root-0325213022-29785242`  
+**State**: `FINISHED` (69 seconds runtime)  
+**DAG run**: `manual__2026-03-25T21:29:45+00:00`
+
+All 4 DAG tasks succeeded:
+| Task | State | Duration |
+|------|-------|----------|
+| `fetch_weather_data` | success | ~1s |
+| `analyze_weather` | success | ~5s |
+| `wait_for_flink_jobmanager` | success | ~1s |
+| `beam_regional_analysis` | **success** | **~2m 10s on Flink** |
+
+---
+
+### Correct Runner Stack
+
+**NOT** `FlinkRunner` directly — use **`PortableRunner` + `beam-job-server`**:
+
+```
+Python DAG → PortableRunner → beam-job-server:8099 (Java)
+                                       ↓
+                              Flink JobManager:8081
+                                       ↓
+                              Flink TaskManager (4 slots)
+                                       ↑
+                              beam-worker-pool:50000
+                              (shares TM network namespace)
+```
+
+### Image Versions (Confirmed Working)
+
+```yaml
+flink-jobmanager:   flink:1.20.1-scala_2.12-java11
+flink-taskmanager:  flink:1.20.1-scala_2.12-java11
+beam-job-server:    apache/beam_flink1.20_job_server:2.71.0
+beam-worker-pool:   apache/beam_python3.12_sdk:2.71.0
+```
+
+### Required `docker-compose.full.yml` Settings
+
+```yaml
+# Flink TaskManager — OOM guard and 4 slots
+flink-taskmanager:
+  image: flink:1.20.1-scala_2.12-java11
+  environment:
+    FLINK_PROPERTIES: |
+      jobmanager.rpc.address: flink-jobmanager
+      taskmanager.numberOfTaskSlots: 4
+      taskmanager.memory.process.size: 2g
+      env.java.opts.taskmanager: -XX:MaxDirectMemorySize=512m   # CRITICAL
+
+# Beam worker pool — must share TM network namespace
+beam-worker-pool:
+  image: apache/beam_python3.12_sdk:2.71.0
+  command: --worker_pool
+  network_mode: "service:flink-taskmanager"   # makes localhost:50000 reachable from TM
+
+# Beam job server
+beam-job-server:
+  image: apache/beam_flink1.20_job_server:2.71.0
+  ports:
+    - "8099:8099"   # job_endpoint
+    - "8098:8098"   # artifact_endpoint
+```
+
+### DAG Pipeline Args (weather_lithuania_dag.py)
+
+```python
+beam_args = [
+    "--runner", "PortableRunner",
+    "--job_endpoint", "beam-job-server:8099",
+    "--artifact_endpoint", "beam-job-server:8098",
+    "--environment_type", "EXTERNAL",
+    "--environment_config", "localhost:50000",  # TM's localhost = worker pool
+    "--parallelism", "1",   # CRITICAL: >1 causes network buffer exhaustion with single TM
+]
+```
+
+### Critical: `--parallelism 1`
+
+A single Flink TaskManager with default 8192 network buffers cannot handle
+`--parallelism 2` for this pipeline — it exhausts buffers and fails with:
+
+```
+java.io.IOException: Insufficient number of network buffers: required 512, but only 473 available
+```
+
+Use `--parallelism 1` with a single TM. Scale parallelism only when you have
+multiple TaskManagers (one slot per parallelism unit).
+
+### Container Count (Lean Stack)
+
+Only 8 containers needed for core workflow:
+```
+postgres              (Airflow DB)
+airflow-scheduler     (DAG scheduling)
+airflow-webserver     (UI at localhost:8080)
+flink-jobmanager      (REST at localhost:8082)
+flink-taskmanager     (4 slots, shares net with beam-worker-pool)
+beam-job-server       (PortableRunner job submission)
+beam-worker-pool      (Python SDK harness)
+```
+
+Dashboard services (`ws-server`, `frontend`, `ml-server`, `ollama`) are gated
+behind `profiles: [dashboard]` and not started by default.
+
+### WSL2 Stability (.wslconfig)
+
+```ini
+[wsl2]
+memory=6GB
+swap=8GB
+processors=6
+autoMemoryReclaim=gradual   # prevents VM balloon pauses that kill gRPC
+sparseVhd=true
+```
+
+Without `autoMemoryReclaim=gradual`, Windows memory pressure causes WSL VM to
+pause and all gRPC connections die with `Wsl/Service/0x8007274c`.
+
+### Flink REST Ports
+
+| Context | URL |
+|---------|-----|
+| Host browser | `http://localhost:8082` |
+| Inside containers | `http://flink-jobmanager:8081` |
+| Inside JM container | `http://localhost:8081` |
+
+### Weather CSV Cache Workaround
+
+`fetch_weather_data` reuses cached CSV if mtime < 60 minutes. If cache is stale,
+always `touch` before triggering to avoid HTTP 429 from external weather API:
+
+```bash
+touch ~/Development/ml/python/output/weather/raw_daily_weather.csv
+docker exec airflow-airflow-scheduler-1 airflow dags trigger lithuania_weather_analysis
+```
+
+### Starting the Stack
+
+```bash
+cd ~/Development/ml
+docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d
+# Wait for airflow-init to exit 0, then scheduler becomes healthy (~60s)
+
+# Verify
+docker ps --format "table {{.Names}}\t{{.Status}}"
+curl -s http://localhost:8082/v1/overview | python3 -c "import sys,json; o=json.load(sys.stdin); print('JM OK, slots:', o['slots-available'])"
+```
