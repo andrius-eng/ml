@@ -308,55 +308,44 @@ RAG_LLM_PROVIDER=ollama OLLAMA_MODEL=llama3.1:8b \
 docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d ml-server ollama
 ```
 
-## Beam Multi-Node Test
+## Beam DAG Task
 
-The weather DAG already includes a Beam task (`beam_regional_analysis`).
-You can run it with different runners without code changes.
+The weather DAG (`lithuania_weather_analysis`) includes a `beam_regional_analysis`
+task that runs the Beam pipeline via `PortableRunner` against the dedicated
+`beam-job-server`, which submits the job to Flink.
 
-Default behavior is local:
-
-```bash
-BEAM_RUNNER=DirectRunner
-```
-
-For distributed tests, pass runner-specific args via `BEAM_PIPELINE_ARGS`.
-Example for Flink runner:
+The full stack is started with:
 
 ```bash
 cd ml
-docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d flink-jobmanager flink-taskmanager
-
-BEAM_RUNNER=FlinkRunner \
-BEAM_PIPELINE_ARGS="--flink_master=flink-jobmanager:8081 --parallelism=4 --environment_type=LOOPBACK" \
-BEAM_ENVIRONMENT_TYPE=LOOPBACK \
-docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d airflow-scheduler airflow-webserver
-
-# Kubernetes / Docker environment modes
-# For Kubernetes native Beam execution (when you have an in-cluster Flink and Beam portable env):
-BEAM_RUNNER=FlinkRunner \
-BEAM_ENVIRONMENT_TYPE=KUBERNETES \
-BEAM_PIPELINE_ARGS="--flink_master=http://<flink-jobmanager-host>:8081 --parallelism=4 --no-fetch-missing-cities" \
-docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d airflow-scheduler airflow-webserver
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d
 ```
 
-The DAG task will execute:
+Trigger the DAG:
 
 ```bash
-python beam_analysis.py --runner "$BEAM_RUNNER" ... $BEAM_PIPELINE_ARGS
+docker exec airflow-airflow-scheduler-1 \
+  airflow dags trigger lithuania_weather_analysis
 ```
 
-You can also run the Beam job directly:
+Run the Beam pipeline directly (outside Airflow):
 
 ```bash
-cd ml
-python python/beam_analysis.py \
-  --input python/output/weather/raw_daily_weather.csv \
-  --output-dir python/output/beam \
-  --runner FlinkRunner \
-  --flink_master localhost:8081 \
-  --parallelism 4 \
-  --environment_type LOOPBACK
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml \
+  exec airflow-scheduler python python/beam_analysis.py \
+    --runner PortableRunner \
+    --job_endpoint beam-job-server:8099 \
+    --artifact_endpoint beam-job-server:8098 \
+    --environment_type EXTERNAL \
+    --environment_config beam-worker-pool:50000 \
+    --parallelism 1 \
+    --input python/output/weather/raw_daily_weather.csv \
+    --output-dir python/output/beam \
+    --end-date 2026-03-26
 ```
+
+> `--parallelism 1` is required with a single Flink TaskManager.
+> See [FLINK_RUNNER_READY.md](FLINK_RUNNER_READY.md) for the full configuration reference.
 
 ## Train Llama On DAG Artifacts (LoRA)
 
