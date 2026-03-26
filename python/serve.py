@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import math
+import time
+from datetime import date, timedelta
 from pathlib import Path
 
 import torch
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -20,7 +23,31 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from rag_pipeline import answer_question
 
+try:
+    from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+    from starlette.responses import Response as StarletteResponse
+    _prometheus_available = True
+except ImportError:
+    _prometheus_available = False
+
 ML_OUTPUT_DIR = Path(os.environ.get("ML_OUTPUT_DIR", "python/output"))
+
+# ── Prometheus metrics ────────────────────────────────────────────────────────
+if _prometheus_available:
+    REQUEST_COUNT = Counter(
+        "ml_server_requests_total",
+        "Total HTTP requests",
+        ["method", "endpoint", "status"],
+    )
+    REQUEST_LATENCY = Histogram(
+        "ml_server_request_duration_seconds",
+        "HTTP request latency",
+        ["endpoint"],
+    )
+    FORECAST_COUNT = Counter(
+        "ml_server_forecasts_total",
+        "Total /forecast calls",
+    )
 
 
 class PredictionRequest(BaseModel):
@@ -36,6 +63,17 @@ class PredictionResponse(BaseModel):
     temperature_c: float
 
 
+class ForecastDay(BaseModel):
+    date: str
+    temperature_c: float
+
+
+class ForecastResponse(BaseModel):
+    start_date: str
+    end_date: str
+    days: list[ForecastDay]
+
+
 MODEL_PATH = ML_OUTPUT_DIR / 'climate' / 'climate_model.pth'
 _model_cache: ClimateModel | None = None
 
@@ -49,7 +87,7 @@ def get_model() -> ClimateModel | None:
     return _model_cache
 
 
-app = FastAPI(title='Torch + MLflow Demo')
+app = FastAPI(title='Lithuania Climate ML API')
 
 app.add_middleware(
     CORSMiddleware,
@@ -103,3 +141,59 @@ def predict(req: PredictionRequest):
         temperature_c = model(x).item()
 
     return {'sin_doy': req.sin_doy, 'cos_doy': req.cos_doy, 'year_norm': req.year_norm, 'temperature_c': float(temperature_c)}
+
+
+def _date_to_features(d: date) -> tuple[float, float, float]:
+    """Convert a calendar date to (sin_doy, cos_doy, year_norm) model inputs."""
+    doy = d.timetuple().tm_yday
+    sin_doy = math.sin(2 * math.pi * doy / 365)
+    cos_doy = math.cos(2 * math.pi * doy / 365)
+    year_norm = (d.year - 1991) / 30.0
+    return sin_doy, cos_doy, year_norm
+
+
+@app.get('/forecast', response_model=ForecastResponse)
+def forecast(
+    start: str = Query(default=None, description="Start date YYYY-MM-DD (default: today)"),
+    days: int = Query(default=7, ge=1, le=365, description="Number of days to forecast"),
+):
+    """Return model temperature predictions for a date range.
+
+    Example: GET /forecast?start=2026-07-01&days=14
+    """
+    model = get_model()
+    if model is None:
+        raise HTTPException(status_code=503, detail='Model not loaded')
+
+    try:
+        start_date = date.fromisoformat(start) if start else date.today()
+    except ValueError:
+        raise HTTPException(status_code=422, detail='start must be YYYY-MM-DD')
+
+    end_date = start_date + timedelta(days=days - 1)
+
+    if _prometheus_available:
+        FORECAST_COUNT.inc()
+
+    results: list[ForecastDay] = []
+    for i in range(days):
+        d = start_date + timedelta(days=i)
+        sin_doy, cos_doy, year_norm = _date_to_features(d)
+        x = torch.tensor([[sin_doy, cos_doy, year_norm]], dtype=torch.float32)
+        with torch.no_grad():
+            temp = model(x).item()
+        results.append(ForecastDay(date=d.isoformat(), temperature_c=round(float(temp), 2)))
+
+    return ForecastResponse(
+        start_date=start_date.isoformat(),
+        end_date=end_date.isoformat(),
+        days=results,
+    )
+
+
+@app.get('/metrics')
+def metrics():
+    """Prometheus metrics endpoint."""
+    if not _prometheus_available:
+        raise HTTPException(status_code=501, detail='prometheus_client not installed')
+    return StarletteResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)

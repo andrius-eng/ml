@@ -207,6 +207,53 @@ services:
     restart: unless-stopped
     networks:
     - default
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.21.3
+    command: >
+      mlflow server
+      --backend-store-uri /mlruns
+      --default-artifact-root /mlruns
+      --host 0.0.0.0
+      --port 5000
+    ports:
+    - 5000:5000
+    volumes:
+    - ../mlruns:/mlruns
+    restart: unless-stopped
+    networks:
+    - default
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    command:
+    - --config.file=/etc/prometheus/prometheus.yml
+    - --storage.tsdb.path=/prometheus
+    - --storage.tsdb.retention.time=15d
+    ports:
+    - 9090:9090
+    volumes:
+    - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    - prometheus-data:/prometheus
+    restart: unless-stopped
+    networks:
+    - default
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    ports:
+    - 3001:3000
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+    - grafana-data:/var/lib/grafana
+    - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+    - prometheus
+    restart: unless-stopped
+    networks:
+    - default
+
 volumes:
   airflow-data:
     driver: local
@@ -217,6 +264,10 @@ volumes:
   beam-artifacts:
     driver: local
   flink-job-archives:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
     driver: local
 networks:
   default:
