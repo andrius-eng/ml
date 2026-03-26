@@ -1,4 +1,0 @@
-[Beam] Runner: DirectRunner
-[Beam] Pipeline args: python/output/weather/raw_daily_weather.csv python/output/beam 2026-03-23 FlinkRunner --runner DirectRunner
-[Beam] Wrote 3807 rows to python/output/beam/monthly_anomaly_matrix.csv
-[Beam] Summary written to python/output/beam/beam_summary.json
