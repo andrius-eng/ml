@@ -352,6 +352,11 @@ def run(
 
     n = _write_csv(collected, str(out_csv))
     print(f"[Beam] Wrote {n} rows to {out_csv}")
+    if n == 0:
+        raise RuntimeError(
+            "[Beam] Pipeline produced 0 rows — check that fetch_eurostat_hdd ran "
+            "successfully and that the Flink cluster is reachable."
+        )
 
     # Also write a summary JSON for the frontend
     _write_summary(collected, out / "beam_summary.json", end_date)

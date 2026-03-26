@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from model import LinearModel
+from model import ClimateModel
 
 import json
 import os
@@ -24,22 +24,26 @@ ML_OUTPUT_DIR = Path(os.environ.get("ML_OUTPUT_DIR", "python/output"))
 
 
 class PredictionRequest(BaseModel):
-    x: float
+    sin_doy: float
+    cos_doy: float
+    year_norm: float
 
 
 class PredictionResponse(BaseModel):
-    x: float
-    y: float
+    sin_doy: float
+    cos_doy: float
+    year_norm: float
+    temperature_c: float
 
 
-MODEL_PATH = Path('python/output/model.pth')
-_model_cache: LinearModel | None = None
+MODEL_PATH = ML_OUTPUT_DIR / 'climate' / 'climate_model.pth'
+_model_cache: ClimateModel | None = None
 
 
-def get_model() -> LinearModel | None:
+def get_model() -> ClimateModel | None:
     global _model_cache
     if _model_cache is None and MODEL_PATH.exists():
-        _model_cache = LinearModel()
+        _model_cache = ClimateModel()
         _model_cache.load_state_dict(torch.load(str(MODEL_PATH), weights_only=True))
         _model_cache.eval()
     return _model_cache
@@ -94,8 +98,8 @@ def predict(req: PredictionRequest):
     if model is None:
         raise HTTPException(status_code=503, detail='Model not loaded')
 
-    x = torch.tensor([[req.x]], dtype=torch.float32)
+    x = torch.tensor([[req.sin_doy, req.cos_doy, req.year_norm]], dtype=torch.float32)
     with torch.no_grad():
-        y_pred = model(x).item()
+        temperature_c = model(x).item()
 
-    return {'x': req.x, 'y': float(y_pred)}
+    return {'sin_doy': req.sin_doy, 'cos_doy': req.cos_doy, 'year_norm': req.year_norm, 'temperature_c': float(temperature_c)}

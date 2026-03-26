@@ -52,7 +52,7 @@ def train(
     X_t = torch.from_numpy(X)
     y_t = torch.from_numpy(y)
 
-    model = ClimateModel()
+    model = ClimateModel(dropout=0.1)
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
 
@@ -69,6 +69,7 @@ def train(
             })
         metrics = []
         for epoch in range(1, epochs + 1):
+            model.train()
             perm = torch.randperm(X_t.size(0))
             epoch_loss = 0.0
 
