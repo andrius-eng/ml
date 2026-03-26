@@ -77,43 +77,50 @@ graph TB
 
 ```mermaid
 flowchart LR
-    API([Open-Meteo
-ERA5 API])
+    API(["Open-Meteo
+ERA5 API"])
+    EURO(["Eurostat
+HDD API"])
 
     subgraph Ingest
-        FETCH[fetch scripts]
+        FETCH["weather · march
+fetch scripts"]
+        EFETCH["eurostat_fetch.py"]
     end
 
     subgraph Analyse
-        AN[analyze
-anomalies · z-scores]
-        TR[train
-PyTorch model]
-        QG[quality gate]
+        AN["analyze
+anomalies · z-scores
+heat stress"]
+        TR["train
+PyTorch model"]
+        QG["quality gate"]
     end
 
     subgraph Artifacts["python/output/"]
         CSV[(CSVs)]
-        JSON2[(JSON summaries)]
+        JSON2["(JSON summaries
++ hdd · heat_stress)"]
         MD[(Markdown reports)]
         LORA[(LoRA adapter)]
     end
 
     subgraph LLM["LLM Pipeline"]
-        SFT[prepare SFT
-68 examples]
-        FTRAIN[train LoRA
-distilgpt2]
+        SFT["prepare SFT
+68 examples"]
+        FTRAIN["train LoRA
+distilgpt2"]
     end
 
     subgraph Serve
-        RAG[RAG context
-TF-IDF + Qdrant]
-        FAST[FastAPI :8000]
-        UI[Dashboard :5173]
+        RAG["RAG context
+TF-IDF + Qdrant"]
+        FAST["FastAPI :8000"]
+        UI["Dashboard :5173"]
     end
 
     API --> FETCH --> AN --> TR & QG
+    EURO --> EFETCH --> JSON2
     AN --> CSV & JSON2 & MD
     TR --> JSON2
     CSV & JSON2 & MD --> SFT --> FTRAIN --> LORA
