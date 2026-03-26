@@ -93,6 +93,28 @@ function renderClimateStress(d) {
     kpiRow.innerHTML = "<p style=\"opacity:.5\">Heat stress data not yet available.</p>";
   }
 
+  // HDD KPI cards — ytd and heating season (Eurostat, may lag current year)
+  if (hdd && hdd.ytd && hdd.ytd.months > 0) {
+    const lagNote = hdd.data_lag_months > 3
+      ? ` · Eurostat data through ${hdd.data_through} (${hdd.data_lag_months}mo lag)`
+      : "";
+    const hddItems = [
+      {
+        label: `HDD ${hdd.ytd.label}`,
+        value: hdd.ytd.total_hdd.toFixed(0),
+        sub: `baseline ${hdd.ytd.baseline_mean_1991_2020.toFixed(0)} · anomaly ${sign(hdd.ytd.anomaly)}${hdd.ytd.anomaly.toFixed(0)}${lagNote}`,
+        highlight: Math.abs(hdd.ytd.anomaly) > 150,
+      },
+      {
+        label: `Heating season ${hdd.heating_season.label}`,
+        value: hdd.heating_season.total_hdd.toFixed(0),
+        sub: `${hdd.heating_season.months_included} months · baseline ${hdd.heating_season.baseline_mean_1991_2020.toFixed(0)} · anomaly ${sign(hdd.heating_season.anomaly)}${hdd.heating_season.anomaly.toFixed(0)}`,
+        highlight: Math.abs(hdd.heating_season.anomaly) > 200,
+      },
+    ];
+    hddItems.forEach((item) => kpiRow.appendChild(kpiCard(item)));
+  }
+
   // HDD bar chart
   const wrap = document.getElementById("hdd-chart-wrap");
   if (!hdd || !Array.isArray(hdd.recent_months) || hdd.recent_months.length === 0) {

@@ -12434,13 +12434,15 @@
   },
   "heating_degree_days": {
     "country": "LT",
+    "data_lag_months": 15,
+    "data_through": "2024-12",
     "fetched_at": "2026-03-26",
     "heating_season": {
-      "anomaly": 0.0,
-      "baseline_mean_1991_2020": 0.0,
-      "label": "2025/26",
-      "months_included": 0,
-      "total_hdd": 0
+      "anomaly": -166.5,
+      "baseline_mean_1991_2020": 1393.9,
+      "label": "2024/25",
+      "months_included": 3,
+      "total_hdd": 1227.3
     },
     "recent_months": [
       {
@@ -12494,11 +12496,11 @@
     ],
     "unit": "HDD",
     "ytd": {
-      "anomaly": 0.0,
-      "baseline_mean_1991_2020": 0.0,
-      "label": "Jan\u2013Mar 2026",
-      "months": 0,
-      "total_hdd": 0
+      "anomaly": -668.5,
+      "baseline_mean_1991_2020": 3893.6,
+      "label": "Full year 2024",
+      "months": 12,
+      "total_hdd": 3225.1
     }
   }
 }

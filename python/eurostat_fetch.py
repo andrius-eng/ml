@@ -52,30 +52,57 @@ def parse_hdd_series(raw: dict) -> list[dict]:
 def build_hdd_summary(series: list[dict], today: date | None = None) -> dict:
     """Compute year-to-date HDD total and 1991-2020 baseline comparison.
 
-    *series* — sorted list of {month, hdd} dicts as returned by
-    :func:`parse_hdd_series`.
+    Eurostat publishes with a significant lag (often 6–15 months).  When the
+    latest available data predates the current calendar year, the function falls
+    back to the most-recent year that *has* data so the dashboard always shows
+    real numbers rather than zeros.
 
     Returns a dict with:
     - ``recent_months``: last 12 months of HDD data
-    - ``ytd``: current Jan–<today> period total vs baseline mean
-    - ``heating_season``: Oct–Apr (partial) total vs baseline mean
+    - ``data_through``: ISO year-month of the latest observation
+    - ``data_lag_months``: approximate lag vs today (informational)
+    - ``ytd``: Jan–latest-available-month total vs baseline mean
+    - ``heating_season``: most-recent partial/complete Oct–Apr season
     """
     if today is None:
         today = date.today()
 
-    current_year = today.year
-    this_month = today.strftime("%Y-%m")
-    month_by_key = {r["month"]: r["hdd"] for r in series}
+    if not series:
+        return {
+            "fetched_at": today.isoformat(),
+            "country": "LT",
+            "unit": "HDD",
+            "recent_months": [],
+            "data_through": None,
+            "data_lag_months": None,
+            "ytd": {"label": "n/a", "months": 0, "total_hdd": 0.0,
+                    "baseline_mean_1991_2020": 0.0, "anomaly": 0.0},
+            "heating_season": {"label": "n/a", "months_included": 0,
+                               "total_hdd": 0.0, "baseline_mean_1991_2020": 0.0,
+                               "anomaly": 0.0},
+        }
 
-    # ── Year-to-date (Jan–current month) ──────────────────────────────────────
+    latest_month_str = series[-1]["month"]
+    latest_yr = int(latest_month_str.split("-")[0])
+    latest_mo = int(latest_month_str.split("-")[1])
+
+    # Approximate publication lag in months
+    today_total = today.year * 12 + today.month
+    latest_total = latest_yr * 12 + latest_mo
+    lag_months = today_total - latest_total
+
+    # ── Year-to-date: use the latest year that has data ───────────────────────
+    ref_year = latest_yr
+    ref_end = latest_month_str  # don't venture beyond known data
+
     ytd_months = [
         r for r in series
-        if r["month"].startswith(f"{current_year}-") and r["month"] <= this_month
+        if r["month"].startswith(f"{ref_year}-") and r["month"] <= ref_end
     ]
     ytd_total = sum(r["hdd"] for r in ytd_months)
     ytd_month_nums = {int(r["month"].split("-")[1]) for r in ytd_months}
 
-    # Baseline: same months averaged over 1991-2020
+    # Baseline: same calendar-months averaged over 1991-2020
     baseline_by_year: dict[int, float] = {}
     for r in series:
         yr_str, mo_str = r["month"].split("-")
@@ -87,26 +114,44 @@ def build_hdd_summary(series: list[dict], today: date | None = None) -> dict:
         if baseline_by_year else 0.0
     )
 
-    # ── Current heating season (Oct prev-year – Apr this year, partial) ───────
-    season_start_year = current_year - 1 if today.month < 10 else current_year
-    season_label = f"{season_start_year}/{str(current_year)[-2:]}"
-    season_months_present = []
-    for r in series:
-        yr_str, mo_str = r["month"].split("-")
-        yr, mo = int(yr_str), int(mo_str)
-        if mo not in _HEATING_MONTHS:
-            continue
-        # Oct–Dec of start year OR Jan–Apr of end year
-        if (yr == season_start_year and mo >= 10) or (yr == current_year and mo <= 4):
-            if r["month"] <= this_month:
-                season_months_present.append(r)
-    season_total = sum(r["hdd"] for r in season_months_present)
+    ytd_label_end = f"{latest_yr}-{latest_mo:02d}"
+    if latest_mo == 12:
+        ytd_label = f"Full year {latest_yr}"
+    else:
+        import calendar as _cal
+        ytd_label = f"Jan–{_cal.month_abbr[latest_mo]} {latest_yr}"
 
-    # Baseline for heating season: same set of calender-months, 1991-2020
+    # ── Heating season: most-recent season with at least one data point ───────
+    # Try the season that straddles latest_month first, then fall back one year.
+    for season_start_year in (
+        (latest_yr - 1 if latest_mo < 10 else latest_yr),
+        (latest_yr - 2 if latest_mo < 10 else latest_yr - 1),
+    ):
+        season_end_year = season_start_year + 1
+        season_months_present = []
+        for r in series:
+            yr_str, mo_str = r["month"].split("-")
+            yr, mo = int(yr_str), int(mo_str)
+            if mo not in _HEATING_MONTHS:
+                continue
+            if (yr == season_start_year and mo >= 10) or (yr == season_end_year and mo <= 4):
+                if r["month"] <= ref_end:
+                    season_months_present.append(r)
+        if season_months_present:
+            break
+    else:
+        season_months_present = []
+        season_start_year = latest_yr - 1
+
+    season_end_year = season_start_year + 1
+    season_total = sum(r["hdd"] for r in season_months_present)
+    season_label = f"{season_start_year}/{str(season_end_year)[-2:]}"
+
+    # Baseline for heating season
     season_month_pairs: set[tuple[int, int]] = set()
     for r in season_months_present:
         yr_str, mo_str = r["month"].split("-")
-        yr_offset = int(yr_str) - season_start_year  # 0 or 1
+        yr_offset = int(yr_str) - season_start_year
         season_month_pairs.add((yr_offset, int(mo_str)))
 
     season_baseline_by_year: dict[int, float] = {}
@@ -130,9 +175,11 @@ def build_hdd_summary(series: list[dict], today: date | None = None) -> dict:
         "fetched_at": today.isoformat(),
         "country": "LT",
         "unit": "HDD",
+        "data_through": latest_month_str,
+        "data_lag_months": lag_months,
         "recent_months": series[-12:],
         "ytd": {
-            "label": f"Jan\u2013{today.strftime('%b')} {current_year}",
+            "label": ytd_label,
             "months": len(ytd_months),
             "total_hdd": round(ytd_total, 1),
             "baseline_mean_1991_2020": round(ytd_baseline, 1),
@@ -146,7 +193,6 @@ def build_hdd_summary(series: list[dict], today: date | None = None) -> dict:
             "anomaly": round(season_total - season_baseline, 1),
         },
     }
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch Lithuania HDD from Eurostat")
