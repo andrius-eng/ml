@@ -1,6 +1,6 @@
 # ML pipeline image — runs weather fetch, analysis, and export scripts.
 # Also used by Airflow tasks (mounted as /opt/airflow/project).
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 
