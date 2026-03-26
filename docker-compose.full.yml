@@ -232,7 +232,7 @@ services:
     ports:
     - 9090:9090
     volumes:
-    - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    - ./airflow/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     - prometheus-data:/prometheus
     restart: unless-stopped
     networks:
@@ -247,7 +247,7 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
     - grafana-data:/var/lib/grafana
-    - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    - ./airflow/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
     - prometheus
     restart: unless-stopped
