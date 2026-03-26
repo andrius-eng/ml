@@ -90,14 +90,16 @@ function renderClimateStress(d) {
     ];
     items.forEach((item) => kpiRow.appendChild(kpiCard(item)));
   } else {
-    kpiRow.innerHTML = "<p style=\"opacity:.5\">Heat stress data not yet available.</p>";
+    kpiRow.innerHTML =
+      '<p style="opacity:.5">Heat stress data not yet available.</p>';
   }
 
   // HDD KPI cards — ytd and heating season (Eurostat, may lag current year)
   if (hdd && hdd.ytd && hdd.ytd.months > 0) {
-    const lagNote = hdd.data_lag_months > 3
-      ? ` · Eurostat data through ${hdd.data_through} (${hdd.data_lag_months}mo lag)`
-      : "";
+    const lagNote =
+      hdd.data_lag_months > 3
+        ? ` · Eurostat data through ${hdd.data_through} (${hdd.data_lag_months}mo lag)`
+        : "";
     const hddItems = [
       {
         label: `HDD ${hdd.ytd.label}`,
@@ -117,7 +119,11 @@ function renderClimateStress(d) {
 
   // HDD bar chart
   const wrap = document.getElementById("hdd-chart-wrap");
-  if (!hdd || !Array.isArray(hdd.recent_months) || hdd.recent_months.length === 0) {
+  if (
+    !hdd ||
+    !Array.isArray(hdd.recent_months) ||
+    hdd.recent_months.length === 0
+  ) {
     if (wrap) wrap.style.display = "none";
     return;
   }
@@ -138,7 +144,11 @@ function renderClimateStress(d) {
           label: "Monthly HDD (Eurostat)",
           data: values,
           backgroundColor: values.map((v) =>
-            v > 300 ? "rgba(59,130,246,0.7)" : v > 100 ? "rgba(99,179,237,0.6)" : "rgba(186,230,253,0.5)"
+            v > 300
+              ? "rgba(59,130,246,0.7)"
+              : v > 100
+                ? "rgba(99,179,237,0.6)"
+                : "rgba(186,230,253,0.5)",
           ),
           borderRadius: 3,
         },
@@ -155,8 +165,19 @@ function renderClimateStress(d) {
         },
       },
       scales: {
-        x: { ticks: { color: "#94a3b8", font: { size: 11 } }, grid: { color: "rgba(255,255,255,0.05)" } },
-        y: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(255,255,255,0.05)" }, title: { display: true, text: "Heating Degree Days", color: "#94a3b8" } },
+        x: {
+          ticks: { color: "#94a3b8", font: { size: 11 } },
+          grid: { color: "rgba(255,255,255,0.05)" },
+        },
+        y: {
+          ticks: { color: "#94a3b8" },
+          grid: { color: "rgba(255,255,255,0.05)" },
+          title: {
+            display: true,
+            text: "Heating Degree Days",
+            color: "#94a3b8",
+          },
+        },
       },
     },
   });
