@@ -57,8 +57,8 @@ Apache Beam supports multiple runners (execution engines):
 - **SparkRunner**: Hadoop ecosystem alternative
 - **DataflowRunner**: Google Cloud native
 
-### 2. **Environment Types** (for FlinkRunner with remote job servers)
-- **LOOPBACK**: Python worker runs in same container (recommended for learning)
+### 2. **Environment Types** (for PortableRunner with beam-job-server)
+- **LOOPBACK**: Python worker runs in same process (not used — requires Java in driver)
 - **DOCKER**: Uses Docker containers for workers (more complex deployment)
 - **PROCESS**: Separate Python processes
 
@@ -106,14 +106,17 @@ BEAM_PIPELINE_ARGS: >-
 ```bash
 cd /home/andrius/Development/ml
 
-# Run with FlinkRunner (distributed across Flink cluster)
-python test_flink_runner.py \
-  --runner FlinkRunner \
-  --flink-master flink-jobmanager:8081 \
-  --parallelism 2
+# Run the weather Beam pipeline (PortableRunner via beam-job-server)
+python python/beam_analysis.py \
+  --runner PortableRunner \
+  --job_endpoint beam-job-server:8099 \
+  --artifact_endpoint beam-job-server:8098 \
+  --environment_type EXTERNAL \
+  --environment_config beam-worker-pool:50000 \
+  --parallelism 1
 
-# Or test locally first
-python test_flink_runner.py --runner DirectRunner
+# Test locally with DirectRunner first
+python python/beam_analysis.py --runner DirectRunner
 ```
 
 ### Option 2: Python Script in Container
@@ -122,12 +125,15 @@ python test_flink_runner.py --runner DirectRunner
 # Start containers
 docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml up -d
 
-# Run Beam job in scheduler container with FlinkRunner
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml exec airflow-scheduler bash -c '
+# Run Beam job in scheduler container (PortableRunner)
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml exec airflow-scheduler bash -c '
   cd /opt/airflow/project && python python/beam_analysis.py \
-    --runner FlinkRunner \
-    --flink_master flink-jobmanager:8081 \
-    --parallelism 2 \
+    --runner PortableRunner \
+    --job_endpoint beam-job-server:8099 \
+    --artifact_endpoint beam-job-server:8098 \
+    --environment_type EXTERNAL \
+    --environment_config beam-worker-pool:50000 \
+    --parallelism 1 \
     --input python/output/weather/raw_daily_weather.csv \
     --output-dir python/output/beam \
     --end-date 2026-03-24
@@ -136,11 +142,11 @@ docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml exec air
 
 ### Option 3: Via Airflow DAG Trigger
 
-The `weather_lithuania_dag` is pre-configured for FlinkRunner:
+The `lithuania_weather_analysis` DAG is pre-configured for PortableRunner:
 
 ```bash
-# Trigger the DAG (includes Beam job with FlinkRunner)
-docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml exec airflow-scheduler \
+# Trigger the DAG (includes Beam job via PortableRunner → beam-job-server → Flink)
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml exec airflow-scheduler \
   airflow dags trigger lithuania_weather_analysis
 
 # Check status
@@ -204,26 +210,24 @@ The repository includes a dedicated Beam worker pool service (`beam-worker-pool`
 - easier scaling via `--parallelism` and container autoscaling
 - avoids Python worker stragglers blocking cluster scheduling
 
-docker-compose snippet:
+docker-compose snippet (actual configuration):
 ```yaml
 beam-worker-pool:
   image: apache/beam_python3.12_sdk:2.71.0
-  command: ["--worker_pool"]
-  ports:
-    - "50000:50000"
-  networks:
-    - default
+  command: --worker_pool
+  network_mode: "service:flink-taskmanager"   # shares TM localhost — critical
   depends_on:
-    - flink-jobmanager
+    - flink-taskmanager
   restart: unless-stopped
 ```
-In your `BEAM_PIPELINE_ARGS` use `--environment_type=EXTERNAL` (or `LOOPBACK` for local dev) with `--environment_config=beam-worker-pool:50000`.
+In `BEAM_PIPELINE_ARGS` use `--environment_type=EXTERNAL --environment_config=beam-worker-pool:50000`.
+The worker pool must share the TaskManager network namespace so `localhost:50000` is reachable from inside the Flink JVM.
 
-## Python-to-Java Conversion / FlinkRunner Interop Caveat
+## Python-to-Java Conversion / PortableRunner Interop Notes
 
-When running Python Beam pipelines on FlinkRunner, the Python DAG is translated into a portable pipeline graph and executed as a cross-language job on Flink. This involves a conversion step:
+When running Python Beam pipelines via PortableRunner → beam-job-server → Flink, the Python DAG is translated into a portable pipeline graph. This involves a conversion step:
 - Python SDK translates pipeline to Portable Proto (IR) via `beam_runner_api_pb2`.
-- FlinkRunner implements this as a Java job graph in the Flink JVM.
+- The beam-job-server submits this as a Java job graph to the Flink JVM.
 - Python transforms are executed in worker harnesses (Python process) over Fn API.
 
 Common issue: pipeline components that are only available in Python SDK (e.g., certain third-party transforms, lambda serialization, user-defined states/timers) may not be fully portable or require explicit Java expansion.
@@ -231,7 +235,7 @@ Common issue: pipeline components that are only available in Python SDK (e.g., c
 Mitigation:
 - prefer built-in Beam transforms that are available in all SDKs
 - use `--sdk_location` or `--environment` to ensure compatible worker image
-- test locally with `DirectRunner` first, then `FlinkRunner` with `--environment_type=LOOPBACK`
+- test locally with `DirectRunner` first, then `PortableRunner` pointing at `beam-job-server`
 - on conversion errors, inspect `Flink` UI and scheduler logs for `ProtoIncompatible` or `UnknownTransform` messages
 
 ## Weather DAG Flink Integration
@@ -313,7 +317,7 @@ Use this when `beam_regional_analysis` falls through to DirectRunner or fails:
 
 ### Level 1: Understanding Basic Execution
 1. Run `test_flink_runner.py` with DirectRunner first (single machine)
-2. Compare with FlinkRunner execution (distributed)
+2. Compare with PortableRunner execution (distributed via beam-job-server)
 3. Observe: Same code, different executioners
 
 ### Level 2: Distributed Data Processing
@@ -321,7 +325,7 @@ Use this when `beam_regional_analysis` falls through to DirectRunner or fails:
    - Parallel city weather fetching (FetchCityWeather)
    - Grouped aggregation (temperature anomalies)
    - Distributed windowing
-2. Run with different parallelism values: `--parallelism=1`, `--parallelism=4`
+2. Run with different parallelism values: `--parallelism=1` (only increase with multiple TaskManagers)
 3. Watch Flink dashboard to see task distribution
 
 ### Level 3: Production Scaling
@@ -426,10 +430,12 @@ from apache_beam.options.pipeline_options import PipelineOptions
 def my_distributed_job():
     # Configure for distributed execution
     options = PipelineOptions([
-        '--runner=FlinkRunner',
-        '--flink_master=flink-jobmanager:8081',
-        '--parallelism=4',
-        '--environment_type=LOOPBACK',  # Important!
+        '--runner=PortableRunner',
+        '--job_endpoint=beam-job-server:8099',
+        '--artifact_endpoint=beam-job-server:8098',
+        '--environment_type=EXTERNAL',
+        '--environment_config=beam-worker-pool:50000',
+        '--parallelism=1',   # increase only with multiple TaskManagers
     ])
     
     with beam.Pipeline(options=options) as p:
@@ -457,9 +463,9 @@ if __name__ == '__main__':
 
 ## Next Steps
 
-1. ✅ Run the test script to verify FlinkRunner works
+1. ✅ Trigger `lithuania_weather_analysis` DAG to verify PortableRunner works
 2. ✅ Monitor jobs via Flink web UI
-3. ✅ Experiment with different parallelism settings
+3. ✅ Experiment with parallelism (add TaskManagers before increasing > 1)
 4. ✅ Modify `test_flink_runner.py` to process your own data
 5. ✅ Integrate into production Airflow DAGs
 
