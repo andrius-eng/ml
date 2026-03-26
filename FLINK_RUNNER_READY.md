@@ -18,13 +18,17 @@ The `beam-worker-pool` container runs Python SDK harness code and shares the
 network namespace of `flink-taskmanager` so `localhost:50000` is reachable from
 inside the TaskManager JVM.
 
-```
-Airflow scheduler
-  └── beam_analysis.py  (PortableRunner)
-        └── beam-job-server:8099  (job submission)
-              └── Flink JobManager:8081
-                    └── Flink TaskManager
-                          └── beam-worker-pool:50000  (Python harness, same netns)
+```mermaid
+graph TD
+    SCH([Airflow scheduler]) --> PY[beam_analysis.py
+PortableRunner]
+    PY --> JOB[beam-job-server:8099
+job submission]
+    JOB --> JM[Flink JobManager:8081]
+    JM --> TM[Flink TaskManager]
+    TM <-->|Fn API
+shared netns| WP[beam-worker-pool:50000
+Python harness]
 ```
 
 ## Key Docker Compose Settings

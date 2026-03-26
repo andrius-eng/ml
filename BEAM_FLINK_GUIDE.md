@@ -8,39 +8,25 @@ This guide shows how to use **Apache Beam with Apache Flink** for distributed da
 
 The updated architecture in this repository uses Airflow scheduling, Beam portable runner graph translation, and a dedicated worker pool for Python harness execution.
 
-```
-               +----------------------------+
-               |   Airflow DAG (Trigger)    |
-               |   /python/beam_analysis.py |
-               +-------------┬--------------+
-                             |
-                             ▼
-          +------------------------------------------+
-          |  Beam SDK (Python)                       |
-          |  - Pipeline definition (PCollections,    |
-          |    transforms, windows)                  |
-          +---------------┬--------------------------+
-                          |
-                          ▼
-          +------------------------------------------+
-          |  Portable Pipeline (IR)                  |
-          |  - Proto translation via Beam runner api  |
-          |  - Java-compatible graph for Flink       |
-          +---------------┬--------------------------+
-                          |
-                          ▼
-        +------------------------------+    +-------------------------+
-        | Flink JobManager (Master)    |    | Beam Worker Pool (Python)|
-        | - REST API :8081             |    | - beam-worker-pool:50000 |
-        | - schedules and checkpoints  |<--> | - executes Python fns    |
-        +---------------┬--------------+    +-------------------------+
-                        /|\
-                         |
-          +--------------+-------------+
-          |  Flink TaskManagers         |
-          |  - slots execute subtasks   |
-          |  - parallelism from config  |
-          +-----------------------------+
+```mermaid
+graph TD
+    A([Airflow DAG
+beam_analysis.py]) --> B[Beam SDK Python
+Pipeline definition]
+    B --> C[Portable Pipeline IR
+Proto translation → Flink-compatible graph]
+    C --> D[beam-job-server:8099
+PortableRunner submission]
+    D --> JM[Flink JobManager
+REST :8081 · schedules & checkpoints]
+    JM --> TM1[Flink TaskManager
+slots execute subtasks]
+    JM --> TM2[Flink TaskManager
+...]
+    WP[Beam Worker Pool
+beam-worker-pool:50000
+executes Python fns] <-->|Fn API
+shared netns| JM
 ```
 
 Notes:
@@ -166,26 +152,18 @@ Features:
 - **Logs**: Debug information
 
 ### 2. **Job Submission Flow** (What you'll see)
-```
-Job Submission (Python → Flink)
-      ↓
-┌─ Flink JobManager receives job graph
-│  ├─ Validates graph structure
-│  ├─ Assigns tasks to available slots
-│  │  └─ Slots = available CPU cores on TaskManagers
-│  └─ Schedules execution
-│
-├─ TaskManagers receive task assignments
-│  ├─ Allocate memory for task execution
-│  └─ Start parallel execution
-│
-├─ Monitor progress
-│  ├─ Collect metrics (records processed, throughput)
-│  └─ Update task status
-│
-└─ Job completion
-   ├─ Aggregate results
-   └─ Return to Python process
+```mermaid
+flowchart TD
+    SUB([Python submits job
+PortableRunner → beam-job-server:8099])
+    SUB --> JM[Flink JobManager
+validates graph · assigns slots]
+    JM --> TM[Flink TaskManagers
+allocate memory · start parallel execution]
+    TM --> MON[Monitor progress
+records processed · throughput metrics]
+    MON --> DONE([Job completion
+aggregate results · return to Python])
 ```
 
 ### 3. **CLI Monitoring**
@@ -496,15 +474,16 @@ All 4 DAG tasks succeeded:
 
 **NOT** `FlinkRunner` directly — use **`PortableRunner` + `beam-job-server`**:
 
-```
-Python DAG → PortableRunner → beam-job-server:8099 (Java)
-                                       ↓
-                              Flink JobManager:8081
-                                       ↓
-                              Flink TaskManager (4 slots)
-                                       ↑
-                              beam-worker-pool:50000
-                              (shares TM network namespace)
+```mermaid
+graph TD
+    DAG([Python DAG]) --> PR[PortableRunner]
+    PR --> JOB[beam-job-server:8099
+Java]
+    JOB --> JM[Flink JobManager:8081]
+    JM --> TM[Flink TaskManager
+4 slots]
+    WP[beam-worker-pool:50000
+shares TM network namespace] <-->|Fn API loopback| TM
 ```
 
 ### Image Versions (Confirmed Working)
