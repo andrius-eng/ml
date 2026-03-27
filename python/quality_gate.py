@@ -10,8 +10,10 @@ from contextlib import nullcontext
 
 try:
     import mlflow
+    from mlflow import MlflowClient
 except Exception:
     mlflow = None
+    MlflowClient = None
 
 
 def _resume_run(run_id_path: str):
@@ -56,11 +58,28 @@ def main():
 
     print('Quality gate passed.')
 
-    # Tag the MLflow run with the quality gate result
+    # Tag the MLflow run and promote @champion
     run_id_path = os.path.join(os.path.dirname(args.summary_json) or '.', 'mlflow_run_id.txt')
     with _resume_run(run_id_path) as active_run:
         if mlflow is not None and active_run is not None:
             mlflow.set_tags({'quality_gate': 'passed', 'stage': 'ready'})
+
+    # Promote the registered model version to @champion
+    if mlflow is not None and MlflowClient is not None:
+        try:
+            run_id = ''
+            with open(run_id_path) as _f:
+                run_id = _f.read().strip()
+            client = MlflowClient()
+            versions = client.search_model_versions(f"run_id='{run_id}'")
+            if versions:
+                version = versions[0].version
+                client.set_registered_model_alias('ClimateTemperatureModel', 'champion', version)
+                print(f'Promoted ClimateTemperatureModel v{version} to @champion')
+            else:
+                print('WARNING: no registered model version found for this run; @champion not updated')
+        except Exception as _e:
+            print(f'WARNING: could not set @champion alias: {_e}')
 
     return 0
 
