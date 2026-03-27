@@ -11,6 +11,7 @@ data:
   AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: "300"
   AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth"
   PYTHONWARNINGS: "ignore::SyntaxWarning"
+  MLFLOW_TRACKING_URI: "http://mlflow:5000"
   ML_PROJECT_ROOT: "/opt/airflow/project"
   BEAM_RUNNER: "PortableRunner"
   BEAM_PIPELINE_ARGS: "--flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities"
@@ -42,6 +43,7 @@ metadata:
   namespace: ml-stack
 data:
   ML_OUTPUT_DIR: "/project/python/output"
+  MLFLOW_TRACKING_URI: "http://mlflow:5000"
   RAG_LLM_PROVIDER: "ollama"
   OLLAMA_BASE_URL: "http://ollama:11434"
   OLLAMA_MODEL: "llama3.1:8b"
