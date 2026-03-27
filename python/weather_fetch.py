@@ -63,12 +63,33 @@ def main() -> None:
             print(f"Using cached weather file {output_path} ({age_minutes:.1f} minutes old)")
             return
 
+    # Load existing data so we can do an incremental merge and protect the baseline.
+    existing: pd.DataFrame | None = None
+    existing_start: str = args.start_date
+    if output_path.exists():
+        try:
+            existing = pd.read_csv(output_path)
+            last_date = pd.to_datetime(existing["time"]).max().date().isoformat()
+            # Only fetch data we don't already have.
+            from datetime import date as _date, timedelta
+            next_day = (_date.fromisoformat(last_date) + timedelta(days=1)).isoformat()
+            existing_start = next_day
+            print(f"Existing data through {last_date}; fetching delta {next_day} -> {args.end_date}")
+        except Exception as exc:
+            print(f"WARNING: could not read existing CSV ({exc}); will do full fetch")
+            existing = None
+            existing_start = args.start_date
+
+    if existing_start > args.end_date:
+        print(f"Data already up to date through {args.end_date}; nothing to fetch.")
+        return
+
     cities = list(LITHUANIA_PROXY_CITIES.items())
     frames: list[pd.DataFrame] = []
     try:
         for i, (city, (lat, lon)) in enumerate(cities, 1):
-            print(f"[{i}/{len(cities)}] Fetching {city} ({lat}, {lon}) {args.start_date} -> {args.end_date} ...", flush=True)
-            city_df = fetch_daily_weather(lat, lon, args.start_date, args.end_date)
+            print(f"[{i}/{len(cities)}] Fetching {city} ({lat}, {lon}) {existing_start} -> {args.end_date} ...", flush=True)
+            city_df = fetch_daily_weather(lat, lon, existing_start, args.end_date)
             city_df["city"] = city
             frames.append(city_df)
             print(f"[{i}/{len(cities)}] {city}: {len(city_df)} rows OK", flush=True)
@@ -82,10 +103,31 @@ def main() -> None:
             return
         raise
 
-    raw_daily = pd.concat(frames, ignore_index=True)
+    new_data = pd.concat(frames, ignore_index=True)
+
+    # Guard: if the new fetch only covers a short window (e.g. 429 fallback returned
+    # < 180 days), keep the existing historical baseline and just append the delta.
+    if existing is not None:
+        new_days = int(new_data["time"].nunique())
+        if new_days < 180:
+            print(f"WARNING: fetch returned only {new_days} unique days — merging with existing baseline")
+        # Merge: concatenate, deduplicate, sort.
+        combined = pd.concat([existing, new_data], ignore_index=True)
+        combined["time"] = pd.to_datetime(combined["time"]).dt.date.astype(str)
+        combined = combined.drop_duplicates(subset=["time", "city"]).sort_values(["city", "time"]).reset_index(drop=True)
+        raw_daily = combined
+    else:
+        raw_daily = new_data
+
+    # Final guard: never write a CSV that loses the historical baseline.
+    years_present = pd.to_datetime(raw_daily["time"]).dt.year.nunique()
+    if existing is not None and years_present < 5:
+        print(f"WARNING: merged result has only {years_present} years — keeping existing file to protect baseline")
+        return
+
     ensure_parent(args.output)
     raw_daily.to_csv(args.output, index=False)
-    print(f"Saved raw weather data to {args.output} ({len(raw_daily)} rows)")
+    print(f"Saved raw weather data to {args.output} ({len(raw_daily)} rows, {years_present} years)")
 
 
 if __name__ == "__main__":
