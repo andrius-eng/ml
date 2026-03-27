@@ -226,7 +226,7 @@
     "temp_zscore": -11.78,
     "precip_anomaly_mm": -64.0,
     "precip_zscore": -2.03,
-    "latest_7d_temp_anomaly": NaN,
+    "latest_7d_temp_anomaly": null,
     "city_rankings": {
       "combined": [
         {
