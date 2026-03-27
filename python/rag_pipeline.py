@@ -701,32 +701,84 @@ def _answer_month_comparison(question: str, output_dir: Path) -> dict | None:
     }
 
 
-def _answer_forecast_question(question: str, output_dir: Path) -> dict | None:
-    """Answer questions about tomorrow's or a specific date's forecast temperature.
+def _make_model_prediction(model: object, target_date: "date", year_ref: int = 1991, year_scale: float = 30.0) -> float:
+    """Run inference for a single date. Returns raw model output (°C)."""
+    import math as _math
+    import torch as _torch
+    doy = target_date.timetuple().tm_yday
+    sin_doy = _math.sin(2 * _math.pi * doy / 365)
+    cos_doy = _math.cos(2 * _math.pi * doy / 365)
+    year_norm = (target_date.year - year_ref) / year_scale
+    x = _torch.tensor([[sin_doy, cos_doy, year_norm]], dtype=_torch.float32)
+    with _torch.no_grad():
+        return float(model(x).item())
 
-    Detects keywords like 'tomorrow', 'next week', or a specific date and runs
-    the trained ClimateModel directly to produce a prediction.
+
+def _compute_year_bias(model: object, output_dir: Path, target_year: int, recent_days: int = 30) -> dict:
+    """Compute observed-vs-model bias for the current year's data.
+
+    Returns a dict with keys: ytd_bias, recent_bias, n_ytd, n_recent, recent_observed_mean.
+    Falls back to zeros if the data file is missing or too sparse.
+    """
+    import datetime as _dt
+    obs_path = output_dir / 'weather' / 'country_daily_anomalies.csv'
+    if not obs_path.exists():
+        return {'ytd_bias': 0.0, 'recent_bias': 0.0, 'n_ytd': 0, 'n_recent': 0, 'recent_observed_mean': None}
+
+    df = pd.read_csv(obs_path, parse_dates=['time'])
+    df = df[df['time'].dt.year == target_year].dropna(subset=['temperature_2m_mean'])
+    if df.empty:
+        return {'ytd_bias': 0.0, 'recent_bias': 0.0, 'n_ytd': 0, 'n_recent': 0, 'recent_observed_mean': None}
+
+    cutoff = _dt.date.today()
+    df = df[df['time'].dt.date <= cutoff].copy()
+    df['model_pred'] = df['time'].dt.date.apply(lambda d: _make_model_prediction(model, d))
+    df['bias'] = df['temperature_2m_mean'] - df['model_pred']
+
+    ytd_bias = float(df['bias'].mean())
+    n_ytd = len(df)
+
+    recent_df = df.tail(recent_days)
+    recent_bias = float(recent_df['bias'].mean()) if not recent_df.empty else ytd_bias
+    n_recent = len(recent_df)
+    recent_observed_mean = float(recent_df['temperature_2m_mean'].mean()) if not recent_df.empty else None
+
+    return {
+        'ytd_bias': ytd_bias,
+        'recent_bias': recent_bias,
+        'n_ytd': n_ytd,
+        'n_recent': n_recent,
+        'recent_observed_mean': recent_observed_mean,
+    }
+
+
+def _answer_forecast_question(question: str, output_dir: Path) -> dict | None:
+    """Answer questions about tomorrow's or a future date's temperature.
+
+    Strategy:
+    1. Compute the climatological model baseline for the target date.
+    2. Measure the observed-vs-model bias for the current year so far
+       (full YTD and the most recent 30-day window).
+    3. Apply the recent bias as an additive correction and explain the reasoning.
     """
     normalized = question.strip().lower()
-    # Only handle forecast-style questions
     forecast_keywords = ('tomorrow', 'next week', 'forecast', 'predict', 'will it be', 'will the temp')
     if not any(kw in normalized for kw in forecast_keywords):
         return None
 
     try:
-        import math as _math
         import torch as _torch
-        from pathlib import Path as _Path
         import sys as _sys
-        _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+        _sys.path.insert(0, str(Path(__file__).resolve().parent))
         from model import ClimateModel
     except Exception:
         return None
 
     # Determine target date
-    target_date = date.today() + __import__('datetime').timedelta(days=1)  # default: tomorrow
+    import datetime as _dt
+    target_date = date.today() + _dt.timedelta(days=1)
     if 'next week' in normalized:
-        target_date = date.today() + __import__('datetime').timedelta(days=7)
+        target_date = date.today() + _dt.timedelta(days=7)
     else:
         date_match = re.search(r'(\d{4})-(\d{2})-(\d{2})', question)
         if date_match:
@@ -735,7 +787,6 @@ def _answer_forecast_question(question: str, output_dir: Path) -> dict | None:
             except ValueError:
                 pass
 
-    # Load model from .pth file (no MLflow dependency here)
     model_path = output_dir / 'climate' / 'climate_model.pth'
     if not model_path.exists():
         return None
@@ -744,26 +795,61 @@ def _answer_forecast_question(question: str, output_dir: Path) -> dict | None:
         model = ClimateModel()
         model.load_state_dict(_torch.load(str(model_path), weights_only=True))
         model.eval()
-        doy = target_date.timetuple().tm_yday
-        sin_doy = _math.sin(2 * _math.pi * doy / 365)
-        cos_doy = _math.cos(2 * _math.pi * doy / 365)
-        year_norm = (target_date.year - 1991) / 30.0
-        x = _torch.tensor([[sin_doy, cos_doy, year_norm]], dtype=_torch.float32)
-        with _torch.no_grad():
-            temp = round(float(model(x).item()), 1)
     except Exception:
         return None
 
-    label = 'tomorrow' if target_date == date.today() + __import__('datetime').timedelta(days=1) else str(target_date)
+    # Step 1 — raw climatological baseline
+    raw_pred = _make_model_prediction(model, target_date)
+
+    # Step 2 — measure how this year is tracking vs the model
+    bias_info = _compute_year_bias(model, output_dir, target_year=target_date.year)
+    ytd_bias = round(bias_info['ytd_bias'], 1)
+    recent_bias = round(bias_info['recent_bias'], 1)
+    n_ytd = bias_info['n_ytd']
+    n_recent = bias_info['n_recent']
+
+    # Step 3 — apply recent bias as correction
+    adjusted = round(raw_pred + recent_bias, 1)
+    raw_pred_r = round(raw_pred, 1)
+
+    label = 'tomorrow' if target_date == date.today() + _dt.timedelta(days=1) else str(target_date)
+
+    # Build reasoning narrative
+    ytd_sign = 'warmer' if ytd_bias >= 0 else 'colder'
+    recent_sign = 'warmer' if recent_bias >= 0 else 'colder'
+    abs_ytd = abs(ytd_bias)
+    abs_recent = abs(recent_bias)
+
+    if n_ytd >= 7:
+        reasoning = (
+            f"The climatological baseline for this date is {raw_pred_r}°C. "
+            f"However, looking at {target_date.year} so far ({n_ytd} days of observed data): "
+            f"this year has been running {abs_ytd:.1f}°C {ytd_sign} than the model expects overall, "
+            f"and {abs_recent:.1f}°C {recent_sign} over the most recent {n_recent} days. "
+            f"Applying that recent trend as a correction gives an adjusted estimate of {adjusted}°C."
+        )
+    else:
+        reasoning = (
+            f"The climatological baseline for this date is {raw_pred_r}°C. "
+            f"Insufficient {target_date.year} observations to compute a reliable trend correction."
+        )
+        adjusted = raw_pred_r
+
     return {
         'question': question,
         'answer': (
-            f'The climate model predicts {temp}°C for {label} ({target_date.isoformat()}) '
-            f'in Lithuania. This is a seasonal-trend estimate based on historical ERA5 data, '
-            f'not a live weather forecast — actual temperatures may differ by ±4–5°C.'
+            f"For {label} ({target_date.isoformat()}) in Lithuania: "
+            f"adjusted estimate {adjusted}°C (climatological baseline: {raw_pred_r}°C). "
+            f"{reasoning}"
         ),
-        'interpretation': f'Predicted mean temperature: {temp}°C',
-        'sources': [{'title': 'ClimateModel (PyTorch MLP)', 'source': 'climate/climate_model.pth', 'score': 1.0}],
+        'interpretation': (
+            f"Baseline: {raw_pred_r}°C | YTD bias: {ytd_bias:+.1f}°C | "
+            f"Recent {n_recent}d bias: {recent_bias:+.1f}°C | Adjusted: {adjusted}°C"
+        ),
+        'sources': [
+            {'title': 'ClimateModel (PyTorch MLP)', 'source': 'climate/climate_model.pth', 'score': 1.0},
+            {'title': f'{target_date.year} daily observations', 'source': 'weather/country_daily_anomalies.csv', 'score': 1.0},
+        ],
     }
 
 
