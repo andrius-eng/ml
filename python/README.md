@@ -87,7 +87,9 @@ instead of returning zeros for the current year.
 
 - rag_pipeline.py: builds retrieval corpus and answers questions
 - Structured RAG queries (year-vs-year, warmest/coldest year, year-month extremes) are answered directly from source artifacts before falling back to vector retrieval
-- export_frontend_data.py: creates src/data/dashboard.json
+- export_frontend_data.py: creates src/data/dashboard.json and sanitizes
+  non-JSON float tokens (NaN/Infinity) to null so Vite/CI strict JSON parsing
+  cannot fail.
 
 ### Services and local orchestration
 

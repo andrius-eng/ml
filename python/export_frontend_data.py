@@ -15,6 +15,19 @@ import pandas as pd
 from rag_pipeline import build_demo_payload
 
 
+def _sanitize_json_values(value):
+    """Convert NaN/Inf values to JSON-safe values recursively."""
+    if isinstance(value, float):
+        if np.isnan(value) or np.isinf(value):
+            return None
+        return value
+    if isinstance(value, dict):
+        return {k: _sanitize_json_values(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_json_values(v) for v in value]
+    return value
+
+
 def load_json(path: Path) -> dict:
     with open(path) as f:
         return json.load(f)
@@ -128,8 +141,9 @@ def main() -> None:
 
     dest = Path(args.frontend_data)
     dest.parent.mkdir(parents=True, exist_ok=True)
+    dashboard = _sanitize_json_values(dashboard)
     with open(dest, "w") as f:
-        json.dump(dashboard, f, indent=2)
+        json.dump(dashboard, f, indent=2, allow_nan=False)
     print(f"Dashboard data written to {dest}")
 
 
