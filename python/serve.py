@@ -44,6 +44,10 @@ MLFLOW_TRACKING_URI = os.environ.get('MLFLOW_TRACKING_URI', '')
 MODEL_REGISTRY_NAME = 'ClimateTemperatureModel'
 MODEL_ALIAS = 'champion'
 
+if _mlflow_available and MLFLOW_TRACKING_URI:
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    mlflow.enable_system_metrics_logging()
+
 ML_OUTPUT_DIR = Path(os.environ.get("ML_OUTPUT_DIR", "python/output"))
 
 # ── Prometheus metrics ────────────────────────────────────────────────────────
@@ -168,6 +172,12 @@ def rag_query(q: str = ''):
     q = q.strip()
     if not q:
         raise HTTPException(status_code=400, detail='Query parameter "q" is required')
+    if _mlflow_available and MLFLOW_TRACKING_URI:
+        with mlflow.start_span(name='rag_query') as span:
+            span.set_inputs({'question': q})
+            result = answer_question(q, ML_OUTPUT_DIR)
+            span.set_outputs({'answer': result.get('answer', '')[:500]})
+            return result
     return answer_question(q, ML_OUTPUT_DIR)
 
 
@@ -202,12 +212,17 @@ def predict(req: PredictionRequest):
     if _prometheus_available:
         PREDICTION_TEMPERATURE.observe(temperature_c)
 
-    return {
+    result = {
         'sin_doy': req.sin_doy,
         'cos_doy': req.cos_doy,
         'year_norm': req.year_norm,
         'temperature_c': temperature_c,
     }
+    if _mlflow_available and MLFLOW_TRACKING_URI:
+        with mlflow.start_span(name='predict') as span:
+            span.set_inputs({'sin_doy': req.sin_doy, 'cos_doy': req.cos_doy, 'year_norm': req.year_norm})
+            span.set_outputs({'temperature_c': temperature_c})
+    return result
 
 
 def _date_to_features(d: date) -> tuple[float, float, float]:
@@ -257,6 +272,31 @@ def forecast(
         start_date=start_date.isoformat(),
         end_date=end_date.isoformat(),
         days=results,
+    )
+
+
+@app.get('/forecast/tomorrow', response_model=ForecastResponse)
+def forecast_tomorrow():
+    """Return the model's temperature prediction for tomorrow.
+
+    Convenience shortcut for GET /forecast?start=<tomorrow>&days=1
+    """
+    tomorrow = date.today() + timedelta(days=1)
+    model = get_model()
+    if model is None:
+        raise HTTPException(status_code=503, detail='Model not loaded')
+    sin_doy, cos_doy, year_norm = _date_to_features(tomorrow)
+    x = torch.tensor([[sin_doy, cos_doy, year_norm]], dtype=torch.float32)
+    with torch.no_grad():
+        temp = float(model(x).item())
+    if _prometheus_available:
+        PREDICTION_TEMPERATURE.observe(temp)
+        FORECAST_COUNT.inc()
+    day = ForecastDay(date=tomorrow.isoformat(), temperature_c=round(temp, 2))
+    return ForecastResponse(
+        start_date=tomorrow.isoformat(),
+        end_date=tomorrow.isoformat(),
+        days=[day],
     )
 
 
