@@ -225,6 +225,12 @@ Docker plugin, `docker-compose` may not exist.
 docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
 ```
 
+MLflow persistence note:
+- Compose now stores tracking DB at `../mlruns` and model artifacts at
+  `../mlartifacts` with `--default-artifact-root file:///mlartifacts`.
+- This prevents model-version metadata from pointing to missing `MLmodel` files
+  after container restarts.
+
 First-time setup:
 
 ```bash
@@ -300,6 +306,13 @@ kubernetes/
 │   └── application-minikube.yaml    # dev/minikube
 └── deploy-minikube.sh       # convenience script
 ```
+
+MLflow in Kubernetes:
+- `kubernetes/base/mlflow.yaml` runs the MLflow server.
+- `kubernetes/base/pvcs.yaml` includes `mlflow-data` and `mlflow-artifacts`
+  PVCs for persistent backend DB and artifact files.
+- `kubernetes/base/configmaps.yaml` sets `MLFLOW_TRACKING_URI=http://mlflow:5000`
+  for Airflow and `ml-server`.
 
 ### Minikube — standalone (kubectl apply)
 

@@ -53,6 +53,30 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
+  name: mlflow-data
+  namespace: ml-stack
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-artifacts
+  namespace: ml-stack
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
   name: beam-artifacts
   namespace: ml-stack
 spec:

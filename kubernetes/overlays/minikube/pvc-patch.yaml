@@ -31,6 +31,20 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
+  name: mlflow-data
+spec:
+  storageClassName: standard
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-artifacts
+spec:
+  storageClassName: standard
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
   name: beam-artifacts
 spec:
   storageClassName: standard

@@ -9,6 +9,7 @@ resources:
   - configmaps.yaml
   - pvcs.yaml
   - postgres.yaml
+  - mlflow.yaml
   - airflow.yaml
   - flink-beam.yaml
   - dashboard.yaml
