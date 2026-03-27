@@ -22,6 +22,7 @@ from qdrant_client.models import Distance, PointStruct, VectorParams
 
 COLLECTION_NAME = "climate_dashboard_docs"
 DEFAULT_QUESTIONS = [
+    "What will the temperature be tomorrow?",
     "Is Lithuania currently warmer or colder than normal?",
     "How unusual is this March in Vilnius?",
     "Can I trust the climate model outputs?",
