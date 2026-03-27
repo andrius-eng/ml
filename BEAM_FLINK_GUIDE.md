@@ -613,15 +613,26 @@ pause and all gRPC connections die with `Wsl/Service/0x8007274c`.
 | Inside containers | `http://flink-jobmanager:8081` |
 | Inside JM container | `http://localhost:8081` |
 
-### Custom WindowFn — CalendarMonthWindowFn
+### CalendarMonthWindowFn (Reference Only)
 
-`beam_analysis.py` implements two Beam primitives used by the regional heatmap
-pipeline:
+`beam_analysis.py` still contains `CalendarMonthWindowFn` and `TagWindowFn` as
+reference implementations for calendar-month windowing patterns.
+
+For the production Flink path in this repository, they are **not executed**.
+Flink's Java runtime cannot execute pickled Python `WindowFn` objects from
+portable pipelines. The active pipeline uses Flink-safe grouping by composite
+key:
+
+- map each record to key `(city, year, month)`
+- `GroupByKey` / `CombinePerKey` monthly aggregation
+- unpack to a regular row shape for downstream baseline and anomaly steps
+
+This yields identical monthly semantics without custom Python window coders.
+
+Reference behavior of the classes:
 
 - **`CalendarMonthWindowFn`** — custom `WindowFn` that assigns each record to the
-  `[month_start, month_end)` `IntervalWindow` for its calendar month. Built-in
-  window functions (Fixed, Sliding, Session) don't align on calendar-month
-  boundaries, so a custom implementation is required.
+  `[month_start, month_end)` `IntervalWindow` for its calendar month.
 - **`TagWindowFn`** — `DoFn` that reads the current window via `DoFn.WindowParam`
   to annotate each element with `year` and `month` labels before grouping.
 

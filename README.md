@@ -79,55 +79,58 @@ graph TB
 
 ```mermaid
 flowchart LR
-    API(["Open-Meteo
-ERA5 API"])
-    EURO(["Eurostat
-HDD API"])
+  API["Open-Meteo API\narchive + forecast"]
+  NASA["NASA POWER API\n429 fallback"]
+  EURO["Eurostat HDD API"]
 
-    subgraph Ingest
-        FETCH["weather · march
-fetch scripts"]
-        EFETCH["eurostat_fetch.py"]
-    end
+  subgraph Ingest
+    FETCH["weather_fetch.py\n30-year guard + backfill"]
+    VFETCH["vilnius_march_fetch.py"]
+    EFETCH["eurostat_fetch.py"]
+  end
 
-    subgraph Analyse
-        AN["analyze
-anomalies · z-scores
-heat stress"]
-        TR["train
-PyTorch model"]
-        QG["quality gate"]
-    end
+  subgraph Analyze
+    WAN["weather_analyze.py"]
+    BAN["beam_analysis.py\n(city,year,month) GroupByKey"]
+    CTRAIN["climate_train.py"]
+    WQG["weather_quality_gate.py"]
+    CQG["quality_gate.py\nset @champion alias"]
+  end
 
-    subgraph Artifacts["python/output/"]
-        CSV[(CSVs)]
-        JSON2["(JSON summaries
-+ hdd · heat_stress)"]
-        MD[(Markdown reports)]
-        LORA[(LoRA adapter)]
-    end
+  subgraph Lineage
+    DVC["DVC pointer\nraw_daily_weather.csv.dvc"]
+    MLF["MLflow\nmetrics + dataset input + dvc.md5"]
+  end
 
-    subgraph LLM["LLM Pipeline"]
-        SFT["prepare SFT
-68 examples"]
-        FTRAIN["train LoRA
-distilgpt2"]
-    end
+  subgraph Artifacts["python/output/"]
+    CSV[(CSVs)]
+    JSON2[(JSON)]
+    MD[(Markdown)]
+    LORA[(LoRA adapter)]
+  end
 
-    subgraph Serve
-        RAG["RAG context
-TF-IDF + Qdrant"]
-        FAST["FastAPI :8000"]
-        UI["Dashboard :5173"]
-    end
+  subgraph Serving
+    RAG["rag_pipeline.py\nretrieval + deterministic paths"]
+    OLL["Ollama\n/api/generate"]
+    FAST["FastAPI /predict + /rag/query"]
+    UI["Dashboard"]
+  end
 
-    API --> FETCH --> AN --> TR & QG
-    EURO --> EFETCH --> JSON2
-    AN --> CSV & JSON2 & MD
-    TR --> JSON2
-    CSV & JSON2 & MD --> SFT --> FTRAIN --> LORA
-    CSV & JSON2 & MD --> RAG --> FAST --> UI
-    CSV & JSON2 --> UI
+  API --> FETCH
+  API --> VFETCH
+  API -.429.-> NASA --> FETCH
+  EURO --> EFETCH
+  FETCH --> WAN --> WQG --> MLF
+  FETCH --> BAN
+  VFETCH --> CSV
+  CTRAIN --> CQG --> MLF
+  FETCH --> DVC --> MLF
+  WAN --> CSV & JSON2 & MD
+  BAN --> CSV
+  EFETCH --> JSON2
+  CSV & JSON2 & MD --> RAG --> OLL --> FAST --> UI
+  CSV --> FAST
+  CSV & JSON2 & MD --> LORA
 ```
 
 ## DAGs
@@ -641,14 +644,18 @@ The gate already computes the signal — it just needs a delivery mechanism.
 
 ### 4. MLflow model registry promotion gate
 
-`climate_train.py` logs the model to MLflow but never promotes it to
-`Staging` or `Production`. Add a post-training step in `train_dag.py`:
-```python
-# after quality_gate passes:
-client.transition_model_version_stage(name, version, "Production")
-```
-Then `serve.py` loads `models:/ClimateModel/Production` rather than a hardcoded
-run-ID path. This enables zero-downtime model rollbacks via `mlflow models serve`.
+Implemented in the current pipeline:
+- `climate_train.py` registers `ClimateTemperatureModel`.
+- `quality_gate.py` promotes the passing run's model version to alias `@champion`
+  via `client.set_registered_model_alias('ClimateTemperatureModel', 'champion', version)`.
+- `serve.py` and `rag_pipeline.py` both load from
+  `models:/ClimateTemperatureModel@champion` with `.pth` fallback.
+
+If the MLflow Model Version page for an older version shows no Inputs/Outputs,
+that version was registered without a model signature in model metadata.
+Re-training with the current `climate_train.py` (`infer_signature` +
+`mlflow.pytorch.log_model(..., signature=..., input_example=...)`) creates
+versions with populated IO schema.
 
 ### 5. RAG answer quality gate
 
