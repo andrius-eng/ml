@@ -613,6 +613,35 @@ pause and all gRPC connections die with `Wsl/Service/0x8007274c`.
 | Inside containers | `http://flink-jobmanager:8081` |
 | Inside JM container | `http://localhost:8081` |
 
+### Custom WindowFn — CalendarMonthWindowFn
+
+`beam_analysis.py` implements two Beam primitives used by the regional heatmap
+pipeline:
+
+- **`CalendarMonthWindowFn`** — custom `WindowFn` that assigns each record to the
+  `[month_start, month_end)` `IntervalWindow` for its calendar month. Built-in
+  window functions (Fixed, Sliding, Session) don't align on calendar-month
+  boundaries, so a custom implementation is required.
+- **`TagWindowFn`** — `DoFn` that reads the current window via `DoFn.WindowParam`
+  to annotate each element with `year` and `month` labels before grouping.
+
+`get_window_coder()` must return an `IntervalWindowCoder`. In Beam ≥ 2.63 this
+symbol is **not** re-exported through `apache_beam.coders` — it only lives in
+`apache_beam.coders.coders`. Import it directly:
+
+```python
+# CORRECT (Beam 2.63+ / 2.71.0):
+from apache_beam.coders.coders import IntervalWindowCoder
+
+class CalendarMonthWindowFn(WindowFn):
+    def get_window_coder(self):
+        return IntervalWindowCoder()
+
+# WRONG — raises AttributeError on Beam 2.71.0:
+# from apache_beam import coders
+# return coders.IntervalWindowCoder()
+```
+
 ### Weather CSV Cache Workaround
 
 `fetch_weather_data` reuses cached CSV if mtime < 60 minutes. If cache is stale,

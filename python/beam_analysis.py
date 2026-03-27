@@ -19,6 +19,7 @@ from pathlib import Path
 
 import apache_beam as beam
 from apache_beam import coders
+from apache_beam.coders.coders import IntervalWindowCoder
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import SetupOptions
 from apache_beam.transforms.window import GlobalWindows, IntervalWindow, WindowFn
@@ -100,20 +101,23 @@ class BaselineStatsCombineFn(beam.CombineFn):
 class CalendarMonthWindowFn(WindowFn):
     """Assign each daily record to its calendar-month IntervalWindow.
 
-    Beam WindowFn primitive: replaces the manual (city, year, month) grouping
-    key with proper event-time windowing so downstream transforms are window-
-    aware and can use DoFn.WindowParam to recover year/month metadata.
+    NOTE: This class is kept as a reference implementation of a custom Beam
+    WindowFn. It is NOT used in the active pipeline because PortableRunner →
+    Flink rejects pickled-Python WindowFns at job submission time with:
+      IllegalArgumentException: Unknown WindowFn: beam:window_fn:pickled_python:v1
+    The pipeline uses composite (city, year, month) key grouping instead.
     """
 
     def assign(self, context):
-        dt = datetime.fromtimestamp(context.timestamp, tz=timezone.utc)
+        ts = float(context.timestamp)  # Beam Timestamp → float
+        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
         start = datetime(dt.year, dt.month, 1, tzinfo=timezone.utc).timestamp()
         last_day = calendar.monthrange(dt.year, dt.month)[1]
         end = datetime(dt.year, dt.month, last_day, 23, 59, 59, tzinfo=timezone.utc).timestamp()
         return [IntervalWindow(start, end)]
 
     def get_window_coder(self):
-        return coders.IntervalWindowCoder()
+        return IntervalWindowCoder()
 
     def merge(self, merge_context):
         pass  # non-merging
@@ -122,16 +126,15 @@ class CalendarMonthWindowFn(WindowFn):
 class TagWindowFn(beam.DoFn):
     """Extract year and month from the CalendarMonth window via DoFn.WindowParam.
 
-    Beam DoFn primitive: uses the window's start timestamp (set by
-    CalendarMonthWindowFn) to annotate each element with its year and month
-    without any manual date-string parsing.
+    NOTE: Reference implementation only. Not used in the active pipeline
+    (see CalendarMonthWindowFn note above).
     """
 
     def process(self, element, window=beam.DoFn.WindowParam):
         city, stats = element
         if stats["mean"] is None:
             return
-        dt = datetime.fromtimestamp(window.start, tz=timezone.utc)
+        dt = datetime.fromtimestamp(float(window.start), tz=timezone.utc)
         yield {
             "city": city,
             "year": dt.year,
@@ -230,8 +233,6 @@ def run(
     out.mkdir(parents=True, exist_ok=True)
     out_csv = out / "monthly_anomaly_matrix.csv"
 
-    end_ts = datetime.fromisoformat(end_date).replace(tzinfo=timezone.utc).timestamp()
-
     # ── Prepare source records ──────────────────────────────────────────
 
     if input_csv and Path(input_csv).exists():
@@ -266,14 +267,6 @@ def run(
 
     # ── Run Beam pipeline ───────────────────────────────────────────────
 
-    def _to_timestamped(record):
-        """Convert a daily record to a TimestampedValue using its date as event time."""
-        ts = datetime.fromisoformat(record["time"][:10]).replace(tzinfo=timezone.utc).timestamp()
-        return beam.window.TimestampedValue(
-            {"city": record["city"], "temperature": record["temperature_2m_mean"]},
-            ts,
-        )
-
     tmp_jsonl = str(out / "_anomalies_tmp")
     pipeline_args = list(beam_args or [])
 
@@ -286,7 +279,15 @@ def run(
     options.view_as(SetupOptions).save_main_session = True
 
     resolved_runner = options.get_all_options().get("runner", runner)
-    print(f"[Beam] Runner: {resolved_runner}")
+    print(f"[Beam] Runner: {resolved_runner}", flush=True)
+    n_records = len(records) if records is not None else None
+    if n_records is not None:
+        print(f"[Beam] Input: {n_records} records from {len(cities)} cities", flush=True)
+    else:
+        print(f"[Beam] Input: will fetch {len(cities)} cities from Open-Meteo", flush=True)
+    import time as _wall
+    _t0 = _wall.time()
+    print("[Beam] Submitting pipeline...", flush=True)
 
     with beam.Pipeline(options=options) as p:
         if records is not None:
@@ -298,35 +299,36 @@ def run(
                 | "FetchWeather" >> beam.ParDo(FetchCityWeather(start_date, end_date))
             )
 
-        # Assign event-time timestamps from the record date.
-        # Records are historical so no future-date filtering is needed;
-        # the end_date bound was already applied when loading/fetching data.
-        timestamped = (
-            raw
-            | "AssignTimestamps" >> beam.Map(_to_timestamped)
-        )
-
-        # ── Monthly means: use CalendarMonthWindowFn (Beam WindowFn primitive) ──
-        # Each element lands in the window for its calendar month. CombinePerKey
-        # computes the monthly mean per city within each window. TagWindowFn then
-        # reads the window boundaries via DoFn.WindowParam to recover year/month.
+        # ── Monthly means: composite (city, year, month) key grouping ──
+        # CalendarMonthWindowFn (custom Python WindowFn) is NOT used here.
+        # Flink rejects pickled-Python WindowFns at job submission time:
+        #   IllegalArgumentException: Unknown WindowFn: beam:window_fn:pickled_python:v1
+        # GroupByKey on a composite key is functionally identical and works on
+        # all runners (DirectRunner, PortableRunner→Flink).
         monthly = (
-            timestamped
-            | "WindowIntoMonths" >> beam.WindowInto(CalendarMonthWindowFn())
-            | "KeyByCity" >> beam.Map(lambda r: (r["city"], r["temperature"]))
+            raw
+            | "KeyByCityYM" >> beam.Map(lambda r: (
+                (r["city"], int(r["time"][:4]), int(r["time"][5:7])),
+                r["temperature_2m_mean"]
+            ))
             | "MonthlyMean" >> beam.CombinePerKey(MonthlyMeanCombineFn())
-            | "TagWithWindow" >> beam.ParDo(TagWindowFn())
+            | "UnpackMonthly" >> beam.Map(lambda kv: {
+                "city": kv[0][0],
+                "year": kv[0][1],
+                "month": kv[0][2],
+                "mean_temp": kv[1]["mean"],
+                "days": kv[1]["count"],
+            })
         )
 
-        # ── Baseline statistics: re-window into GlobalWindows to aggregate ──
-        # Filter to baseline years, then collapse back into a single global window
-        # so BaselineStatsCombineFn can see all years at once per (city, month).
+        # ── Baseline statistics ──
+        # Filter to baseline years, group by (city, month) across all years.
+        # GlobalWindows is the default when no WindowInto transform is applied.
         baseline = (
             monthly
             | "FilterBaseline" >> beam.Filter(
                 lambda r: BASELINE_START <= r["year"] <= BASELINE_END
             )
-            | "RewindowGlobal" >> beam.WindowInto(GlobalWindows())
             | "KeyByCityMonth" >> beam.Map(lambda r: ((r["city"], r["month"]), r["mean_temp"]))
             | "BaselineStats" >> beam.CombinePerKey(BaselineStatsCombineFn())
         )
@@ -336,13 +338,15 @@ def run(
         # ── Join monthly means with baseline and compute anomalies ──
         anomalies = (
             monthly
-            | "RewindowGlobalAll" >> beam.WindowInto(GlobalWindows())
             | "ComputeAnomalies" >> beam.Map(_compute_anomaly, baselines=baseline_side)
         )
 
         anomalies | "WriteJsonl" >> beam.Map(json.dumps) | beam.io.WriteToText(
             tmp_jsonl, file_name_suffix=".jsonl", shard_name_template=""
         )
+
+    elapsed = _wall.time() - _t0
+    print(f"[Beam] Pipeline finished in {elapsed:.1f}s", flush=True)
 
     # ── Read back results ───────────────────────────────────────────────
 
@@ -359,7 +363,7 @@ def run(
     # ── Write output ────────────────────────────────────────────────────
 
     n = _write_csv(collected, str(out_csv))
-    print(f"[Beam] Wrote {n} rows to {out_csv}")
+    print(f"[Beam] Wrote {n} rows to {out_csv}", flush=True)
     if n == 0:
         raise RuntimeError(
             "[Beam] Pipeline produced 0 rows — check that fetch_eurostat_hdd ran "

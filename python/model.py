@@ -31,15 +31,15 @@ class ClimateModel(nn.Module):
     Output: predicted daily mean temperature in °C
     """
 
-    def __init__(self, dropout: float = 0.1):
+    def __init__(self, input_dim: int = 3, dropout: float = 0.1):
         super().__init__()
         # Shallow linear projection used as residual bypass
-        self.skip = nn.Linear(3, 1)
+        self.skip = nn.Linear(input_dim, 1)
 
         # Deep branch: BatchNorm → Linear → ReLU → Dropout, ×3
         self.block = nn.Sequential(
-            nn.BatchNorm1d(3),
-            nn.Linear(3, 128),
+            nn.BatchNorm1d(input_dim),
+            nn.Linear(input_dim, 128),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(128, 64),

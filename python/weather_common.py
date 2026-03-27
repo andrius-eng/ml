@@ -62,12 +62,75 @@ def _fetch_url(url: str, timeout: int = 60) -> dict:
         return json.load(response)["daily"]
 
 
+def _fetch_nasa_power_daily(lat: float, lon: float, start: str, end: str) -> pd.DataFrame:
+    """Fetch long-history daily weather from NASA POWER (independent provider).
+
+    This endpoint is used as a fallback when Open-Meteo archive API is rate
+    limited (HTTP 429). It provides global daily reanalysis-like data without
+    API keys.
+
+    Mappings:
+    - T2M       -> temperature_2m_mean
+    - T2M_MIN   -> temperature_2m_min
+    - T2M_MAX   -> temperature_2m_max
+    - PRECTOTCORR -> precipitation_sum
+    - WS2M      -> wind_speed_10m_max (approximation)
+
+    Snowfall, sunshine duration, and ET0 are not available from this endpoint
+    and are set to NaN so downstream code can handle them as optional columns.
+    """
+    from datetime import date as _date
+
+    start_yyyymmdd = _date.fromisoformat(start).strftime("%Y%m%d")
+    end_yyyymmdd = _date.fromisoformat(end).strftime("%Y%m%d")
+    base = "https://power.larc.nasa.gov/api/temporal/daily/point"
+    params = {
+        "parameters": "T2M,T2M_MAX,T2M_MIN,PRECTOTCORR,WS2M",
+        "community": "AG",
+        "longitude": lon,
+        "latitude": lat,
+        "start": start_yyyymmdd,
+        "end": end_yyyymmdd,
+        "format": "JSON",
+    }
+    url = f"{base}?{urlencode(params)}"
+    with urlopen(url, timeout=90) as response:
+        payload = json.load(response)
+
+    parameter = payload["properties"]["parameter"]
+    t2m = parameter.get("T2M", {})
+    t2m_min = parameter.get("T2M_MIN", {})
+    t2m_max = parameter.get("T2M_MAX", {})
+    precip = parameter.get("PRECTOTCORR", {})
+    ws2m = parameter.get("WS2M", {})
+
+    keys = sorted(set(t2m.keys()) | set(t2m_min.keys()) | set(t2m_max.keys()) | set(precip.keys()) | set(ws2m.keys()))
+    rows = []
+    for k in keys:
+        rows.append(
+            {
+                "time": f"{k[:4]}-{k[4:6]}-{k[6:8]}",
+                "temperature_2m_mean": t2m.get(k),
+                "temperature_2m_min": t2m_min.get(k),
+                "temperature_2m_max": t2m_max.get(k),
+                "precipitation_sum": precip.get(k),
+                "wind_speed_10m_max": ws2m.get(k),
+                "snowfall_sum": None,
+                "sunshine_duration": None,
+                "et0_fao_evapotranspiration": None,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def fetch_daily_weather(lat: float, lon: float, start: str, end: str) -> pd.DataFrame:
     """Return a DataFrame of daily weather for a single lat/lon point.
 
-    Tries the open-meteo archive API first (full ERA5 history).  On an HTTP 429
-    it immediately falls back to the forecast API (last ≤92 days).  Up to five
-    attempts are made total, with exponential backoff between retries.
+    Tries the Open-Meteo archive API first (full ERA5 history). On HTTP 429,
+    it first tries NASA POWER (independent long-history provider) and only then
+    falls back to Open-Meteo forecast (last ≤92 days) as a last-resort
+    freshness fallback. Up to five attempts are made total, with backoff
+    between retries.
 
     Parameters
     ----------
@@ -121,7 +184,17 @@ def fetch_daily_weather(lat: float, lon: float, start: str, end: str) -> pd.Data
             last_exc = e
             is_429 = isinstance(e, HTTPError) and e.code == 429
             if is_429:
-                print(f"  [{attempt+1}/5] Archive API 429 — trying forecast fallback ...", flush=True)
+                print(f"  [{attempt+1}/5] Archive API 429 — trying NASA POWER fallback ...", flush=True)
+                try:
+                    nasa_df = _fetch_nasa_power_daily(lat, lon, start, end)
+                    if not nasa_df.empty:
+                        print(f"  NASA POWER fallback OK ({len(nasa_df)} days)", flush=True)
+                        return nasa_df
+                    print("  NASA POWER fallback returned empty dataset", flush=True)
+                except Exception as ne:
+                    print(f"  NASA POWER fallback failed: {ne}", flush=True)
+
+                print(f"  [{attempt+1}/5] Trying forecast fallback ...", flush=True)
                 try:
                     payload = _fetch_url(forecast_url)
                     print(f"  Forecast fallback OK ({past_days} past days)", flush=True)

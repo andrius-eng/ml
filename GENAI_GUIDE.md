@@ -93,11 +93,12 @@ from the pipeline output directory the first time a query arrives (or when
 
 | Document | Source |
 |---|---|
-| Lithuania YTD weather overview | `weather/ytd_summary.json` |
+| Lithuania YTD weather overview (temp, precip, snowfall, sunshine, wind, ET₀, HDD) | `weather/ytd_summary.json` |
 | City anomaly rankings | `weather/city_rankings.json` |
 | Vilnius month anomaly overview | `vilnius_*/summary.json` |
 | Vilnius month historical extremes | `vilnius_*/*_temperature_anomalies.csv` |
-| Climate model evaluation (R², RMSE, MAE) | `climate/climate_evaluation.json` |
+| Climate model evaluation (R², RMSE, MAE, feature list) | `climate/climate_evaluation.json` |
+| Climate feature manifest | `climate/feature_columns.json`, `climate/feature_defaults.json` |
 | Pipeline narrative reports | `weather/weather_summary.md`, `vilnius_*/report.md` |
 
 Documents are tokenised with a custom TF-IDF vectoriser (unigrams + bigrams,

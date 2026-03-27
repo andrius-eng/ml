@@ -122,18 +122,55 @@ def fetch_weather_data(**context):
     
     # Get execution date from Airflow context
     execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
+    min_years_required = 30
+    force_full_fetch = False
 
     # Check cache
     if RAW_WEATHER_PATH.exists():
         age_seconds = (datetime.now() - datetime.fromtimestamp(RAW_WEATHER_PATH.stat().st_mtime)).total_seconds()       
-        if age_seconds < 3600:  # Less than 60 minutes
-            logger.info(f"✓ Using cached raw weather data (age: {age_seconds/60:.0f} minutes)")
+        years_present = 0
+        try:
+            import csv
+
+            years: set[int] = set()
+            with RAW_WEATHER_PATH.open("r", encoding="utf-8", newline="") as fh:
+                reader = csv.DictReader(fh)
+                for row in reader:
+                    t = row.get("time", "")
+                    if len(t) >= 4 and t[:4].isdigit():
+                        years.add(int(t[:4]))
+            years_present = len(years)
+        except Exception as exc:
+            logger.warning(f"Could not inspect cached weather coverage: {exc}")
+
+        if years_present < min_years_required:
+            force_full_fetch = True
+            logger.warning(
+                "Cached weather data only spans %s years (< %s); forcing full historical backfill",
+                years_present,
+                min_years_required,
+            )
+        elif age_seconds < 3600:  # Less than 60 minutes
+            logger.info(
+                "✓ Using cached raw weather data (age: %.0f minutes, %s years)",
+                age_seconds / 60,
+                years_present,
+            )
             return
 
     logger.info("Fetching fresh weather data...")
+    fetch_args = [
+        "--start-date", "1991-01-01",
+        "--end-date", execution_date,
+        "--output", str(RAW_WEATHER_PATH),
+        "--min-years-required", str(min_years_required),
+    ]
+    if force_full_fetch:
+        fetch_args.extend(["--force-full-fetch", "--cache-minutes", "0"])
+
     run_script(
         WEATHER_FETCH_SCRIPT,
-        ["--start-date", "1991-01-01", "--end-date", execution_date, "--output", str(RAW_WEATHER_PATH)],    
+        fetch_args,
         logger,
         timeout=1800,
     )
@@ -217,6 +254,53 @@ def refresh_rag_context_data(analysis_end=None, **context):
     )
 
 
+def _stream_subprocess(cmd: list, logger, timeout: int, label: str) -> int:
+    """Run a subprocess and stream stdout/stderr line-by-line to the Airflow logger.
+
+    Returns exit code. Raises subprocess.TimeoutExpired if the process exceeds
+    ``timeout`` seconds. Unlike subprocess.run(capture_output=True) this makes
+    every print() inside the child process visible immediately in Airflow logs
+    rather than only after the process exits.
+    """
+    import select
+    import threading
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+
+    lines_out: list[str] = []
+    lines_err: list[str] = []
+
+    def _drain(stream, collector, log_fn):
+        for line in stream:
+            line = line.rstrip()
+            collector.append(line)
+            log_fn(f"[{label}] {line}")
+        stream.close()
+
+    t_out = threading.Thread(target=_drain, args=(proc.stdout, lines_out, logger.info), daemon=True)
+    t_err = threading.Thread(target=_drain, args=(proc.stderr, lines_err, logger.warning), daemon=True)
+    t_out.start()
+    t_err.start()
+
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        t_out.join(timeout=5)
+        t_err.join(timeout=5)
+        raise
+
+    t_out.join()
+    t_err.join()
+    return proc.returncode
+
+
 def run_beam_analysis_with_fallback(analysis_end=None, **context):
     analysis_end = resolve_analysis_end(context, analysis_end if 'analysis_end' in globals() else None)
     """Run Beam pipeline via PortableRunner -> beam-job-server -> Flink cluster.
@@ -224,6 +308,8 @@ def run_beam_analysis_with_fallback(analysis_end=None, **context):
     Falls back to DirectRunner if the Flink/Beam stack is unavailable.
     PortableRunner is required (not FlinkRunner) because the Airflow scheduler
     container has no Java runtime to start a local job server.
+    stdout/stderr from the Beam script are streamed line-by-line so every
+    progress print is visible in the Airflow task log in real time.
     """
     logger = logging.getLogger(__name__)
 
@@ -243,17 +329,15 @@ def run_beam_analysis_with_fallback(analysis_end=None, **context):
             "--environment_config", "localhost:50000",  # worker-pool shares flink-taskmanager network namespace
             "--parallelism", "1",
         ]
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=2700)
-        if result.stdout:
-            logger.info(result.stdout)
+        rc = _stream_subprocess(cmd, logger, timeout=2700, label="PortableRunner")
+        if rc != 0:
+            raise subprocess.CalledProcessError(rc, cmd)
         logger.info("✅ Beam pipeline completed successfully on Flink via PortableRunner")
         return
     except subprocess.TimeoutExpired:
-        logger.warning("PortableRunner/Flink timeout - falling back to DirectRunner...")
+        logger.warning("PortableRunner/Flink timed out after 45 min — falling back to DirectRunner")
     except subprocess.CalledProcessError as e:
-        logger.warning(f"PortableRunner/Flink failed (exit {e.returncode})")
-        if e.stderr:
-            logger.warning(f"stderr: {e.stderr}")
+        logger.warning(f"PortableRunner/Flink failed (exit {e.returncode}) — falling back to DirectRunner")
 
     # Fallback to DirectRunner (no Flink dependency)
     logger.warning("⚠️ Falling back to DirectRunner - results will not use Flink")
@@ -265,17 +349,15 @@ def run_beam_analysis_with_fallback(analysis_end=None, **context):
             "--end-date", analysis_end,
             "--runner", "DirectRunner",
         ]
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=2700)
-        if result.stdout:
-            logger.info(result.stdout)
+        rc = _stream_subprocess(cmd, logger, timeout=2700, label="DirectRunner")
+        if rc != 0:
+            raise subprocess.CalledProcessError(rc, cmd)
         logger.warning("⚠️ Beam pipeline completed with DirectRunner (fallback - Flink unavailable)")
     except subprocess.CalledProcessError as e:
         logger.error(f"DirectRunner also failed (exit {e.returncode})")
-        if e.stderr:
-            logger.error(f"stderr: {e.stderr}")
         raise RuntimeError("Both PortableRunner/Flink and DirectRunner failed for Beam pipeline")
     except subprocess.TimeoutExpired:
-        raise RuntimeError("DirectRunner timeout for Beam pipeline")
+        raise RuntimeError("DirectRunner timed out after 45 min")
 
 
 DAG_DIR = Path(__file__).resolve().parent
