@@ -93,7 +93,11 @@ def fetch_daily_weather(lat: float, lon: float, start: str, end: str) -> pd.Data
     common_params = {
         "latitude": lat,
         "longitude": lon,
-        "daily": ["temperature_2m_mean", "temperature_2m_min", "temperature_2m_max", "precipitation_sum"],
+        "daily": [
+            "temperature_2m_mean", "temperature_2m_min", "temperature_2m_max",
+            "precipitation_sum", "snowfall_sum", "sunshine_duration",
+            "wind_speed_10m_max", "et0_fao_evapotranspiration",
+        ],
         "timezone": "Europe/Vilnius",
     }
     archive_url = "https://archive-api.open-meteo.com/v1/archive?" + urlencode(
@@ -142,8 +146,12 @@ def build_country_daily(raw_daily: pd.DataFrame, current_end: date) -> pd.DataFr
     raw["month_day"] = raw["time"].dt.strftime("%m-%d")
     raw = raw[raw["month_day"] <= current_end.strftime("%m-%d")].copy()
 
+    _country_cols = [c for c in [
+        "temperature_2m_mean", "precipitation_sum",
+        "snowfall_sum", "sunshine_duration", "wind_speed_10m_max", "et0_fao_evapotranspiration",
+    ] if c in raw.columns]
     country_daily = (
-        raw.groupby("time", as_index=False)[["temperature_2m_mean", "precipitation_sum"]].mean()
+        raw.groupby("time", as_index=False)[_country_cols].mean()
     )
     country_daily["year"] = country_daily["time"].dt.year
     country_daily["month_day"] = country_daily["time"].dt.strftime("%m-%d")
@@ -159,19 +167,37 @@ def build_city_daily(raw_daily: pd.DataFrame, current_end: date) -> pd.DataFrame
 
 
 def build_annual_summary(country_daily: pd.DataFrame) -> pd.DataFrame:
-    return country_daily.groupby("year", as_index=False).agg(
+    _agg: dict = dict(
         ytd_mean_temp=("temperature_2m_mean", "mean"),
         ytd_total_precip=("precipitation_sum", "sum"),
         days=("time", "count"),
     )
+    for col, name, fn in [
+        ("snowfall_sum",              "ytd_total_snowfall",  "sum"),
+        ("sunshine_duration",         "ytd_total_sunshine",  "sum"),
+        ("wind_speed_10m_max",        "ytd_mean_wind_speed", "mean"),
+        ("et0_fao_evapotranspiration","ytd_total_et0",       "sum"),
+    ]:
+        if col in country_daily.columns:
+            _agg[name] = (col, fn)
+    return country_daily.groupby("year", as_index=False).agg(**_agg)
 
 
 def build_city_annual_summary(city_daily: pd.DataFrame) -> pd.DataFrame:
-    return city_daily.groupby(["city", "year"], as_index=False).agg(
+    _agg: dict = dict(
         ytd_mean_temp=("temperature_2m_mean", "mean"),
         ytd_total_precip=("precipitation_sum", "sum"),
         days=("time", "count"),
     )
+    for col, name, fn in [
+        ("snowfall_sum",              "ytd_total_snowfall",  "sum"),
+        ("sunshine_duration",         "ytd_total_sunshine",  "sum"),
+        ("wind_speed_10m_max",        "ytd_mean_wind_speed", "mean"),
+        ("et0_fao_evapotranspiration","ytd_total_et0",       "sum"),
+    ]:
+        if col in city_daily.columns:
+            _agg[name] = (col, fn)
+    return city_daily.groupby(["city", "year"], as_index=False).agg(**_agg)
 
 
 def build_daily_climatology(daily: pd.DataFrame, group_cols: list[str] | None = None) -> pd.DataFrame:
@@ -180,12 +206,18 @@ def build_daily_climatology(daily: pd.DataFrame, group_cols: list[str] | None = 
 
     baseline = daily[(daily["year"] >= 1991) & (daily["year"] <= 2020)].copy()
     keys = [*group_cols, "month_day"]
-    climatology = baseline.groupby(keys, as_index=False).agg(
+    _clim_agg: dict = dict(
         climatology_temp_mean=("temperature_2m_mean", "mean"),
         climatology_temp_std=("temperature_2m_mean", "std"),
         climatology_precip_mean=("precipitation_sum", "mean"),
         climatology_precip_std=("precipitation_sum", "std"),
     )
+    if "snowfall_sum" in baseline.columns:
+        _clim_agg["climatology_snow_mean"] = ("snowfall_sum", "mean")
+        _clim_agg["climatology_snow_std"] = ("snowfall_sum", "std")
+    if "sunshine_duration" in baseline.columns:
+        _clim_agg["climatology_sunshine_mean"] = ("sunshine_duration", "mean")
+    climatology = baseline.groupby(keys, as_index=False).agg(**_clim_agg)
     return climatology
 
 
@@ -217,6 +249,15 @@ def apply_daily_climatology(daily: pd.DataFrame, climatology: pd.DataFrame, grou
         enriched["rolling_7d_precip_anomaly"] = enriched["precip_anomaly"].rolling(window=7, min_periods=1).sum()
         enriched["cumulative_precip_anomaly"] = enriched["precip_anomaly"].cumsum()
 
+    if "snowfall_sum" in enriched.columns and "climatology_snow_mean" in enriched.columns:
+        enriched["snow_anomaly"] = enriched["snowfall_sum"] - enriched["climatology_snow_mean"]
+        _grp = enriched.groupby(group_cols, group_keys=False) if group_cols else None
+        enriched["rolling_7d_snow_anomaly"] = (
+            _grp["snow_anomaly"].transform(lambda s: s.rolling(window=7, min_periods=1).sum())
+            if _grp is not None else
+            enriched["snow_anomaly"].rolling(window=7, min_periods=1).sum()
+        )
+
     return enriched
 
 
@@ -227,11 +268,16 @@ def build_monthly_anomalies(daily: pd.DataFrame, group_cols: list[str] | None = 
     frame = daily.copy()
     frame["month"] = pd.to_datetime(frame["time"]).dt.month
 
-    monthly_per_year = frame.groupby([*group_cols, "year", "month"], as_index=False).agg(
+    _monthly_agg: dict = dict(
         temp_mean=("temperature_2m_mean", "mean"),
         precip_total=("precipitation_sum", "sum"),
         days=("time", "count"),
     )
+    if "snowfall_sum" in frame.columns:
+        _monthly_agg["snowfall_total"] = ("snowfall_sum", "sum")
+    if "sunshine_duration" in frame.columns:
+        _monthly_agg["sunshine_total"] = ("sunshine_duration", "sum")
+    monthly_per_year = frame.groupby([*group_cols, "year", "month"], as_index=False).agg(**_monthly_agg)
 
     baseline = monthly_per_year[(monthly_per_year["year"] >= 1991) & (monthly_per_year["year"] <= 2025)].copy()
     current_monthly = monthly_per_year[monthly_per_year["year"] == current_year].copy()
@@ -304,6 +350,29 @@ def compute_weather_summary(annual: pd.DataFrame, current_year: int = 2026) -> d
             "z_score_vs_baseline": float((actual_current - expected_mean) / expected_std) if expected_std else None,
         }
 
+    if "ytd_total_snowfall" in annual.columns:
+        snow_curr = float(current["ytd_total_snowfall"])
+        snow_base_mean = float(baseline["ytd_total_snowfall"].mean())
+        result["current"]["ytd_total_snowfall_cm"] = snow_curr
+        result["snowfall"] = {
+            "ytd_total_cm": snow_curr,
+            "baseline_mean_cm": snow_base_mean,
+            "deviation_vs_baseline_cm": snow_curr - snow_base_mean,
+        }
+    if "ytd_total_sunshine" in annual.columns:
+        sun_curr_s = float(current["ytd_total_sunshine"])
+        sun_base_s = float(baseline["ytd_total_sunshine"].mean())
+        result["current"]["ytd_total_sunshine_h"] = round(sun_curr_s / 3600.0, 1)
+        result["sunshine"] = {
+            "ytd_total_hours": round(sun_curr_s / 3600.0, 1),
+            "baseline_mean_hours": round(sun_base_s / 3600.0, 1),
+            "deviation_vs_baseline_hours": round((sun_curr_s - sun_base_s) / 3600.0, 1),
+        }
+    if "ytd_mean_wind_speed" in annual.columns:
+        result["current"]["ytd_mean_wind_kmh"] = float(current["ytd_mean_wind_speed"])
+    if "ytd_total_et0" in annual.columns:
+        result["current"]["ytd_total_et0_mm"] = float(current["ytd_total_et0"])
+
     return result
 
 
@@ -336,6 +405,10 @@ def attach_current_anomaly_metrics(summary: dict, current_daily: pd.DataFrame) -
             "latest_cumulative_anomaly": float(latest["cumulative_precip_anomaly"]),
         }
     )
+    if "snow_anomaly" in current_daily.columns:
+        enriched.setdefault("snowfall", {})["latest_daily_anomaly_cm"] = float(latest.get("snow_anomaly", 0.0))
+        if "rolling_7d_snow_anomaly" in current_daily.columns:
+            enriched["snowfall"]["latest_7d_anomaly_cm"] = float(latest.get("rolling_7d_snow_anomaly", 0.0))
     return enriched
 
 

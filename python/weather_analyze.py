@@ -230,6 +230,67 @@ def main() -> None:
     print(f"Saved city rankings to {args.city_rankings_output}")
     print(f"Saved markdown report to {args.report_output}")
 
+    _log_weather_to_mlflow(summary, city_summaries)
+
+
+def _log_weather_to_mlflow(summary: dict, city_summaries: list[dict]) -> None:
+    """Log weather analysis results to MLflow: metrics + city dataset table."""
+    import os
+    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "")
+    if not tracking_uri:
+        return
+    try:
+        import mlflow
+        mlflow.set_tracking_uri(tracking_uri)
+        mlflow.set_experiment("weather-analysis")
+
+        temp = summary.get("temperature", {})
+        precip = summary.get("precipitation", {})
+        coverage = summary.get("coverage", {})
+
+        temp_dev = float(temp.get("deviation_vs_1991_2020_mean", 0.0))
+        temp_7d = float(temp.get("latest_7d_anomaly", 0.0))
+        # +1 = warming (recent 7d warmer than season), -1 = cooling, 0 = neutral
+        trend_direction = 1.0 if temp_7d > temp_dev + 0.5 else (-1.0 if temp_7d < temp_dev - 0.5 else 0.0)
+
+        with mlflow.start_run(run_name="weather-dag", tags={"type": "weather_analysis", "dag": "lithuania_weather"}):
+            _metrics = {
+                "temp_deviation_vs_baseline":   temp_dev,
+                "temp_z_score":                 float(temp.get("z_score_vs_baseline", 0.0)),
+                "temp_7d_anomaly":              temp_7d,
+                "trend_direction":              trend_direction,
+                "precip_deviation_vs_baseline": float(precip.get("deviation_vs_1991_2020_mean", 0.0)),
+                "precip_z_score":               float(precip.get("z_score_vs_baseline", 0.0)),
+                "days_observed":                float(coverage.get("days_observed", 0)),
+            }
+            snowfall = summary.get("snowfall", {})
+            if snowfall:
+                _metrics["ytd_total_snowfall_cm"] = float(snowfall.get("ytd_total_cm", 0.0))
+                _metrics["snowfall_deviation_vs_baseline_cm"] = float(snowfall.get("deviation_vs_baseline_cm", 0.0))
+            sunshine = summary.get("sunshine", {})
+            if sunshine:
+                _metrics["ytd_total_sunshine_h"] = float(sunshine.get("ytd_total_hours", 0.0))
+            current_s = summary.get("current", {})
+            if "ytd_mean_wind_kmh" in current_s:
+                _metrics["ytd_mean_wind_kmh"] = float(current_s["ytd_mean_wind_kmh"])
+            if "ytd_total_et0_mm" in current_s:
+                _metrics["ytd_total_et0_mm"] = float(current_s["ytd_total_et0_mm"])
+            mlflow.log_metrics(_metrics)
+            mlflow.log_table(
+                data={
+                    "city":              [c.get("city", "") for c in city_summaries],
+                    "temp_anomaly_c":    [round(c.get("temperature", {}).get("deviation_vs_1991_2020_mean", 0.0), 2) for c in city_summaries],
+                    "temp_z_score":      [round(c.get("temperature", {}).get("z_score_vs_baseline", 0.0), 2) for c in city_summaries],
+                    "temp_7d_anomaly":   [round(c.get("temperature", {}).get("latest_7d_anomaly", 0.0), 2) for c in city_summaries],
+                    "precip_anomaly_mm": [round(c.get("precipitation", {}).get("deviation_vs_1991_2020_mean", 0.0), 2) for c in city_summaries],
+                    "precip_z_score":    [round(c.get("precipitation", {}).get("z_score_vs_baseline", 0.0), 2) for c in city_summaries],
+                },
+                artifact_file="weather_city_dataset.json",
+            )
+        print("[mlflow] weather analysis logged")
+    except Exception as exc:
+        print(f"[mlflow] WARNING: failed to log weather analysis: {exc}")
+
 
 if __name__ == "__main__":
     main()

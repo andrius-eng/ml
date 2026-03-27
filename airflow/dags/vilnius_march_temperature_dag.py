@@ -74,6 +74,7 @@ with DAG(
             f'{project_python_command(str(FETCH_SCRIPT), "--month", str(MONTH), "--execution-date", EXECUTION_DATE, "--window-years", "30", "--output", str(RAW_PATH))}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+        append_env=True,
     )
 
     analyze_vilnius_month = BashOperator(
@@ -85,6 +86,7 @@ with DAG(
             f'{project_python_command(str(ANALYZE_SCRIPT), "--month", str(MONTH), "--raw-input", str(RAW_PATH), "--annual-output", str(ANNUAL_PATH), "--summary-output", str(SUMMARY_PATH), "--report-output", str(REPORT_PATH), "--execution-date", EXECUTION_DATE, "--window-years", "30")}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+        append_env=True,
     )
 
     plot_vilnius_month = BashOperator(
@@ -96,6 +98,7 @@ with DAG(
             f'{project_python_command(str(PLOT_SCRIPT), "--annual-input", str(ANNUAL_PATH), "--summary-input", str(SUMMARY_PATH), "--output", str(PLOT_PATH))}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+        append_env=True,
     )
 
     quality_gate = BashOperator(
@@ -107,6 +110,7 @@ with DAG(
             f'{project_python_command(str(QUALITY_GATE_SCRIPT), "--annual-input", str(ANNUAL_PATH), "--summary-input", str(SUMMARY_PATH), "--expected-years", "30", "--min-days", "10", "--max-abs-z", "4.0")}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+        append_env=True,
     )
 
     refresh_rag_context = BashOperator(
@@ -118,6 +122,7 @@ with DAG(
             f'{project_python_command(str(RAG_PIPELINE_SCRIPT), "--output-dir", str(PROJECT_ROOT / "python" / "output"), "--demo-output", str(RAG_DEMO_PATH))}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+        append_env=True,
     )
 
     fetch_vilnius_month >> analyze_vilnius_month >> [plot_vilnius_month, quality_gate]

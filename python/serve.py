@@ -8,7 +8,9 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import torch
-from fastapi import FastAPI, HTTPException, Query
+import re
+import urllib.request as _urllib_req
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -41,11 +43,13 @@ except Exception:
     _mlflow_available = False
 
 MLFLOW_TRACKING_URI = os.environ.get('MLFLOW_TRACKING_URI', '')
+MLFLOW_EXPERIMENT_NAME = os.environ.get('MLFLOW_EXPERIMENT_NAME', 'climate-temperature-model')
 MODEL_REGISTRY_NAME = 'ClimateTemperatureModel'
 MODEL_ALIAS = 'champion'
 
 if _mlflow_available and MLFLOW_TRACKING_URI:
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
     mlflow.enable_system_metrics_logging()
 
 ML_OUTPUT_DIR = Path(os.environ.get("ML_OUTPUT_DIR", "python/output"))
@@ -167,18 +171,109 @@ class RagQueryResponse(BaseModel):
     sources: list[dict]
 
 
+def _heuristic_judge(answer: str, sources: list) -> float:
+    """Fast rule-based quality score 0.0-5.0. No network calls, never blocks."""
+    import re as _re
+    if 'No relevant pipeline artifacts' in answer:
+        return 0.0
+    score = 2.5
+    # Sources tier
+    n_sources = len(sources) if sources else 0
+    if n_sources >= 3:
+        score += 1.0
+    elif n_sources >= 1:
+        score += 0.5
+    # Length tier
+    length = len(answer)
+    if length > 500:
+        score += 1.0
+    elif length > 250:
+        score += 0.5
+    elif length < 100:
+        score -= 1.0
+    # Numeric evidence
+    numbers = _re.findall(r'\b\d+(?:[.,]\d+)?(?:\s*%|\xb0C|mm|hPa)?\b', answer)
+    if len(numbers) >= 3:
+        score += 0.5
+    elif len(numbers) >= 1:
+        score += 0.25
+    # Epistemic hedging
+    hedges = ['likely', 'approximately', 'around', 'estimated', 'about', 'suggests']
+    if any(h in answer.lower() for h in hedges):
+        score += 0.25
+    # Refusal
+    refusals = ["i don't know", 'i do not know', 'cannot answer', 'no information']
+    if any(r in answer.lower() for r in refusals):
+        score -= 1.0
+    return round(max(0.0, min(5.0, score)), 2)
+
+
+def _run_rag_evaluation(question: str, answer: str, sources: list, trace_id: str | None = None) -> None:
+    """Background task: score answer, log feedback on trace (Quality tab) and dataset to run (Datasets tab)."""
+    if not (_mlflow_available and MLFLOW_TRACKING_URI):
+        return
+    try:
+        import pandas as pd
+        judge_score = _heuristic_judge(answer, sources)
+        answered = "No relevant pipeline artifacts" not in answer
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+        mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
+
+        # Quality tab: log feedback on the standalone trace
+        if trace_id:
+            try:
+                mlflow.log_feedback(
+                    trace_id=trace_id,
+                    name="judge_score",
+                    value=judge_score,
+                    rationale="Heuristic: artifact presence, numeric content, answer length, uncertainty phrases",
+                )
+            except Exception as fb_exc:
+                print(f"[eval] WARNING: log_feedback failed: {fb_exc}")
+
+        # Datasets tab: log_input with a Dataset object inside a run
+        df = pd.DataFrame({
+            "question": [question],
+            "answer": [answer],
+            "judge_score": [judge_score],
+            "sources": [", ".join(s.get("source", "") for s in sources)],
+            "answered": [answered],
+        })
+        dataset = mlflow.data.from_pandas(df, name="rag_eval_dataset", source="rag_queries")
+        with mlflow.start_run(run_name="rag-eval", tags={"type": "rag_evaluation"}):
+            mlflow.log_input(dataset, context="eval")
+            mlflow.log_metrics({
+                "answered": float(answered),
+                "source_count": float(len(sources)),
+                "answer_length": float(len(answer)),
+                "judge_score": judge_score,
+            })
+        print(f"[eval] logged judge_score={judge_score} answered={answered} trace_id={trace_id}")
+    except Exception as exc:
+        print(f"WARNING: MLflow eval logging failed: {exc}")
+
+
 @app.get('/rag/query', response_model=RagQueryResponse)
-def rag_query(q: str = ''):
+def rag_query(q: str = '', background_tasks: BackgroundTasks = None):
     q = q.strip()
     if not q:
         raise HTTPException(status_code=400, detail='Query parameter "q" is required')
+    result = answer_question(q, ML_OUTPUT_DIR, top_k=5)
+    answer_text = result.get('answer', '')
+    sources = result.get('sources', [])
+    answered = 'No relevant pipeline artifacts' not in answer_text
+    trace_id = None
     if _mlflow_available and MLFLOW_TRACKING_URI:
         with mlflow.start_span(name='rag_query') as span:
             span.set_inputs({'question': q})
-            result = answer_question(q, ML_OUTPUT_DIR)
-            span.set_outputs({'answer': result.get('answer', '')[:500]})
-            return result
-    return answer_question(q, ML_OUTPUT_DIR)
+            span.set_outputs({'answer': answer_text[:500]})
+            span.set_attribute('answered', answered)
+            span.set_attribute('source_count', len(sources))
+            span.set_attribute('answer_length', len(answer_text))
+        trace_id = mlflow.get_last_active_trace_id()
+        if background_tasks is not None:
+            background_tasks.add_task(_run_rag_evaluation, q, answer_text, sources, trace_id)
+    return result
 
 
 @app.get('/')

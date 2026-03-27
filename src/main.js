@@ -898,43 +898,64 @@ function connectWebSocket() {
 
 // ── RAG query form handler ──────────────────────────────────────────────────
 
-document.getElementById("rag-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const input = document.getElementById("rag-input");
-  const question = input.value.trim();
-  if (!question) return;
-
+async function submitRagQuestion(question) {
   const resultDiv = document.getElementById("rag-query-result");
-  resultDiv.textContent = "Loading...";
+  const submitBtn = document.getElementById("rag-submit");
+
   resultDiv.removeAttribute("hidden");
+  resultDiv.innerHTML = `<p class="rag-loading"><span class="rag-spinner"></span>Asking Ollama…</p>`;
+  if (submitBtn) submitBtn.disabled = true;
 
   try {
+    const t0 = Date.now();
     const response = await fetch(
       `/api/rag/query?q=${encodeURIComponent(question)}`,
     );
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
+    const result = await response.json();
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
 
-    const interpHtml = data.interpretation
-      ? `<div class="rag-interpretation">${data.interpretation}</div>`
+    const interpHtml = result.interpretation
+      ? `<div class="rag-interpretation">${result.interpretation}</div>`
       : "";
 
+    const sourcesHtml = (result.sources || [])
+      .map((s) => `<span>${formatSource(s)}${s.score != null ? ` (${s.score.toFixed(2)})` : ""}</span>`)
+      .join("");
+
     resultDiv.innerHTML = `
-      <h3>${data.question}</h3>
-      <p>${data.answer}</p>
-      ${interpHtml}
-      <div class="rag-sources">
-        ${(data.sources || []).map((s) => `<span>${s.title} (${s.score.toFixed(2)})</span>`).join("")}
+      <div class="rag-result-header">
+        <h3 class="rag-question">${result.question}</h3>
+        <span class="rag-badge-ollama">Ollama · ${elapsed}s</span>
       </div>
+      <p class="rag-answer">${result.answer}</p>
+      ${interpHtml}
+      <div class="rag-sources">${sourcesHtml}</div>
     `;
   } catch (err) {
-    if (err.message.includes("502") || err.message.includes("503")) {
+    if (err.message.includes("502") || err.message.includes("503") || err.message.includes("Failed to fetch")) {
       resultDiv.innerHTML =
-        '<p style="color:var(--muted)">RAG API is not running. Start it with:<br><code>uv run uvicorn --app-dir python serve:app --host 127.0.0.1 --port 8000</code></p>';
+        '<p style="color:var(--muted)">RAG API is not running. Start the serve container or run:<br><code>uv run uvicorn --app-dir python serve:app --host 127.0.0.1 --port 8000</code></p>';
     } else {
       resultDiv.textContent = `Error: ${err.message}`;
     }
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
+}
+
+document.getElementById("rag-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const question = document.getElementById("rag-input").value.trim();
+  if (question) await submitRagQuestion(question);
+});
+
+document.getElementById("rag-chips").addEventListener("click", async (e) => {
+  const chip = e.target.closest(".rag-chip");
+  if (!chip) return;
+  const question = chip.textContent.trim();
+  document.getElementById("rag-input").value = question;
+  await submitRagQuestion(question);
 });
 
 // ── boot ─────────────────────────────────────────────────────────────────────

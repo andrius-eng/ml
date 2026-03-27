@@ -54,25 +54,68 @@ def main() -> int:
         f"precip_threshold={args.max_monthly_precip_abs_z:.2f}",
     )
 
+    failure: str | None = None
     if days < args.min_days:
-        raise SystemExit(f"Only {days} days observed, expected at least {args.min_days}")
-    if abs(temp_z) > args.max_temp_abs_z:
-        raise SystemExit(f"Temperature z-score {temp_z:.3f} exceeds guardrail")
-    if abs(precip_z) > args.max_precip_abs_z:
-        raise SystemExit(f"Precipitation z-score {precip_z:.3f} exceeds guardrail")
-    if not weak_months.empty:
-        raise SystemExit(f"Found suspiciously sparse month rows: {weak_months[['month', 'days']].to_dict(orient='records')}")
-    if not extreme_temp_months.empty:
-        raise SystemExit(
+        failure = f"Only {days} days observed, expected at least {args.min_days}"
+    elif abs(temp_z) > args.max_temp_abs_z:
+        failure = f"Temperature z-score {temp_z:.3f} exceeds guardrail"
+    elif abs(precip_z) > args.max_precip_abs_z:
+        failure = f"Precipitation z-score {precip_z:.3f} exceeds guardrail"
+    elif not weak_months.empty:
+        failure = f"Found suspiciously sparse month rows: {weak_months[['month', 'days']].to_dict(orient='records')}"
+    elif not extreme_temp_months.empty:
+        failure = (
             f"Monthly temperature anomalies exceeded threshold: {extreme_temp_months[['month', 'temp_zscore']].to_dict(orient='records')}"
         )
-    if not extreme_precip_months.empty:
-        raise SystemExit(
+    elif not extreme_precip_months.empty:
+        failure = (
             f"Monthly precipitation anomalies exceeded threshold: {extreme_precip_months[['month', 'precip_zscore']].to_dict(orient='records')}"
         )
 
+    _log_quality_gate_to_mlflow(
+        passed=(failure is None),
+        temp_z=temp_z, precip_z=precip_z, days=days,
+        n_weak_months=len(weak_months),
+        n_extreme_temp_months=len(extreme_temp_months),
+        n_extreme_precip_months=len(extreme_precip_months),
+        monthly=monthly,
+        failure_reason=failure,
+    )
+
+    if failure:
+        raise SystemExit(failure)
+
     print("Weather quality gate passed.")
     return 0
+
+
+def _log_quality_gate_to_mlflow(passed: bool, temp_z: float, precip_z: float,
+                                  days: int, n_weak_months: int,
+                                  monthly, failure_reason=None) -> None:
+    """Log weather quality gate results to MLflow."""
+    import os
+    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "")
+    if not tracking_uri:
+        return
+    try:
+        import mlflow
+        mlflow.set_tracking_uri(tracking_uri)
+        mlflow.set_experiment("weather-analysis")
+        with mlflow.start_run(run_name="weather-quality-gate", tags={"type": "quality_gate", "dag": "lithuania_weather"}):
+            mlflow.log_metrics({
+                "passed":                   float(passed),
+                "days_observed":            float(days),
+                "temp_z_score":             temp_z,
+                "precip_z_score":           precip_z,
+                "n_weak_months":            float(n_weak_months),
+                "n_extreme_temp_months":    float(n_extreme_temp_months),
+                "n_extreme_precip_months":  float(n_extreme_precip_months),
+            })
+            records = monthly.to_dict(orient="list")
+            mlflow.log_table(data=records, artifact_file="weather_monthly_dataset.json")
+        print("[mlflow] quality gate logged")
+    except Exception as exc:
+        print(f"[mlflow] WARNING: failed to log quality gate: {exc}")
 
 
 if __name__ == "__main__":

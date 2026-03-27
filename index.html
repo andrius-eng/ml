@@ -138,18 +138,24 @@
         <section class="card" id="rag-query-section">
           <h2>Ask the Pipeline</h2>
           <p class="section-desc">
-            Query the Qdrant vector store live. The retrieval layer finds the most relevant
-            pipeline artifacts and assembles an answer from retrieved evidence.
+            Live query — the pipeline computes the facts, then Ollama (llama3.2) drafts the answer
+            using the prompt template registered in MLflow.
           </p>
+          <div class="rag-chips" id="rag-chips">
+            <button class="rag-chip" type="button">What will the temperature be tomorrow?</button>
+            <button class="rag-chip" type="button">Is Lithuania currently warmer or colder than normal?</button>
+            <button class="rag-chip" type="button">How unusual is this March in Vilnius?</button>
+            <button class="rag-chip" type="button">What was the warmest March on record?</button>
+          </div>
           <form class="rag-form" id="rag-form" autocomplete="off">
             <input
               class="rag-input"
               id="rag-input"
               type="text"
-              placeholder="e.g. Is Lithuania warmer than usual this year?"
+              placeholder="Ask anything about Lithuanian climate…"
               aria-label="Ask a question about the pipeline outputs"
             />
-            <button class="rag-submit" type="submit">Ask</button>
+            <button class="rag-submit" id="rag-submit" type="submit">Ask</button>
           </form>
           <div id="rag-query-result" class="rag-query-result" hidden></div>
         </section>

@@ -258,6 +258,27 @@ a:hover {
 }
 
 /* ── Live RAG query form ────────────────────────────────────── */
+.rag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 1rem;
+}
+
+.rag-chip {
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 999px;
+  padding: 0.38rem 0.72rem;
+  color: #bfdbfe;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.rag-chip:hover {
+  background: rgba(96, 165, 250, 0.18);
+}
+
 .rag-form {
   display: flex;
   gap: 0.6rem;
@@ -294,12 +315,58 @@ a:hover {
   background: rgba(255, 255, 255, 0.18);
 }
 
+.rag-submit:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 .rag-query-result {
   margin-top: 1rem;
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1rem 1.1rem;
+}
+
+.rag-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.rag-badge-ollama {
+  white-space: nowrap;
+  font-size: 0.78rem;
+  color: #bfdbfe;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  background: rgba(96, 165, 250, 0.08);
+  border-radius: 999px;
+  padding: 0.2rem 0.5rem;
+}
+
+.rag-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0;
+  color: var(--muted);
+}
+
+.rag-spinner {
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-top-color: #60a5fa;
+  border-radius: 50%;
+  animation: rag-spin 0.9s linear infinite;
+}
+
+@keyframes rag-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .rag-interpretation {
@@ -324,6 +391,12 @@ a:hover {
 }
 
 @media (max-width: 640px) {
+  .rag-form,
+  .rag-result-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .chart-row {
     grid-template-columns: 1fr;
   }
