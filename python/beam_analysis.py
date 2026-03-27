@@ -10,15 +10,18 @@ Output: monthly_anomaly_matrix.csv  (city × year × month anomaly grid)
 from __future__ import annotations
 
 import argparse
+import calendar
 import csv
 import json
 import statistics
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import apache_beam as beam
+from apache_beam import coders
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import SetupOptions
+from apache_beam.transforms.window import GlobalWindows, IntervalWindow, WindowFn
 
 from weather_common import REGION_CITIES, fetch_daily_weather
 
@@ -91,54 +94,68 @@ class BaselineStatsCombineFn(beam.CombineFn):
         return {"mean": statistics.mean(acc), "std": statistics.stdev(acc)}
 
 
-# ── Utility transforms ──────────────────────────────────────────────────────
+# ── Beam windowing primitives ───────────────────────────────────────────────
 
 
-def _parse_record(record):
-    """Add year/month fields to a raw daily record."""
-    t = record["time"]
-    return {
-        "city": record["city"],
-        "time": t,
-        "year": int(t[:4]),
-        "month": int(t[5:7]),
-        "day": int(t[8:10]),
-        "temperature": record["temperature_2m_mean"],
-    }
+class CalendarMonthWindowFn(WindowFn):
+    """Assign each daily record to its calendar-month IntervalWindow.
+
+    Beam WindowFn primitive: replaces the manual (city, year, month) grouping
+    key with proper event-time windowing so downstream transforms are window-
+    aware and can use DoFn.WindowParam to recover year/month metadata.
+    """
+
+    def assign(self, context):
+        dt = datetime.fromtimestamp(context.timestamp, tz=timezone.utc)
+        start = datetime(dt.year, dt.month, 1, tzinfo=timezone.utc).timestamp()
+        last_day = calendar.monthrange(dt.year, dt.month)[1]
+        end = datetime(dt.year, dt.month, last_day, 23, 59, 59, tzinfo=timezone.utc).timestamp()
+        return [IntervalWindow(start, end)]
+
+    def get_window_coder(self):
+        return coders.IntervalWindowCoder()
+
+    def merge(self, merge_context):
+        pass  # non-merging
 
 
-def _monthly_key(record):
-    return ((record["city"], record["year"], record["month"]), record["temperature"])
+class TagWindowFn(beam.DoFn):
+    """Extract year and month from the CalendarMonth window via DoFn.WindowParam.
+
+    Beam DoFn primitive: uses the window's start timestamp (set by
+    CalendarMonthWindowFn) to annotate each element with its year and month
+    without any manual date-string parsing.
+    """
+
+    def process(self, element, window=beam.DoFn.WindowParam):
+        city, stats = element
+        if stats["mean"] is None:
+            return
+        dt = datetime.fromtimestamp(window.start, tz=timezone.utc)
+        yield {
+            "city": city,
+            "year": dt.year,
+            "month": dt.month,
+            "mean_temp": stats["mean"],
+            "days": stats["count"],
+        }
 
 
-def _baseline_rekey(kv):
-    """Re-key ((city, year, month), stats) → ((city, month), annual_mean)."""
-    (city, _year, month), stats = kv
-    return ((city, month), stats["mean"])
-
-
-def _compute_anomaly(kv, baselines):
-    """Join monthly mean with baseline side-input to produce anomaly row."""
-    (city, year, month), stats = kv
-    mean_temp = stats["mean"]
-    days = stats["count"]
+def _compute_anomaly(record, baselines):
+    """Join a monthly record with the baseline side-input to produce an anomaly row."""
+    city, year, month = record["city"], record["year"], record["month"]
+    mean_temp = record["mean_temp"]
     bl = baselines.get((city, month))
-    anomaly = None
-    z_score = None
-    bl_mean = None
-    bl_std = None
+    anomaly = bl_mean = bl_std = z_score = None
     if bl and mean_temp is not None:
-        bl_mean = bl["mean"]
-        bl_std = bl["std"]
+        bl_mean, bl_std = bl["mean"], bl["std"]
         anomaly = mean_temp - bl_mean
         if bl_std and bl_std > 0:
             z_score = anomaly / bl_std
     return {
-        "city": city,
-        "year": year,
-        "month": month,
+        "city": city, "year": year, "month": month,
         "mean_temp": round(mean_temp, 2) if mean_temp is not None else None,
-        "days": days,
+        "days": record["days"],
         "baseline_mean": round(bl_mean, 2) if bl_mean is not None else None,
         "baseline_std": round(bl_std, 2) if bl_std is not None else None,
         "anomaly": round(anomaly, 2) if anomaly is not None else None,
@@ -213,17 +230,14 @@ def run(
     out.mkdir(parents=True, exist_ok=True)
     out_csv = out / "monthly_anomaly_matrix.csv"
 
-    end_month = int(end_date[5:7])
-    end_day = int(end_date[8:10])
+    end_ts = datetime.fromisoformat(end_date).replace(tzinfo=timezone.utc).timestamp()
 
     # ── Prepare source records ──────────────────────────────────────────
 
     if input_csv and Path(input_csv).exists():
-        # Read existing fetched data
         raw_df = pd.read_csv(input_csv)
         existing_cities = set(raw_df["city"].unique())
 
-        # Fetch any cities not already in the file
         extra = {c: coord for c, coord in cities.items() if c not in existing_cities}
         if extra and fetch_missing_cities:
             import time as _time
@@ -235,39 +249,30 @@ def run(
                     df["city"] = city_name
                     frames.append(df)
                 except Exception as exc:
-                    # External weather API can throttle with HTTP 429.
-                    # Keep pipeline progress by skipping unavailable cities.
                     print(f"[Beam] WARNING: failed to fetch {city_name}: {exc}")
-                _time.sleep(5)  # rate-limit courtesy
+                _time.sleep(5)
             raw_df = pd.concat(frames, ignore_index=True)
         elif extra and not fetch_missing_cities:
             print(f"[Beam] Skipping fetch for {len(extra)} missing cities from input CSV")
-        # Filter to only requested cities
+
         raw_df = raw_df[raw_df["city"].isin(cities)].copy()
-        # Ensure consistent types for Beam schema inference
-        raw_df["temperature_2m_mean"] = raw_df["temperature_2m_mean"].astype(float)
+        raw_df["temperature_2m_mean"] = pd.to_numeric(raw_df["temperature_2m_mean"], errors="coerce")
         raw_df["time"] = raw_df["time"].astype(str)
         raw_df["city"] = raw_df["city"].astype(str)
         raw_df = raw_df.dropna(subset=["temperature_2m_mean"])
         records = raw_df[["city", "time", "temperature_2m_mean"]].to_dict("records")
     else:
-        # Fetch everything via Beam DoFn
         records = None  # will use Beam Create + ParDo
 
-    # ── YTD filter: full year for completed years, date cutoff for current year ──
-
-    end_year = int(end_date[:4])
-
-    def _within_ytd(record):
-        if record["year"] < end_year:
-            return True  # completed years: show all 12 months
-        if record["month"] > end_month:
-            return False
-        if record["month"] == end_month and record["day"] > end_day:
-            return False
-        return True
-
     # ── Run Beam pipeline ───────────────────────────────────────────────
+
+    def _to_timestamped(record):
+        """Convert a daily record to a TimestampedValue using its date as event time."""
+        ts = datetime.fromisoformat(record["time"][:10]).replace(tzinfo=timezone.utc).timestamp()
+        return beam.window.TimestampedValue(
+            {"city": record["city"], "temperature": record["temperature_2m_mean"]},
+            ts,
+        )
 
     tmp_jsonl = str(out / "_anomalies_tmp")
     pipeline_args = list(beam_args or [])
@@ -282,56 +287,59 @@ def run(
 
     resolved_runner = options.get_all_options().get("runner", runner)
     print(f"[Beam] Runner: {resolved_runner}")
-    if pipeline_args:
-        print(f"[Beam] Pipeline args: {' '.join(pipeline_args)}")
 
     with beam.Pipeline(options=options) as p:
         if records is not None:
-            # Records already in memory
-            daily = (
-                p
-                | "CreateRecords" >> beam.Create(records)
-                | "Parse" >> beam.Map(_parse_record)
-                | "FilterYTD" >> beam.Filter(_within_ytd)
-            )
+            raw = p | "CreateRecords" >> beam.Create(records)
         else:
-            # Fetch via Beam ParDo
-            daily = (
+            raw = (
                 p
                 | "CreateCities" >> beam.Create(list(cities.items()))
                 | "FetchWeather" >> beam.ParDo(FetchCityWeather(start_date, end_date))
-                | "ParseFetched" >> beam.Map(_parse_record)
-                | "FilterYTDFetched" >> beam.Filter(_within_ytd)
             )
 
-        # Monthly mean per (city, year, month)
-        monthly = (
-            daily
-            | "KeyMonthly" >> beam.Map(_monthly_key)
-            | "MonthlyMean" >> beam.CombinePerKey(MonthlyMeanCombineFn())
+        # Assign event-time timestamps from the record date.
+        # Records are historical so no future-date filtering is needed;
+        # the end_date bound was already applied when loading/fetching data.
+        timestamped = (
+            raw
+            | "AssignTimestamps" >> beam.Map(_to_timestamped)
         )
 
-        # Baseline statistics per (city, month) from 1991-2025
+        # ── Monthly means: use CalendarMonthWindowFn (Beam WindowFn primitive) ──
+        # Each element lands in the window for its calendar month. CombinePerKey
+        # computes the monthly mean per city within each window. TagWindowFn then
+        # reads the window boundaries via DoFn.WindowParam to recover year/month.
+        monthly = (
+            timestamped
+            | "WindowIntoMonths" >> beam.WindowInto(CalendarMonthWindowFn())
+            | "KeyByCity" >> beam.Map(lambda r: (r["city"], r["temperature"]))
+            | "MonthlyMean" >> beam.CombinePerKey(MonthlyMeanCombineFn())
+            | "TagWithWindow" >> beam.ParDo(TagWindowFn())
+        )
+
+        # ── Baseline statistics: re-window into GlobalWindows to aggregate ──
+        # Filter to baseline years, then collapse back into a single global window
+        # so BaselineStatsCombineFn can see all years at once per (city, month).
         baseline = (
-            daily
+            monthly
             | "FilterBaseline" >> beam.Filter(
                 lambda r: BASELINE_START <= r["year"] <= BASELINE_END
             )
-            | "KeyBaselineMonthly" >> beam.Map(_monthly_key)
-            | "BaselineMonthlyMean" >> beam.CombinePerKey(MonthlyMeanCombineFn())
-            | "RekeyBaseline" >> beam.Map(_baseline_rekey)
+            | "RewindowGlobal" >> beam.WindowInto(GlobalWindows())
+            | "KeyByCityMonth" >> beam.Map(lambda r: ((r["city"], r["month"]), r["mean_temp"]))
             | "BaselineStats" >> beam.CombinePerKey(BaselineStatsCombineFn())
         )
 
         baseline_side = beam.pvalue.AsDict(baseline)
 
-        # Compute anomalies by joining with baseline side input
+        # ── Join monthly means with baseline and compute anomalies ──
         anomalies = (
             monthly
+            | "RewindowGlobalAll" >> beam.WindowInto(GlobalWindows())
             | "ComputeAnomalies" >> beam.Map(_compute_anomaly, baselines=baseline_side)
         )
 
-        # Write results as JSON lines (side-effect append doesn't work in Beam 2.71)
         anomalies | "WriteJsonl" >> beam.Map(json.dumps) | beam.io.WriteToText(
             tmp_jsonl, file_name_suffix=".jsonl", shard_name_template=""
         )

@@ -48,6 +48,46 @@ def render_report(summary: dict, annual: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+def _log_to_mlflow(summary: dict, annual) -> None:
+    """Log Vilnius monthly temperature analysis results to MLflow."""
+    import os, math, sys
+    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "")
+    if not tracking_uri:
+        return
+    try:
+        import mlflow
+        month_name = summary.get("month_name", "month").lower()
+        mlflow.set_tracking_uri(tracking_uri)
+        mlflow.set_experiment("vilnius-temperature-analysis")
+        years_included = int(summary["window"]["years_included"])
+        run_tags = {
+            "type": "temperature_analysis",
+            "dag": "vilnius_march_temperature",
+            "month": month_name,
+        }
+        if years_included < 5:
+            run_tags["data_quality_warning"] = f"only {years_included} year(s) — archive API may be rate-limited"
+        with mlflow.start_run(run_name=f"vilnius-{month_name}-analyze", tags=run_tags):
+            latest_row = annual[annual["year"] == annual["year"].max()].iloc[0]
+            def _safe(v):
+                f = float(v)
+                return 0.0 if math.isnan(f) or math.isinf(f) else f
+            mlflow.log_metrics({
+                "latest_mean_temp_c":   _safe(latest_row["mean_temp_c"]),
+                "latest_anomaly_c":     _safe(latest_row["anomaly_c"]),
+                "latest_zscore":        _safe(latest_row["zscore"]),
+                "baseline_mean_temp_c": _safe(summary["baseline"]["mean_temp_c"]),
+                "baseline_std_temp_c":  _safe(summary["baseline"]["std_temp_c"]),
+                "years_included":       float(years_included),
+            })
+            mlflow.log_table(data=annual.to_dict(orient="list"),
+                             artifact_file=f"vilnius_{month_name}_annual_dataset.json")
+        print("[mlflow] vilnius temperature analysis logged")
+        sys.stdout.flush()
+    except Exception as exc:
+        print(f"[mlflow] WARNING: failed to log: {exc}")
+        sys.stdout.flush()
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Analyze Vilnius monthly temperature anomalies")
     parser.add_argument("--month", type=int, default=3, help="Calendar month number (1-12, default: 3 for March)")
@@ -69,27 +109,74 @@ def main() -> None:
     cutoff_day = execution_date.day if execution_date.month == args.month else calendar.monthrange(execution_date.year, args.month)[1]
     start_year = execution_date.year - args.window_years + 1
 
-    raw = pd.read_csv(raw_input)
-    raw["time"] = pd.to_datetime(raw["time"])
-    raw["year"] = raw["time"].dt.year
-    raw["month"] = raw["time"].dt.month
-    raw["day"] = raw["time"].dt.day
+    # ── Use Beam pipeline for windowed aggregation ──────────────────────────
+    # Uses CalendarMonthWindowFn + CombinePerKey for monthly means and baseline
+    # stats. Mirrors the weather DAG: PortableRunner → Flink, fallback to Direct.
+    import beam_analysis
 
-    month_data = raw[
-        (raw["year"] >= start_year)
-        & (raw["year"] <= execution_date.year)
-        & (raw["month"] == args.month)
-        & (raw["day"] <= cutoff_day)
+    VILNIUS_COORDS = (54.6872, 25.2797)
+
+    beam_output_dir = str(Path(raw_input).parent / "_beam_tmp")
+
+    portable_args = [
+        "--job_endpoint", "beam-job-server:8099",
+        "--artifact_endpoint", "beam-job-server:8098",
+        "--environment_type", "EXTERNAL",
+        "--environment_config", "localhost:50000",
+        "--parallelism", "1",
+    ]
+
+    try:
+        print("[beam] Attempting PortableRunner → Flink...")
+        beam_analysis.run(
+            start_date=f"{start_year}-01-01",
+            end_date=execution_date.isoformat(),
+            output_dir=beam_output_dir,
+            cities={"Vilnius": VILNIUS_COORDS},
+            input_csv=raw_input,
+            fetch_missing_cities=False,
+            runner="PortableRunner",
+            beam_args=portable_args,
+        )
+        print("[beam] PortableRunner succeeded")
+    except Exception as exc:
+        print(f"[beam] PortableRunner failed ({exc}); falling back to DirectRunner")
+        beam_analysis.run(
+            start_date=f"{start_year}-01-01",
+            end_date=execution_date.isoformat(),
+            output_dir=beam_output_dir,
+            cities={"Vilnius": VILNIUS_COORDS},
+            input_csv=raw_input,
+            fetch_missing_cities=False,
+            runner="DirectRunner",
+        )
+
+    beam_csv = Path(beam_output_dir) / "monthly_anomaly_matrix.csv"
+    beam_df = pd.read_csv(beam_csv)
+
+    # Filter to the target month, applying the cutoff-day constraint for the
+    # current execution year (Beam already filtered via CalendarMonthWindowFn,
+    # but the current month may be partial — drop the current year if the month
+    # hasn't reached cutoff_day worth of data yet).
+    annual = beam_df[
+        (beam_df["city"] == "Vilnius")
+        & (beam_df["month"] == args.month)
     ].copy()
 
-    annual = month_data.groupby("year", as_index=False).agg(
-        mean_temp_c=("temperature_2m_mean", "mean"),
-        days_observed=("time", "count"),
-    )
-    baseline_mean = float(annual["mean_temp_c"].mean())
-    baseline_std = float(annual["mean_temp_c"].std(ddof=1))
-    annual["anomaly_c"] = annual["mean_temp_c"] - baseline_mean
-    annual["zscore"] = annual["anomaly_c"] / baseline_std if baseline_std else 0.0
+    # Rename Beam columns → downstream schema
+    annual = annual.rename(columns={
+        "mean_temp": "mean_temp_c",
+        "days":      "days_observed",
+        "anomaly":   "anomaly_c",
+        "z_score":   "zscore",
+    })[["year", "mean_temp_c", "days_observed", "anomaly_c", "zscore"]].sort_values("year").reset_index(drop=True)
+
+    # Derive summary stats from the Beam baseline columns (already computed)
+    baseline_row = beam_df[
+        (beam_df["city"] == "Vilnius") & (beam_df["month"] == args.month)
+    ].iloc[0] if len(beam_df) > 0 else None
+    baseline_mean = float(baseline_row["baseline_mean"]) if baseline_row is not None else float(annual["mean_temp_c"].mean())
+    baseline_std  = float(baseline_row["baseline_std"])  if baseline_row is not None else 0.0
 
     summary = {
         "month": args.month,
@@ -121,7 +208,9 @@ def main() -> None:
     month_name = calendar.month_name[args.month]
     print(f"Saved {month_name} anomaly table to {annual_output}")
     print(f"Saved {month_name} anomaly report to {report_output}")
+    _log_to_mlflow(summary, annual)
 
 
 if __name__ == "__main__":
     main()
+

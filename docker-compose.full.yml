@@ -223,7 +223,7 @@ services:
     ports:
     - 8000:8000
     environment:
-      ML_OUTPUT_DIR: /project/python/output
+      ML_OUTPUT_DIR: /project/ml/python/output
       RAG_LLM_PROVIDER: ${RAG_LLM_PROVIDER:-ollama}
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
@@ -289,14 +289,19 @@ services:
       - default
 
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v3.1.0
+    image: ghcr.io/mlflow/mlflow:v3.10.1
     command: >
+      sh -c "
+      mlflow db upgrade sqlite:////mlruns/mlflow.db &&
       mlflow server
-      --backend-store-uri /mlruns
+      --backend-store-uri sqlite:////mlruns/mlflow.db
       --default-artifact-root mlflow-artifacts:/
       --serve-artifacts
       --host 0.0.0.0
       --port 5000
+      --allowed-hosts localhost,127.0.0.1,localhost:5000,127.0.0.1:5000,mlflow,mlflow:5000
+      --cors-allowed-origins http://localhost:5173,http://127.0.0.1:5173,http://localhost:5000,http://127.0.0.1:5000
+      "
     ports:
     - 5000:5000
     volumes:

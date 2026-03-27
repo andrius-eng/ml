@@ -36,6 +36,8 @@ DEFAULT_LLM_PROVIDER = os.environ.get("RAG_LLM_PROVIDER", "ollama").strip().lowe
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
 MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "")
+MODEL_REGISTRY_NAME = os.environ.get("MODEL_REGISTRY_NAME", "ClimateTemperatureModel")
+MODEL_ALIAS = os.environ.get("MODEL_ALIAS", "champion")
 RAG_PROMPT_NAME = "rag-system-prompt"
 RAG_PROMPT_ALIAS = "champion"
 
@@ -792,14 +794,25 @@ def _answer_forecast_question(question: str, output_dir: Path) -> dict | None:
             except ValueError:
                 pass
 
-    model_path = output_dir / 'climate' / 'climate_model.pth'
-    if not model_path.exists():
-        return None
-
     try:
-        model = ClimateModel()
-        model.load_state_dict(_torch.load(str(model_path), weights_only=True))
-        model.eval()
+        model = None
+        if _mlflow_available and MLFLOW_TRACKING_URI:
+            try:
+                _mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+                model = _mlflow.pytorch.load_model(
+                    f'models:/{MODEL_REGISTRY_NAME}@{MODEL_ALIAS}'
+                )
+                model.eval()
+            except Exception:
+                model = None
+
+        if model is None:
+            model_path = output_dir / 'climate' / 'climate_model.pth'
+            if not model_path.exists():
+                return None
+            model = ClimateModel()
+            model.load_state_dict(_torch.load(str(model_path), weights_only=True))
+            model.eval()
     except Exception:
         return None
 
@@ -875,7 +888,7 @@ def _answer_with_ollama(question: str, matches: list[dict]) -> str | None:
     context_lines = []
     for idx, match in enumerate(matches, start=1):
         context_lines.append(
-            f"[{idx}] {match['title']} ({match['source']})\n{match['text']}"
+            f"[{idx}] {match['title']} ({match['source']})\n{match['text'][:600]}"
         )
     context = "\n\n".join(context_lines)
 
@@ -894,11 +907,12 @@ def _answer_with_ollama(question: str, matches: list[dict]) -> str | None:
     )
 
     try:
-        with request.urlopen(req, timeout=45) as resp:
+        with request.urlopen(req, timeout=120) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         text = (data.get("response") or "").strip()
         return text or None
-    except (error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+    except (error.URLError, TimeoutError, json.JSONDecodeError, OSError) as _e:
+        print(f"[ollama] failed: {_e}")
         return None
 
 
@@ -934,9 +948,17 @@ def answer_question(question: str, output_dir: Path, top_k: int = 3) -> dict:
             answer = llm_answer
 
     if not answer:
-        snippets = [first_sentences(match["text"], limit=1) for match in matches[:2]]
-        snippets = [snippet for snippet in snippets if snippet]
-        answer = "Based on retrieved DAG outputs, " + " ".join(snippets)
+        # Build a readable structured answer from the top matches
+        lines = []
+        for match in matches[:3]:
+            title = match.get("title", "")
+            text = match.get("text", "").strip()
+            if text:
+                lines.append(f"**{title}**: {first_sentences(text, limit=2)}")
+        if lines:
+            answer = "\n\n".join(lines)
+        else:
+            answer = "No relevant pipeline artifacts were available for this question."
 
     interpretation = _interpret_answer(answer)
     return {

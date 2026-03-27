@@ -49,12 +49,26 @@ def main() -> int:
         f"max_abs_z={max_abs_z:.3f}",
     )
 
+    failure: str | None = None
     if years_included != args.expected_years:
-        raise SystemExit(f"Expected {args.expected_years} {month_name} rows, found {years_included}")
-    if min_days < args.min_days:
-        raise SystemExit(f"At least one {month_name} slice is too sparse: min days = {min_days}")
-    if max_abs_z > args.max_abs_z:
-        raise SystemExit(f"{month_name} anomaly z-score {max_abs_z:.3f} exceeds threshold {args.max_abs_z:.3f}")
+        failure = f"Expected {args.expected_years} {month_name} rows, found {years_included}"
+    elif min_days < args.min_days:
+        failure = f"At least one {month_name} slice is too sparse: min days = {min_days}"
+    elif max_abs_z > args.max_abs_z:
+        failure = f"{month_name} anomaly z-score {max_abs_z:.3f} exceeds threshold {args.max_abs_z:.3f}"
+
+    _log_quality_gate_to_mlflow(
+        passed=(failure is None),
+        month_name=month_name,
+        years_included=years_included,
+        min_days=min_days,
+        max_abs_z=max_abs_z,
+        annual=annual,
+        failure_reason=failure,
+    )
+
+    if failure:
+        raise SystemExit(failure)
 
     print(f"Vilnius {month_name} quality gate passed.")
     return 0
@@ -62,3 +76,32 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+def _log_quality_gate_to_mlflow(passed: bool, month_name: str, years_included: int,
+                                  min_days: int, max_abs_z: float,
+                                  annual, failure_reason=None) -> None:
+    """Log Vilnius quality gate result to MLflow."""
+    import os
+    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "")
+    if not tracking_uri:
+        return
+    try:
+        import mlflow
+        month_slug = month_name.lower()
+        mlflow.set_tracking_uri(tracking_uri)
+        mlflow.set_experiment("vilnius-temperature-analysis")
+        with mlflow.start_run(
+            run_name=f"vilnius-{month_slug}-quality-gate",
+            tags={"type": "quality_gate", "dag": "vilnius_march_temperature", "month": month_slug},
+        ):
+            mlflow.log_metrics({
+                "passed":          float(passed),
+                "years_included":  float(years_included),
+                "min_days":        float(min_days),
+                "max_abs_z":       max_abs_z,
+            })
+            mlflow.log_table(data=annual.to_dict(orient="list"),
+                             artifact_file=f"vilnius_{month_slug}_gate_dataset.json")
+        print("[mlflow] vilnius quality gate logged")
+    except Exception as exc:
+        print(f"[mlflow] WARNING: failed to log: {exc}")
