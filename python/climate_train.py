@@ -39,6 +39,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.optim.lr_scheduler as lr_scheduler
 
 from model import ClimateModel
 
@@ -72,6 +73,7 @@ def train(
 
     model = ClimateModel(dropout=0.1)
     optimizer = optim.Adam(model.parameters(), lr=lr)
+    scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr * 0.01)
     criterion = nn.MSELoss()
     input_example = df[['sin_doy', 'cos_doy', 'year_norm']].head(5).copy()
 
@@ -108,8 +110,11 @@ def train(
                 epoch_loss += loss.item() * xb.size(0)
 
             epoch_loss /= X_t.size(0)
-            if mlflow is not None:
+            scheduler.step()
+            # Skip epoch 1: random-init spike inflates Y-axis and obscures real convergence
+            if mlflow is not None and epoch > 1:
                 mlflow.log_metric('mse', epoch_loss, step=epoch)
+                mlflow.log_metric('lr', scheduler.get_last_lr()[0], step=epoch)
             metrics.append({'epoch': epoch, 'mse': epoch_loss})
 
         os.makedirs(os.path.dirname(model_path) or '.', exist_ok=True)

@@ -50,7 +50,7 @@ def main() -> None:
         pv = client.create_prompt_version(
             name=PROMPT_NAME,
             template=RAG_PROMPT_TEMPLATE,
-            commit_message="Initial RAG system prompt",
+            description="Initial RAG system prompt",
             tags={"llm": "llama3.2:3b"},
         )
         version = pv.version
