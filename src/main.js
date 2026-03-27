@@ -717,6 +717,13 @@ function renderRagDemo(d) {
     answer.textContent = item.answer;
     card.appendChild(answer);
 
+    if (item.interpretation) {
+      const interp = document.createElement("p");
+      interp.className = "rag-interpretation";
+      interp.textContent = item.interpretation;
+      card.appendChild(interp);
+    }
+
     const sources = document.createElement("div");
     sources.className = "rag-sources";
     (item.sources || []).forEach((source) => {
