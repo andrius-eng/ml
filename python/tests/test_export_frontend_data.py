@@ -16,6 +16,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from rag_pipeline import DEFAULT_QUESTIONS
+
 # ── fixtures ──────────────────────────────────────────────────────────────
 
 MARCH_CSV = """\
@@ -157,4 +159,4 @@ class TestExportFrontendData:
         self._run_export(pipeline_output_dir, dest)
         data = json.loads(dest.read_text())
         assert data["rag_demo"]["corpus_size"] >= 4
-        assert len(data["rag_demo"]["questions"]) == 3
+        assert len(data["rag_demo"]["questions"]) == len(DEFAULT_QUESTIONS)
