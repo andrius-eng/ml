@@ -920,7 +920,10 @@ async function submitRagQuestion(question) {
       : "";
 
     const sourcesHtml = (result.sources || [])
-      .map((s) => `<span>${formatSource(s)}${s.score != null ? ` (${s.score.toFixed(2)})` : ""}</span>`)
+      .map(
+        (s) =>
+          `<span>${formatSource(s)}${s.score != null ? ` (${s.score.toFixed(2)})` : ""}</span>`,
+      )
       .join("");
 
     resultDiv.innerHTML = `
@@ -933,7 +936,11 @@ async function submitRagQuestion(question) {
       <div class="rag-sources">${sourcesHtml}</div>
     `;
   } catch (err) {
-    if (err.message.includes("502") || err.message.includes("503") || err.message.includes("Failed to fetch")) {
+    if (
+      err.message.includes("502") ||
+      err.message.includes("503") ||
+      err.message.includes("Failed to fetch")
+    ) {
       resultDiv.innerHTML =
         '<p style="color:var(--muted)">RAG API is not running. Start the serve container or run:<br><code>uv run uvicorn --app-dir python serve:app --host 127.0.0.1 --port 8000</code></p>';
     } else {
