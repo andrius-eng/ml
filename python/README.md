@@ -20,29 +20,63 @@ uv run python python/<script>.py
 
 ### Shared foundations
 
-- model.py: model classes and synthetic data helpers
+- model.py: `ClimateModel` — residual MLP with `input_dim` parameter (default 3,
+  expands to up to 8 when weather features are present). Uses `BatchNorm1d`, a
+  skip connection, and configurable dropout.
 - metrics.py: lightweight metrics used by evaluators
 
 ### Climate model pipeline
 
-- climate_data.py: feature engineering and train test split
-- climate_train.py: train PyTorch model and write metrics
-- climate_evaluate.py: evaluate held-out set and write summary json
+- climate_data.py: feature engineering and train/test split. Always emits three
+  temporal features (`sin_doy`, `cos_doy`, `year_norm`). Adds up to five
+  weather-derived features when the source CSV includes the corresponding
+  columns: `precip_log1p`, `snow_log1p`, `sunshine_frac_day`, `wind_norm`,
+  `et0_norm`. Writes `python/output/climate/feature_columns.json` (ordered list)
+  and `python/output/climate/feature_defaults.json` (per-feature training means
+  for inference fallback).
+- climate_train.py: reads feature columns dynamically from the CSV header;
+  instantiates `ClimateModel(input_dim=len(feature_cols))`; logs `features` param
+  to MLflow as a comma-separated list.
+- climate_evaluate.py: reads feature columns from the test CSV header;
+  instantiates `ClimateModel(input_dim=len(feature_cols))` before loading the
+  state dict — must match the `input_dim` used at training time.
 - plot.py: training curve plot
 - diagnostics.py: residual and parity plot
 - quality_gate.py: threshold validation for climate model outputs
 
 ### Lithuania weather pipeline
 
-Note on HDD: Eurostat publishes monthly heating degree day data with a lag, so `eurostat_fetch.py` now reports the latest published full year / heating season instead of returning zeros for the current year.
+Note on HDD: Eurostat publishes monthly heating degree day data with a lag, so
+`eurostat_fetch.py` now reports the latest published full year / heating season
+instead of returning zeros for the current year.
 
-- weather_common.py: shared fetch and anomaly utilities
-- weather_fetch.py: fetch daily weather data
-- weather_analyze.py: build summaries and anomaly artifacts
+- weather_common.py: shared fetch and anomaly utilities. Computes country-level
+  YTD aggregates for snowfall, sunshine duration, wind speed max, and
+  evapotranspiration (ET₀) in addition to temperature and precipitation.
+- weather_fetch.py: incremental fetch with baseline protection. Loads the
+  existing CSV, fetches only the delta since the last stored date, then merges.
+  If the new fetch returns fewer than 180 days (e.g. API rate-limit / 429
+  fallback), it is merged on top of the historical baseline rather than
+  overwriting it. A final guard refuses to write any result covering fewer than
+  5 years of data.
+- weather_analyze.py: builds summaries and anomaly artifacts. Logs extended
+  MLflow metrics to the `weather-analysis` experiment: `ytd_total_snowfall_cm`,
+  `ytd_total_sunshine_h`, `ytd_mean_wind_kmh`, `ytd_total_et0_mm`,
+  `trend_direction`, plus existing temperature/precipitation metrics.
 - weather_plot.py: render charts
-- weather_quality_gate.py: validate data quality thresholds
+- weather_quality_gate.py: validates data quality thresholds. NaN z-scores (when
+  the historical baseline is absent) are treated as warnings rather than
+  failures. Logs a separate MLflow run (type `quality_gate`) in the
+  `weather-analysis` experiment with `n_extreme_temp_months` and
+  `n_extreme_precip_months` metrics.
 - eurostat_fetch.py: fetch monthly heating degree days from Eurostat
-- beam_analysis.py: generate regional month-by-month anomaly matrices for the dashboard heatmap
+- beam_analysis.py: Beam pipeline for regional month-by-month anomaly matrices
+  (dashboard heatmap). Uses `CalendarMonthWindowFn` (custom `WindowFn`) to
+  window records into calendar months and `TagWindowFn` (DoFn with `WindowParam`)
+  to annotate each element with its year/month label.
+  `get_window_coder()` returns `IntervalWindowCoder` imported directly from
+  `apache_beam.coders.coders` — the symbol is not re-exported via
+  `apache_beam.coders` in Beam ≥ 2.63.
 
 ### Vilnius March anomaly pipeline
 

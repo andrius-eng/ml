@@ -43,12 +43,13 @@ def evaluate(
     summary_path: str | None = None,
     predictions_path: str | None = None,
 ) -> dict:
-    model = ClimateModel()
+    df = pd.read_csv(test_path)
+    feature_cols = [c for c in df.columns if c != 'y']
+    model = ClimateModel(input_dim=len(feature_cols))
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model.eval()
 
-    df = pd.read_csv(test_path)
-    X = df[['sin_doy', 'cos_doy', 'year_norm']].to_numpy(dtype=np.float32)
+    X = df[feature_cols].to_numpy(dtype=np.float32)
     y_true = df['y'].to_numpy(dtype=np.float32)
 
     with torch.no_grad():

@@ -53,32 +53,72 @@ def main() -> None:
         default=60,
         help="Do not fetch if cached data is newer than this many minutes",
     )
+    parser.add_argument(
+        "--min-years-required",
+        type=int,
+        default=30,
+        help="Minimum distinct year coverage required in cache before baseline is considered healthy",
+    )
+    parser.add_argument(
+        "--force-full-fetch",
+        action="store_true",
+        help="Ignore incremental delta logic and fetch full start-date -> end-date window",
+    )
     args = parser.parse_args()
 
     output_path = Path(args.output)
+    age_minutes: float | None = None
     if output_path.exists():
         age_secs = time.time() - output_path.stat().st_mtime
         age_minutes = age_secs / 60.0
+
+    if output_path.exists() and not args.force_full_fetch:
+        assert age_minutes is not None
         if age_minutes <= args.cache_minutes:
-            print(f"Using cached weather file {output_path} ({age_minutes:.1f} minutes old)")
-            return
+            try:
+                cached = pd.read_csv(output_path)
+                years_present = pd.to_datetime(cached["time"]).dt.year.nunique()
+            except Exception as exc:
+                years_present = 0
+                print(f"WARNING: failed to validate cache coverage ({exc}); forcing fetch")
+            if years_present >= args.min_years_required:
+                print(
+                    f"Using cached weather file {output_path} "
+                    f"({age_minutes:.1f} minutes old, {years_present} years)"
+                )
+                return
+            print(
+                f"Cache too short ({years_present} years < {args.min_years_required}); "
+                "forcing historical backfill"
+            )
 
     # Load existing data so we can do an incremental merge and protect the baseline.
     existing: pd.DataFrame | None = None
     existing_start: str = args.start_date
-    if output_path.exists():
+    if output_path.exists() and not args.force_full_fetch:
         try:
             existing = pd.read_csv(output_path)
-            last_date = pd.to_datetime(existing["time"]).max().date().isoformat()
-            # Only fetch data we don't already have.
-            from datetime import date as _date, timedelta
-            next_day = (_date.fromisoformat(last_date) + timedelta(days=1)).isoformat()
-            existing_start = next_day
-            print(f"Existing data through {last_date}; fetching delta {next_day} -> {args.end_date}")
+            existing_years = pd.to_datetime(existing["time"]).dt.year.nunique()
+            if existing_years < args.min_years_required:
+                print(
+                    f"Existing cache only has {existing_years} years; "
+                    "refetching full history"
+                )
+                existing = None
+                existing_start = args.start_date
+            else:
+                last_date = pd.to_datetime(existing["time"]).max().date().isoformat()
+                # Only fetch data we don't already have.
+                from datetime import date as _date, timedelta
+                next_day = (_date.fromisoformat(last_date) + timedelta(days=1)).isoformat()
+                existing_start = next_day
+                print(f"Existing data through {last_date}; fetching delta {next_day} -> {args.end_date}")
         except Exception as exc:
             print(f"WARNING: could not read existing CSV ({exc}); will do full fetch")
             existing = None
             existing_start = args.start_date
+    elif args.force_full_fetch:
+        print("Force full fetch requested; rebuilding full historical window")
 
     if existing_start > args.end_date:
         print(f"Data already up to date through {args.end_date}; nothing to fetch.")
@@ -121,9 +161,19 @@ def main() -> None:
 
     # Final guard: never write a CSV that loses the historical baseline.
     years_present = pd.to_datetime(raw_daily["time"]).dt.year.nunique()
-    if existing is not None and years_present < 5:
-        print(f"WARNING: merged result has only {years_present} years — keeping existing file to protect baseline")
-        return
+    if years_present < args.min_years_required:
+        if existing is not None:
+            existing_years = pd.to_datetime(existing["time"]).dt.year.nunique()
+            if existing_years >= args.min_years_required:
+                print(
+                    f"WARNING: fetched result has only {years_present} years; "
+                    f"keeping existing baseline with {existing_years} years"
+                )
+                return
+        raise RuntimeError(
+            f"Historical baseline unavailable: fetched data spans only {years_present} years "
+            f"(required >= {args.min_years_required}). Archive API likely rate-limited (429)."
+        )
 
     ensure_parent(args.output)
     raw_daily.to_csv(args.output, index=False)

@@ -65,17 +65,18 @@ def train(
         mlflow.set_experiment('climate-temperature-model')
 
     df = pd.read_csv(train_path)
-    X = df[['sin_doy', 'cos_doy', 'year_norm']].to_numpy(dtype=np.float32)
+    feature_cols = [c for c in df.columns if c != 'y']
+    X = df[feature_cols].to_numpy(dtype=np.float32)
     y = df['y'].to_numpy(dtype=np.float32).reshape(-1, 1)
 
     X_t = torch.from_numpy(X)
     y_t = torch.from_numpy(y)
 
-    model = ClimateModel(dropout=0.1)
+    model = ClimateModel(input_dim=len(feature_cols), dropout=0.1)
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr * 0.01)
     criterion = nn.MSELoss()
-    input_example = df[['sin_doy', 'cos_doy', 'year_norm']].head(5).copy()
+    input_example = df[feature_cols].head(5).copy()
 
     run_ctx = mlflow.start_run(run_name='train-climate-model') if mlflow is not None else nullcontext()
     with run_ctx as active_run:
@@ -84,7 +85,7 @@ def train(
                 'epochs': epochs,
                 'lr': lr,
                 'batch_size': batch_size,
-                'features': 'sin_doy,cos_doy,year_norm',
+                'features': ','.join(feature_cols),
                 'dataset': 'ERA5-Lithuania-country-daily',
                 'train_rows': len(df),
             })

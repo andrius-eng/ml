@@ -18,7 +18,7 @@ PyTorch training, Qdrant-backed retrieval, and a live dashboard.
 | Data | Open-Meteo ERA5 reanalysis · Eurostat HDD |
 | Distributed processing | Apache Beam 2.71.0 · PortableRunner → Flink 1.20.1 |
 | Local processing | Python 3.11, pandas, numpy |
-| Modeling | PyTorch, MLflow-skinny |
+| Modeling | PyTorch, MLflow-skinny · ClimateModel dynamic input_dim (3–8 features) |
 | LLM fine-tuning | distilgpt2 + LoRA (PEFT), 68 SFT examples |
 | Retrieval | Qdrant local store + lightweight TF-IDF |
 | Frontend | Vite/nginx, vanilla JS, Chart.js |
@@ -150,8 +150,24 @@ Current DAG IDs:
 - The live dashboard served through Docker uses the frontend nginx proxy for
   `/api/*` requests. If `ml-server` is restarted, nginx now re-resolves Docker
   DNS automatically so RAG queries keep working without a manual frontend restart.
-
-Each DAG ends with refresh_rag_context to rebuild retrieval context from latest
+- The weather pipeline logs extended MLflow metrics beyond temperature: YTD
+  snowfall (cm), sunshine hours, mean wind speed (km/h), and evapotranspiration
+  (ET₀ mm). A separate `quality_gate` run is also logged per pipeline execution
+  with pass/fail status and monthly anomaly counts.
+- `weather_fetch.py` protects the 1991–2020 baseline with an incremental merge
+  strategy: only the delta since the last stored date is fetched; if the API
+  returns fewer than 180 days (e.g. after a 429 rate-limit), the result is merged
+  rather than overwriting the historical CSV. A final guard never writes a file
+  with fewer than five years of data.
+- `ClimateModel` now accepts a dynamic `input_dim` (default 3). When the weather
+  CSV includes snowfall, sunshine, wind, and ET₀ columns, `climate_data.py`
+  engineers up to 5 additional features and writes `feature_columns.json` and
+  `feature_defaults.json` to `python/output/climate/`. Training and evaluation
+  both read from these manifests rather than hardcoding the column list.
+- `beam_analysis.py` imports `IntervalWindowCoder` directly from
+  `apache_beam.coders.coders` — the symbol is not re-exported via
+  `apache_beam.coders` in Beam ≥ 2.63 and attempting the short form raises
+  `AttributeError` at pipeline submission time.
 pipeline artifacts.
 
 ## Quick Start
@@ -587,6 +603,89 @@ GitHub Actions workflows:
 - ERA5 is reanalysis data on a 0.25 degree grid. For publication-quality
   climatology, cross-validate against Lithuanian Hydrometeorological Service
   station records.
+
+## Roadmap — High-Value Implementations
+
+Items below are not yet implemented. Each would add real operational value with
+relatively contained scope.
+
+### 1. Trend direction metric (Mann-Kendall)
+
+`weather_analyze.py` logs `trend_direction` to MLflow but currently always emits
+`0.0`. Replace the placeholder with a proper non-parametric Mann-Kendall test on
+the rolling 30-day temperature anomaly series. The sign (+1 / -1) and p-value
+give a statistically defensible warming/cooling signal for the RAG narrative.
+Candidate library: `pymannkendall` (pure-Python, no heavy deps).
+
+### 2. Tomorrow-temperature inference via feature_defaults.json
+
+`serve.py` currently answers `/predict` with synthetic temporal features only.
+Now that the model accepts up to 8 features and `feature_defaults.json` exists,
+the endpoint can:
+1. Fetch today's weather from Open-Meteo forecast API (lightweight, no 429 risk).
+2. Engineer `precip_log1p`, `snow_log1p`, etc. from the response.
+3. Fall back to `feature_defaults.json` for any missing column.
+4. Run inference with `ClimateModel` loaded from the MLflow model registry.
+
+This turns the predict endpoint from a demo into an actual day-ahead forecast.
+
+### 3. Threshold-based alerting from quality gate
+
+`weather_quality_gate.py` logs to MLflow but never alerts anyone. Wire the
+`passed=False` path to an alerting backend:
+- **Airflow email**: set `email_on_failure=True` and configure SMTP in `airflow.cfg`.
+- **Slack webhook**: one `requests.post` call using a secret from Airflow Variables.
+- **PagerDuty / OpsGenie**: for production SLA requirements.
+
+The gate already computes the signal — it just needs a delivery mechanism.
+
+### 4. MLflow model registry promotion gate
+
+`climate_train.py` logs the model to MLflow but never promotes it to
+`Staging` or `Production`. Add a post-training step in `train_dag.py`:
+```python
+# after quality_gate passes:
+client.transition_model_version_stage(name, version, "Production")
+```
+Then `serve.py` loads `models:/ClimateModel/Production` rather than a hardcoded
+run-ID path. This enables zero-downtime model rollbacks via `mlflow models serve`.
+
+### 5. RAG answer quality gate
+
+Each `/rag/query` response includes a `score` from TF-IDF cosine similarity.
+Add a minimum threshold check (e.g. `score < 0.15 → "I don't have enough
+context"`) so the UI never renders confident-looking answers backed by
+near-zero retrieval quality. Implement as a middleware in `serve.py` before
+the Ollama call.
+
+### 6. Historical baseline auto-repair task
+
+When `weather_fetch.py` detects that the merged CSV covers fewer than 5 years,
+it currently refuses to write and logs a warning. Add a dedicated Airflow
+`backfill_weather_history` task that:
+1. Checks the year-span of the existing CSV.
+2. If < 10 years, attempts a paginated fetch of the WMO 1991–1995 … 2020 window
+   in 5-year chunks to avoid 429 rate limits.
+3. Merges and writes atomically (write to `.tmp`, then `os.replace`).
+
+This makes baseline restoration automatic after API outages rather than requiring
+manual intervention.
+
+### 7. Beam pipeline parallelism scaling
+
+`beam_regional_analysis` runs with `--parallelism 1` due to network-buffer
+exhaustion on a single TaskManager. To scale:
+- Add a second `flink-taskmanager` service in `docker-compose.full.yml`.
+- Raise `--parallelism` to match the total slot count.
+- Tune `taskmanager.network.memory.fraction` and `taskmanager.numberOfTaskSlots`
+  in `docker-compose.full.yml` `FLINK_PROPERTIES` to avoid buffer exhaustion.
+
+### 8. Vilnius March forecast: extend to April–May
+
+`vilnius_march_temperature_anomalies` only covers March. The same
+`fetch → analyze → quality_gate → beam` pattern can be replicated for April and
+May with a single parameterized DAG using Airflow's `@dag(params={"month": 3})`
+and a `month` parameter, reducing duplication to one DAG file.
 
 ## Troubleshooting
 

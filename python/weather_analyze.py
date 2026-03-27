@@ -230,11 +230,16 @@ def main() -> None:
     print(f"Saved city rankings to {args.city_rankings_output}")
     print(f"Saved markdown report to {args.report_output}")
 
-    _log_weather_to_mlflow(summary, city_summaries)
+    _log_weather_to_mlflow(summary, city_summaries, raw_df=raw, csv_path=args.raw_input)
 
 
-def _log_weather_to_mlflow(summary: dict, city_summaries: list[dict]) -> None:
-    """Log weather analysis results to MLflow: metrics + city dataset table."""
+def _log_weather_to_mlflow(
+    summary: dict,
+    city_summaries: list[dict],
+    raw_df=None,
+    csv_path: str = "",
+) -> None:
+    """Log weather analysis results + dataset lineage to MLflow."""
     import os
     tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "")
     if not tracking_uri:
@@ -276,6 +281,33 @@ def _log_weather_to_mlflow(summary: dict, city_summaries: list[dict]) -> None:
             if "ytd_total_et0_mm" in current_s:
                 _metrics["ytd_total_et0_mm"] = float(current_s["ytd_total_et0_mm"])
             mlflow.log_metrics(_metrics)
+
+            # --- Dataset lineage (DVC + MLflow Datasets) ---
+            if raw_df is not None:
+                import os as _os, yaml as _yaml
+                import mlflow.data
+                _dvc_file = csv_path + ".dvc" if csv_path else ""
+                _dvc_md5 = ""
+                if _dvc_file and _os.path.exists(_dvc_file):
+                    try:
+                        _meta = _yaml.safe_load(open(_dvc_file))
+                        _dvc_md5 = (_meta.get("outs") or [{}])[0].get("md5", "")
+                    except Exception:
+                        pass
+                _dataset = mlflow.data.from_pandas(
+                    raw_df,
+                    source=_os.path.abspath(csv_path) if csv_path else "unknown",
+                    name="raw_daily_weather",
+                    targets="temperature_2m_mean",
+                )
+                mlflow.log_input(_dataset, context="training")
+                if _dvc_md5:
+                    mlflow.set_tag("dvc.md5", _dvc_md5)
+                    mlflow.set_tag("dvc.file", _os.path.basename(_dvc_file))
+                mlflow.set_tag("dataset.rows", str(len(raw_df)))
+                mlflow.set_tag("dataset.min_date", str(raw_df["time"].min()) if "time" in raw_df.columns else "")
+                mlflow.set_tag("dataset.max_date", str(raw_df["time"].max()) if "time" in raw_df.columns else "")
+
             mlflow.log_table(
                 data={
                     "city":              [c.get("city", "") for c in city_summaries],

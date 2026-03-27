@@ -13,7 +13,10 @@ __pycache__/
 
 mlruns/
 python/mlruns/
-python/output/
+python/output/**
+!python/output/**/
+!python/output/**/*.dvc
+!python/output/**/.gitignore
 
 airflow/logs/
 airflow/.airflow/

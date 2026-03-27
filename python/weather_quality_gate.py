@@ -98,6 +98,8 @@ def main() -> int:
 
 def _log_quality_gate_to_mlflow(passed: bool, temp_z: float, precip_z: float,
                                   days: int, n_weak_months: int,
+                                  n_extreme_temp_months: int,
+                                  n_extreme_precip_months: int,
                                   monthly, failure_reason=None) -> None:
     """Log weather quality gate results to MLflow."""
     import os
