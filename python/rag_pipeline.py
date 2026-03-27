@@ -701,6 +701,72 @@ def _answer_month_comparison(question: str, output_dir: Path) -> dict | None:
     }
 
 
+def _answer_forecast_question(question: str, output_dir: Path) -> dict | None:
+    """Answer questions about tomorrow's or a specific date's forecast temperature.
+
+    Detects keywords like 'tomorrow', 'next week', or a specific date and runs
+    the trained ClimateModel directly to produce a prediction.
+    """
+    normalized = question.strip().lower()
+    # Only handle forecast-style questions
+    forecast_keywords = ('tomorrow', 'next week', 'forecast', 'predict', 'will it be', 'will the temp')
+    if not any(kw in normalized for kw in forecast_keywords):
+        return None
+
+    try:
+        import math as _math
+        import torch as _torch
+        from pathlib import Path as _Path
+        import sys as _sys
+        _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+        from model import ClimateModel
+    except Exception:
+        return None
+
+    # Determine target date
+    target_date = date.today() + __import__('datetime').timedelta(days=1)  # default: tomorrow
+    if 'next week' in normalized:
+        target_date = date.today() + __import__('datetime').timedelta(days=7)
+    else:
+        date_match = re.search(r'(\d{4})-(\d{2})-(\d{2})', question)
+        if date_match:
+            try:
+                target_date = date.fromisoformat(date_match.group(0))
+            except ValueError:
+                pass
+
+    # Load model from .pth file (no MLflow dependency here)
+    model_path = output_dir / 'climate' / 'climate_model.pth'
+    if not model_path.exists():
+        return None
+
+    try:
+        model = ClimateModel()
+        model.load_state_dict(_torch.load(str(model_path), weights_only=True))
+        model.eval()
+        doy = target_date.timetuple().tm_yday
+        sin_doy = _math.sin(2 * _math.pi * doy / 365)
+        cos_doy = _math.cos(2 * _math.pi * doy / 365)
+        year_norm = (target_date.year - 1991) / 30.0
+        x = _torch.tensor([[sin_doy, cos_doy, year_norm]], dtype=_torch.float32)
+        with _torch.no_grad():
+            temp = round(float(model(x).item()), 1)
+    except Exception:
+        return None
+
+    label = 'tomorrow' if target_date == date.today() + __import__('datetime').timedelta(days=1) else str(target_date)
+    return {
+        'question': question,
+        'answer': (
+            f'The climate model predicts {temp}°C for {label} ({target_date.isoformat()}) '
+            f'in Lithuania. This is a seasonal-trend estimate based on historical ERA5 data, '
+            f'not a live weather forecast — actual temperatures may differ by ±4–5°C.'
+        ),
+        'interpretation': f'Predicted mean temperature: {temp}°C',
+        'sources': [{'title': 'ClimateModel (PyTorch MLP)', 'source': 'climate/climate_model.pth', 'score': 1.0}],
+    }
+
+
 def _answer_with_ollama(question: str, matches: list[dict]) -> str | None:
     if not matches:
         return None
@@ -736,6 +802,10 @@ def _answer_with_ollama(question: str, matches: list[dict]) -> str | None:
 
 
 def answer_question(question: str, output_dir: Path, top_k: int = 3) -> dict:
+    deterministic = _answer_forecast_question(question, output_dir)
+    if deterministic is not None:
+        return deterministic
+
     deterministic = _answer_year_month_extreme(question, output_dir)
     if deterministic is not None:
         return deterministic

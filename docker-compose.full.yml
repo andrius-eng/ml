@@ -227,6 +227,7 @@ services:
       RAG_LLM_PROVIDER: ${RAG_LLM_PROVIDER:-ollama}
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      MLFLOW_TRACKING_URI: ${MLFLOW_TRACKING_URI:-http://mlflow:5000}
     volumes:
     - ..:/project:rw
     - dashboard-data:/project/src/data
