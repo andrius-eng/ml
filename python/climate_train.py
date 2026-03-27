@@ -44,6 +44,7 @@ from model import ClimateModel
 
 try:
     import mlflow
+    from mlflow.models import infer_signature
     import mlflow.pytorch
 except Exception:  # pragma: no cover - optional dependency path
     mlflow = None
@@ -72,6 +73,7 @@ def train(
     model = ClimateModel(dropout=0.1)
     optimizer = optim.Adam(model.parameters(), lr=lr)
     criterion = nn.MSELoss()
+    input_example = df[['sin_doy', 'cos_doy', 'year_norm']].head(5).copy()
 
     run_ctx = mlflow.start_run(run_name='train-climate-model') if mlflow is not None else nullcontext()
     with run_ctx as active_run:
@@ -114,10 +116,19 @@ def train(
         torch.save(model.state_dict(), model_path)
         if mlflow is not None:
             try:
+                model.eval()
+                with torch.no_grad():
+                    example_outputs = model(
+                        torch.from_numpy(input_example.to_numpy(dtype=np.float32))
+                    ).cpu().numpy()
+                signature = infer_signature(input_example, example_outputs)
+
                 # Log and register the pytorch model — populates the MLflow Models tab
                 mlflow.pytorch.log_model(
                     model,
                     artifact_path='model',
+                    input_example=input_example,
+                    signature=signature,
                     registered_model_name='ClimateTemperatureModel',
                 )
             except Exception as e:
