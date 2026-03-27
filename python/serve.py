@@ -24,11 +24,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from rag_pipeline import answer_question
 
 try:
-    from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
     from starlette.responses import Response as StarletteResponse
     _prometheus_available = True
 except ImportError:
     _prometheus_available = False
+
+try:
+    import mlflow
+    import mlflow.pytorch
+    from mlflow import MlflowClient
+    _mlflow_available = True
+except Exception:
+    mlflow = None
+    MlflowClient = None
+    _mlflow_available = False
+
+MLFLOW_TRACKING_URI = os.environ.get('MLFLOW_TRACKING_URI', '')
+MODEL_REGISTRY_NAME = 'ClimateTemperatureModel'
+MODEL_ALIAS = 'champion'
 
 ML_OUTPUT_DIR = Path(os.environ.get("ML_OUTPUT_DIR", "python/output"))
 
@@ -48,6 +62,16 @@ if _prometheus_available:
         "ml_server_forecasts_total",
         "Total /forecast calls",
     )
+    PREDICTION_TEMPERATURE = Histogram(
+        "ml_prediction_temperature_celsius",
+        "Distribution of predicted temperatures (°C)",
+        buckets=[-20, -15, -10, -5, 0, 5, 10, 15, 20, 25, 30, 35],
+    )
+    MODEL_VERSION_GAUGE = Gauge(
+        "ml_model_version_loaded",
+        "Currently loaded registered model version (0 = .pth fallback)",
+    )
+    MODEL_VERSION_GAUGE.set(0)
 
 
 class PredictionRequest(BaseModel):
@@ -76,14 +100,49 @@ class ForecastResponse(BaseModel):
 
 MODEL_PATH = ML_OUTPUT_DIR / 'climate' / 'climate_model.pth'
 _model_cache: ClimateModel | None = None
+_model_version: int = 0
 
 
 def get_model() -> ClimateModel | None:
-    global _model_cache
-    if _model_cache is None and MODEL_PATH.exists():
+    global _model_cache, _model_version
+    if _model_cache is not None:
+        return _model_cache
+
+    # Try loading @champion from MLflow registry first
+    if _mlflow_available and MLFLOW_TRACKING_URI:
+        try:
+            mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+            loaded = mlflow.pytorch.load_model(
+                f'models:/{MODEL_REGISTRY_NAME}@{MODEL_ALIAS}'
+            )
+            loaded.eval()
+            _model_cache = loaded
+            try:
+                alias_mv = MlflowClient().get_model_version_by_alias(
+                    MODEL_REGISTRY_NAME, MODEL_ALIAS
+                )
+                _model_version = int(alias_mv.version)
+            except Exception:
+                _model_version = -1
+            if _prometheus_available:
+                MODEL_VERSION_GAUGE.set(_model_version)
+            print(
+                f'Loaded {MODEL_REGISTRY_NAME} v{_model_version} '
+                f'from MLflow registry @{MODEL_ALIAS}'
+            )
+            return _model_cache
+        except Exception as _e:
+            print(f'WARNING: registry load failed ({_e}); falling back to .pth')
+
+    # Fallback: load from .pth file on disk
+    if MODEL_PATH.exists():
         _model_cache = ClimateModel()
         _model_cache.load_state_dict(torch.load(str(MODEL_PATH), weights_only=True))
         _model_cache.eval()
+        _model_version = 0
+        if _prometheus_available:
+            MODEL_VERSION_GAUGE.set(0)
+        print('Loaded model from .pth fallback')
     return _model_cache
 
 
@@ -138,9 +197,17 @@ def predict(req: PredictionRequest):
 
     x = torch.tensor([[req.sin_doy, req.cos_doy, req.year_norm]], dtype=torch.float32)
     with torch.no_grad():
-        temperature_c = model(x).item()
+        temperature_c = float(model(x).item())
 
-    return {'sin_doy': req.sin_doy, 'cos_doy': req.cos_doy, 'year_norm': req.year_norm, 'temperature_c': float(temperature_c)}
+    if _prometheus_available:
+        PREDICTION_TEMPERATURE.observe(temperature_c)
+
+    return {
+        'sin_doy': req.sin_doy,
+        'cos_doy': req.cos_doy,
+        'year_norm': req.year_norm,
+        'temperature_c': temperature_c,
+    }
 
 
 def _date_to_features(d: date) -> tuple[float, float, float]:
@@ -181,8 +248,10 @@ def forecast(
         sin_doy, cos_doy, year_norm = _date_to_features(d)
         x = torch.tensor([[sin_doy, cos_doy, year_norm]], dtype=torch.float32)
         with torch.no_grad():
-            temp = model(x).item()
-        results.append(ForecastDay(date=d.isoformat(), temperature_c=round(float(temp), 2)))
+            temp = float(model(x).item())
+        if _prometheus_available:
+            PREDICTION_TEMPERATURE.observe(temp)
+        results.append(ForecastDay(date=d.isoformat(), temperature_c=round(temp, 2)))
 
     return ForecastResponse(
         start_date=start_date.isoformat(),

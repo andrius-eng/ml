@@ -34,6 +34,44 @@ STOP_WORDS = {
 DEFAULT_LLM_PROVIDER = os.environ.get("RAG_LLM_PROVIDER", "ollama").strip().lower()
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
+MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "")
+RAG_PROMPT_NAME = "rag-system-prompt"
+RAG_PROMPT_ALIAS = "champion"
+
+try:
+    import mlflow as _mlflow
+    _mlflow_available = True
+except Exception:
+    _mlflow = None  # type: ignore[assignment]
+    _mlflow_available = False
+
+# Fallback template (matches what is registered in MLflow Prompts)
+_RAG_PROMPT_FALLBACK = (
+    "You are a climate dashboard assistant. Answer using only the provided context. "
+    "If the answer is not in context, say so briefly. Keep answer concise and factual.\n\n"
+    "Question: {question}\n\n"
+    "Context:\n{context}\n"
+)
+_rag_prompt_template: str | None = None
+
+
+def _get_rag_prompt() -> str:
+    """Return the RAG system prompt, loading from MLflow Prompts if available."""
+    global _rag_prompt_template
+    if _rag_prompt_template is not None:
+        return _rag_prompt_template
+    if _mlflow_available and MLFLOW_TRACKING_URI:
+        try:
+            _mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+            p = _mlflow.load_prompt(f"prompts:/{RAG_PROMPT_NAME}@{RAG_PROMPT_ALIAS}")
+            # MLflow uses {{var}} in templates; normalise to Python {var}
+            _rag_prompt_template = p.template.replace("{{question}}", "{question}").replace("{{context}}", "{context}")
+            print(f"Loaded RAG prompt from MLflow: {RAG_PROMPT_NAME}@{RAG_PROMPT_ALIAS}")
+            return _rag_prompt_template
+        except Exception as _e:
+            print(f"WARNING: could not load RAG prompt from MLflow ({_e}); using fallback")
+    _rag_prompt_template = _RAG_PROMPT_FALLBACK
+    return _rag_prompt_template
 
 
 def load_optional_json(path: Path) -> dict | list | None:
@@ -674,12 +712,7 @@ def _answer_with_ollama(question: str, matches: list[dict]) -> str | None:
         )
     context = "\n\n".join(context_lines)
 
-    prompt = (
-        "You are a climate dashboard assistant. Answer using only the provided context. "
-        "If the answer is not in context, say so briefly. Keep answer concise and factual.\n\n"
-        f"Question: {question}\n\n"
-        f"Context:\n{context}\n"
-    )
+    prompt = _get_rag_prompt().format(question=question, context=context)
 
     payload = {
         "model": OLLAMA_MODEL,

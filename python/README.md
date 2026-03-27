@@ -67,6 +67,16 @@ Note on HDD: Eurostat publishes monthly heating degree day data with a lag, so `
 - llama_prepare_sft.py: builds SFT jsonl files from DAG artifacts
 - llama_train_lora.py: trains LoRA adapter on the generated SFT dataset
 
+### Admin / one-off scripts (`scripts/`)
+
+These are not invoked by Airflow. Run manually from the project root.
+
+- scripts/register_mlflow_prompts.py: registers the RAG system prompt in the MLflow Prompt Registry and sets the `@champion` alias. Re-run whenever the prompt template changes.
+
+```bash
+MLFLOW_TRACKING_URI=http://localhost:5000 uv run python python/scripts/register_mlflow_prompts.py
+```
+
 ## Kubernetes Deployment
 
 In the Kubernetes setup, scripts run inside the Airflow containers that are
