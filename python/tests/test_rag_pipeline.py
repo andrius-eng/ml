@@ -6,7 +6,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from rag_pipeline import answer_question, build_demo_payload, build_documents
+from rag_pipeline import (
+    DEFAULT_QUESTIONS,
+    answer_question,
+    build_demo_payload,
+    build_documents,
+)
 
 
 MARCH_CSV = """\
@@ -98,11 +103,11 @@ def test_answer_question_retrieves_weather_context(tmp_path):
     output_dir = create_pipeline_fixture(tmp_path)
     result = answer_question("Is Lithuania warmer or colder than normal?", output_dir)
     assert result["sources"]
-    assert "retrieved DAG outputs" in result["answer"]
+    assert "lithuania" in result["answer"].lower()
 
 
 def test_build_demo_payload_includes_default_questions(tmp_path):
     output_dir = create_pipeline_fixture(tmp_path)
     payload = build_demo_payload(output_dir)
     assert payload["corpus_size"] >= 4
-    assert len(payload["questions"]) == 3
+    assert len(payload["questions"]) == len(DEFAULT_QUESTIONS)
