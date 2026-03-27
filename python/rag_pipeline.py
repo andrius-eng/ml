@@ -48,8 +48,12 @@ except Exception:
 
 # Fallback template (matches what is registered in MLflow Prompts)
 _RAG_PROMPT_FALLBACK = (
-    "You are a climate dashboard assistant. Answer using only the provided context. "
-    "If the answer is not in context, say so briefly. Keep answer concise and factual.\n\n"
+    "You are a climate dashboard assistant for Lithuania. "
+    "Answer using only the provided context. "
+    "When the context contains climate model forecast facts (baseline temperature, year-to-date bias, adjusted estimate), "
+    "explain the reasoning conversationally: what the historical average is, how this year is trending, "
+    "and what that implies for the estimate — like a knowledgeable friend, not a weather app.\n"
+    "If the answer is not in context, say so briefly. Keep the answer concise.\n\n"
     "Question: {question}\n\n"
     "Context:\n{context}\n"
 )
@@ -822,35 +826,45 @@ def _answer_forecast_question(question: str, output_dir: Path) -> dict | None:
     abs_recent = abs(recent_bias)
 
     if n_ytd >= 7:
-        reasoning = (
-            f"The climatological baseline for this date is {raw_pred_r}°C. "
-            f"However, looking at {target_date.year} so far ({n_ytd} days of observed data): "
-            f"this year has been running {abs_ytd:.1f}°C {ytd_sign} than the model expects overall, "
-            f"and {abs_recent:.1f}°C {recent_sign} over the most recent {n_recent} days. "
-            f"Applying that recent trend as a correction gives an adjusted estimate of {adjusted}°C."
+        facts = (
+            f"Climatological baseline for {target_date.isoformat()}: {raw_pred_r}°C\n"
+            f"Year-to-date ({n_ytd} days observed): {target_date.year} is running "
+            f"{abs_ytd:.1f}°C {ytd_sign} than the model expects.\n"
+            f"Most recent {n_recent}-day window: {abs_recent:.1f}°C {recent_sign} than expected.\n"
+            f"Bias-adjusted estimate for {label}: {adjusted}°C\n"
+            f"Note: this is a climatological trend estimate, not a live weather forecast."
         )
     else:
-        reasoning = (
-            f"The climatological baseline for this date is {raw_pred_r}°C. "
-            f"Insufficient {target_date.year} observations to compute a reliable trend correction."
+        facts = (
+            f"Climatological baseline for {target_date.isoformat()}: {raw_pred_r}°C\n"
+            f"Insufficient {target_date.year} observations to compute a reliable trend correction.\n"
+            f"Note: this is a climatological trend estimate, not a live weather forecast."
         )
         adjusted = raw_pred_r
 
+    sources = [
+        {'title': 'ClimateModel (PyTorch MLP)', 'source': 'climate/climate_model.pth', 'score': 1.0},
+        {'title': f'{target_date.year} daily observations', 'source': 'weather/country_daily_anomalies.csv', 'score': 1.0},
+    ]
+    interpretation = (
+        f"Baseline: {raw_pred_r}°C | YTD bias: {ytd_bias:+.1f}°C | "
+        f"Recent {n_recent}d bias: {recent_bias:+.1f}°C | Adjusted: {adjusted}°C"
+    )
+
+    # Pass the computed facts to Ollama so the MLflow prompt drives the wording
+    context_doc = [{'title': 'Climate model forecast context', 'source': 'climate_model + ERA5 observations', 'text': facts}]
+    llm_answer = _answer_with_ollama(question, context_doc) if DEFAULT_LLM_PROVIDER == "ollama" else None
+
+    answer = llm_answer or (
+        f"For {label} ({target_date.isoformat()}) in Lithuania: "
+        f"adjusted estimate {adjusted}°C (baseline {raw_pred_r}°C). {facts}"
+    )
+
     return {
         'question': question,
-        'answer': (
-            f"For {label} ({target_date.isoformat()}) in Lithuania: "
-            f"adjusted estimate {adjusted}°C (climatological baseline: {raw_pred_r}°C). "
-            f"{reasoning}"
-        ),
-        'interpretation': (
-            f"Baseline: {raw_pred_r}°C | YTD bias: {ytd_bias:+.1f}°C | "
-            f"Recent {n_recent}d bias: {recent_bias:+.1f}°C | Adjusted: {adjusted}°C"
-        ),
-        'sources': [
-            {'title': 'ClimateModel (PyTorch MLP)', 'source': 'climate/climate_model.pth', 'score': 1.0},
-            {'title': f'{target_date.year} daily observations', 'source': 'weather/country_daily_anomalies.csv', 'score': 1.0},
-        ],
+        'answer': answer,
+        'interpretation': interpretation,
+        'sources': sources,
     }
 
 
