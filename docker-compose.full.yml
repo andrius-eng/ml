@@ -5,23 +5,41 @@ services:
       dockerfile: docker/airflow/Dockerfile
     image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-airflow-custom:latest}
     entrypoint: /bin/bash
+    depends_on:
+      - redis
+    user: "0:0"
     command:
       - -c
       - |
         mkdir -p /opt/airflow/logs/dag_processor_manager
         chmod -R 777 /opt/airflow/logs
+        mkdir -p /opt/airflow/project/ml/python/output/weather \
+                 /opt/airflow/project/ml/python/output/climate \
+                 /opt/airflow/project/ml/python/output/vilnius_march \
+                 /opt/airflow/project/ml/python/output/beam
+        chmod -R 777 /opt/airflow/project/ml/python/output
+        mkdir -p /opt/airflow/project/mlruns
+        chmod -R 777 /opt/airflow/project/mlruns
         airflow db migrate
         airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true
     environment:
       BEAM_RUNNER: PortableRunner
       BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities
       MLFLOW_TRACKING_URI: http://mlflow:5000
+      ML_PROJECT_ROOT: /opt/airflow/project/ml
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
     volumes: &id001
     - airflow-data:/opt/airflow
     - ./airflow/dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ./plugins:/opt/airflow/plugins
-    - .:/opt/airflow/project
+    - ..:/opt/airflow/project
   airflow-webserver:
     image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-airflow-custom:latest}
     command: webserver
@@ -31,6 +49,14 @@ services:
       BEAM_RUNNER: PortableRunner
       BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities
       MLFLOW_TRACKING_URI: http://mlflow:5000
+      ML_PROJECT_ROOT: /opt/airflow/project/ml
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
     depends_on:
     - airflow-init
     volumes: *id001
@@ -50,6 +76,14 @@ services:
       BEAM_RUNNER: PortableRunner
       BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities
       MLFLOW_TRACKING_URI: http://mlflow:5000
+      ML_PROJECT_ROOT: /opt/airflow/project/ml
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
     volumes: *id001
     restart: unless-stopped
     networks:
@@ -75,7 +109,7 @@ services:
     command: taskmanager
     volumes:
       - beam-artifacts:/tmp/beam-artifact-staging
-      - ./python/output:/opt/airflow/project/python/output
+      - ../python/output:/opt/airflow/project/python/output
     environment:
       FLINK_PROPERTIES: 'jobmanager.rpc.address: flink-jobmanager
 
@@ -102,7 +136,7 @@ services:
     command: ["--worker_pool"]
     network_mode: "service:flink-taskmanager"
     volumes:
-      - ./python/output:/opt/airflow/project/python/output
+      - ../python/output:/opt/airflow/project/python/output
     depends_on:
       - flink-taskmanager
     restart: unless-stopped
@@ -155,7 +189,7 @@ services:
       DASHBOARD_WS_TOKEN: ${DASHBOARD_WS_TOKEN:-}
       POLL_INTERVAL_MS: ${POLL_INTERVAL_MS:-3600000}
     volumes:
-    - .:/project:rw
+    - ..:/project:rw
     - dashboard-data:/project/src/data
     depends_on:
     - airflow-scheduler
@@ -194,7 +228,7 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
     volumes:
-    - .:/project:rw
+    - ..:/project:rw
     - dashboard-data:/project/src/data
     restart: unless-stopped
     networks:
@@ -212,12 +246,54 @@ services:
     restart: unless-stopped
     networks:
     - default
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 5
+
+  airflow-worker:
+    image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-airflow-custom:latest}
+    command: celery worker
+    environment:
+      BEAM_RUNNER: PortableRunner
+      BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      ML_PROJECT_ROOT: /opt/airflow/project/ml
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+    volumes:
+    - airflow-data:/opt/airflow
+    - ./airflow/dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    - ..:/opt/airflow/project
+    depends_on:
+      - airflow-init
+      - redis
+    restart: unless-stopped
+    networks:
+      - default
+
   mlflow:
-    image: ghcr.io/mlflow/mlflow:v2.21.3
+    image: ghcr.io/mlflow/mlflow:v3.1.0
     command: >
       mlflow server
       --backend-store-uri /mlruns
-      --default-artifact-root /mlruns
+      --default-artifact-root mlflow-artifacts:/
+      --serve-artifacts
       --host 0.0.0.0
       --port 5000
     ports:
@@ -272,8 +348,11 @@ volumes:
     driver: local
   prometheus-data:
     driver: local
+  redis-data:
+    driver: local
   grafana-data:
     driver: local
 networks:
   default:
     name: ml-stack
+    external: true

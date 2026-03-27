@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+from contextlib import nullcontext
 
 import matplotlib
 
@@ -11,6 +13,25 @@ matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
 import pandas as pd
+
+try:
+    import mlflow
+except Exception:
+    mlflow = None
+
+
+def _resume_run(run_id_path: str):
+    if mlflow is None:
+        return nullcontext()
+    try:
+        with open(run_id_path) as _f:
+            run_id = _f.read().strip()
+        tracking_uri = os.environ.get('MLFLOW_TRACKING_URI', '')
+        if tracking_uri:
+            mlflow.set_tracking_uri(tracking_uri)
+        return mlflow.start_run(run_id=run_id)
+    except Exception:
+        return nullcontext()
 
 
 def main():
@@ -49,6 +70,15 @@ def main():
     fig.tight_layout()
     fig.savefig(args.output, dpi=150)
     print(f'Saved diagnostics plot to {args.output}')
+
+    # Log the plot to the shared MLflow run
+    run_id_path = os.path.join(os.path.dirname(args.predictions) or '.', 'mlflow_run_id.txt')
+    with _resume_run(run_id_path) as active_run:
+        if mlflow is not None and active_run is not None:
+            try:
+                mlflow.log_artifact(args.output, artifact_path='plots')
+            except Exception as e:
+                print(f'WARNING: could not log diagnostics plot to MLflow ({e})')
 
 
 if __name__ == '__main__':

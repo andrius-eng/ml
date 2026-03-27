@@ -587,3 +587,33 @@ GitHub Actions workflows:
 - ERA5 is reanalysis data on a 0.25 degree grid. For publication-quality
   climatology, cross-validate against Lithuanian Hydrometeorological Service
   station records.
+
+## Troubleshooting
+
+### Output directory permission errors (PermissionError: [Errno 13])
+
+**Symptom:** Airflow DAG tasks (`fetch_weather_data`, `prepare_climate_data`, etc.) fail with:
+```
+PermissionError: [Errno 13] Permission denied: '/opt/airflow/project/ml/python/output/weather/raw_daily_weather.csv'
+```
+
+**Cause:** The Airflow worker runs as UID 50000 (the `airflow` user inside the container). When output subdirectories are created by Docker containers (also UID 50000) or by root, the host user (`andrius`, UID 1000) cannot chmod them without sudo, and vice versa — the container cannot write to directories created by the host user with default `755` permissions.
+
+**Fix:** Run once after any fresh clone or after Docker creates new subdirectories:
+```bash
+sudo chmod -R 777 ~/Development/ml/python/output/
+sudo chmod -R 777 ~/Development/mlruns/
+```
+
+**Why `ml-stack` network ownership matters:** The `ml-stack` Docker network is created by whichever Compose project starts first. If `airflow/docker-compose.yml` starts before `docker-compose.full.yml`, the network is owned by the `airflow` project and the `ml` project containers get attached with no network. Fix is `external: true` in `docker-compose.full.yml`:
+```yaml
+networks:
+  default:
+    name: ml-stack
+    external: true
+```
+
+**ML_PROJECT_ROOT must be set:** The DAG scripts resolve the project root from `DAG_DIR.parents[1]` which resolves to `/opt` (not `/opt/airflow/project/ml`) because DAGs live at `/opt/airflow/dags`. Without `ML_PROJECT_ROOT`, all script and output paths are wrong. The env var is now set in all Airflow services in `docker-compose.full.yml`:
+```yaml
+ML_PROJECT_ROOT: /opt/airflow/project/ml
+```

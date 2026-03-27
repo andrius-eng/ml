@@ -4,7 +4,28 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+from contextlib import nullcontext
+
+try:
+    import mlflow
+except Exception:
+    mlflow = None
+
+
+def _resume_run(run_id_path: str):
+    if mlflow is None:
+        return nullcontext()
+    try:
+        with open(run_id_path) as _f:
+            run_id = _f.read().strip()
+        tracking_uri = os.environ.get('MLFLOW_TRACKING_URI', '')
+        if tracking_uri:
+            mlflow.set_tracking_uri(tracking_uri)
+        return mlflow.start_run(run_id=run_id)
+    except Exception:
+        return nullcontext()
 
 
 def main():
@@ -34,6 +55,13 @@ def main():
         raise SystemExit(f'R2 {r2:.6f} is below threshold {args.min_r2:.6f}')
 
     print('Quality gate passed.')
+
+    # Tag the MLflow run with the quality gate result
+    run_id_path = os.path.join(os.path.dirname(args.summary_json) or '.', 'mlflow_run_id.txt')
+    with _resume_run(run_id_path) as active_run:
+        if mlflow is not None and active_run is not None:
+            mlflow.set_tags({'quality_gate': 'passed', 'stage': 'ready'})
+
     return 0
 
 
