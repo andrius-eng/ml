@@ -53,12 +53,11 @@ instead of returning zeros for the current year.
 - weather_common.py: shared fetch and anomaly utilities. Computes country-level
   YTD aggregates for snowfall, sunshine duration, wind speed max, and
   evapotranspiration (ET₀) in addition to temperature and precipitation.
-- weather_fetch.py: incremental fetch with baseline protection. Loads the
-  existing CSV, fetches only the delta since the last stored date, then merges.
-  If the new fetch returns fewer than 180 days (e.g. API rate-limit / 429
-  fallback), it is merged on top of the historical baseline rather than
-  overwriting it. A final guard refuses to write any result covering fewer than
-  5 years of data.
+- weather_fetch.py: historical fetch with strict baseline protection.
+  Requires at least 30 years of coverage when `--min-years-required` is set
+  (default in DAG path), supports `--force-full-fetch`, and uses NASA POWER
+  fallback through `weather_common.py` when Open-Meteo archive endpoints return
+  429. Writes are blocked when minimum year coverage is not met.
 - weather_analyze.py: builds summaries and anomaly artifacts. Logs extended
   MLflow metrics to the `weather-analysis` experiment: `ytd_total_snowfall_cm`,
   `ytd_total_sunshine_h`, `ytd_mean_wind_kmh`, `ytd_total_et0_mm`,
@@ -71,12 +70,11 @@ instead of returning zeros for the current year.
   `n_extreme_precip_months` metrics.
 - eurostat_fetch.py: fetch monthly heating degree days from Eurostat
 - beam_analysis.py: Beam pipeline for regional month-by-month anomaly matrices
-  (dashboard heatmap). Uses `CalendarMonthWindowFn` (custom `WindowFn`) to
-  window records into calendar months and `TagWindowFn` (DoFn with `WindowParam`)
-  to annotate each element with its year/month label.
-  `get_window_coder()` returns `IntervalWindowCoder` imported directly from
-  `apache_beam.coders.coders` — the symbol is not re-exported via
-  `apache_beam.coders` in Beam ≥ 2.63.
+  (dashboard heatmap). The Flink-compatible path uses composite key grouping
+  (`(city, year, month)` + `GroupByKey`/`CombinePerKey`) rather than custom
+  Python `WindowFn` objects, which are not portable to Flink Java runtime.
+  `CalendarMonthWindowFn` and `TagWindowFn` remain in the file as reference-only
+  implementations for non-Flink experimentation.
 
 ### Vilnius March anomaly pipeline
 
