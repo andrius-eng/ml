@@ -119,6 +119,7 @@ with DAG(
             f'{project_python_command(str(PLOT_SCRIPT), "--metrics", str(METRICS_PATH), "--output", str(TRAINING_PLOT_PATH))}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+        append_env=True,
     )
 
     evaluate_model = BashOperator(
@@ -130,6 +131,7 @@ with DAG(
             f'{project_python_command(str(CLIMATE_EVALUATE_SCRIPT), "--model", str(MODEL_PATH), "--test-data", str(TEST_SET_PATH), "--summary-json", str(EVALUATION_PATH), "--predictions-csv", str(PREDICTIONS_PATH))}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+        append_env=True,
     )
 
     plot_diagnostics = BashOperator(
@@ -141,6 +143,7 @@ with DAG(
             f'{project_python_command(str(DIAGNOSTICS_SCRIPT), "--predictions", str(PREDICTIONS_PATH), "--output", str(DIAGNOSTICS_PLOT_PATH))}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+        append_env=True,
     )
 
     quality_gate = BashOperator(
@@ -153,6 +156,7 @@ with DAG(
             f'{project_python_command(str(QUALITY_GATE_SCRIPT), "--summary-json", str(EVALUATION_PATH), "--max-mse", "50.0", "--min-r2", "0.65")}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
+        append_env=True,
     )
 
     refresh_rag_context = BashOperator(

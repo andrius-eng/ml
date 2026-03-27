@@ -50,29 +50,58 @@ def check_flink_ready(**context):
         return False
 
 
-def run_script(script_path: Path, args: list, logger):
-    """Run a Python script with given arguments and capture output."""
+def run_script(script_path: Path, args: list, logger, timeout: int = 300):
+    """Run a Python script, streaming stdout/stderr to the task log in real time."""
     if not script_path.exists():
         raise FileNotFoundError(f"Script not found: {script_path}")
-    
-    cmd = [sys.executable, str(script_path)] + args
+
+    cmd = [sys.executable, "-u", str(script_path)] + args
     logger.info(f"Running: {' '.join(cmd)}")
-    
-    try:
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=300)
-        if result.stdout:
-            logger.info(result.stdout)
-        return None
-    except subprocess.TimeoutExpired as e:
-        logger.error(f"Script timeout after 300 seconds: {e}")
-        raise
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Script failed with exit code {e.returncode}")
-        if e.stdout:
-            logger.error(f"stdout: {e.stdout}")
-        if e.stderr:
-            logger.error(f"stderr: {e.stderr}")
-        raise
+
+    import select
+    import io
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+
+    stderr_lines = []
+    deadline = __import__("time").time() + timeout
+
+    while True:
+        remaining = deadline - __import__("time").time()
+        if remaining <= 0:
+            proc.kill()
+            proc.wait()
+            raise subprocess.TimeoutExpired(cmd, timeout)
+
+        ready, _, _ = select.select([proc.stdout, proc.stderr], [], [], min(remaining, 5.0))
+        for stream in ready:
+            line = stream.readline()
+            if not line:
+                continue
+            line = line.rstrip()
+            if stream is proc.stdout:
+                logger.info(line)
+            else:
+                stderr_lines.append(line)
+                logger.warning(line)
+
+        if proc.poll() is not None:
+            # Drain remaining output
+            for line in proc.stdout:
+                logger.info(line.rstrip())
+            for line in proc.stderr:
+                stderr_lines.append(line.rstrip())
+                logger.warning(line.rstrip())
+            break
+
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd)
 
 
 def resolve_analysis_end(context: dict, analysis_end: str | None = None):
@@ -106,6 +135,7 @@ def fetch_weather_data(**context):
         WEATHER_FETCH_SCRIPT,
         ["--start-date", "1991-01-01", "--end-date", execution_date, "--output", str(RAW_WEATHER_PATH)],    
         logger,
+        timeout=1800,
     )
 
 def analyze_weather_data(analysis_end=None, **context):

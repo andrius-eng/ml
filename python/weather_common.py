@@ -1,4 +1,29 @@
-"""Shared helpers for Lithuania weather analysis."""
+"""Shared helpers for Lithuania weather analysis.
+
+Provides city/region definitions, a dual-endpoint weather fetch function,
+and aggregation/climatology utilities used by all weather pipeline scripts.
+
+Weather fetch strategy
+-----------------------
+• Primary endpoint  : ``archive-api.open-meteo.com/v1/archive``
+  Full ERA5 history from 1940-onwards; subject to an hourly 10 000-call quota
+  (HTTP 429 when exhausted).
+
+• Fallback endpoint : ``api.open-meteo.com/v1/forecast?past_days=<N>``
+  Covers the most-recent ≤92 days; operates on a separate quota so it stays
+  available when the archive quota is exhausted.
+
+  Limitations of the fallback:
+  - Only the last 92 days are returned, not the full 1991-present history
+  - Use as a data-freshness safety-net while the archive 429 window resets
+
+Retry / backoff schedule (``fetch_daily_weather``)
+---------------------------------------------------
+  attempt 1-5:  try archive API
+  on 429      : immediately try forecast fallback; on fallback failure wait
+                60 × (attempt+1) seconds before next archive attempt
+  on other err: wait 2 × (attempt+1) seconds before retry
+"""
 
 from __future__ import annotations
 
@@ -31,28 +56,83 @@ REGION_CITIES = {
 }
 
 
+def _fetch_url(url: str, timeout: int = 60) -> dict:
+    """Fetch JSON from url and return the 'daily' key."""
+    with urlopen(url, timeout=timeout) as response:
+        return json.load(response)["daily"]
+
+
 def fetch_daily_weather(lat: float, lon: float, start: str, end: str) -> pd.DataFrame:
-    params = {
+    """Return a DataFrame of daily weather for a single lat/lon point.
+
+    Tries the open-meteo archive API first (full ERA5 history).  On an HTTP 429
+    it immediately falls back to the forecast API (last ≤92 days).  Up to five
+    attempts are made total, with exponential backoff between retries.
+
+    Parameters
+    ----------
+    lat, lon: float
+        WGS-84 coordinates of the location.
+    start, end: str
+        ISO-8601 date strings (``YYYY-MM-DD``) defining the requested range.
+        Note: the forecast fallback truncates to the last 92 days regardless of
+        ``start``.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns: ``time``, ``temperature_2m_mean``, ``temperature_2m_min``,
+        ``temperature_2m_max``, ``precipitation_sum``.  One row per calendar day.
+
+    Raises
+    ------
+    URLError / HTTPError
+        Re-raised after all five attempts are exhausted (both archive and
+        forecast fallback failed on every attempt).
+    """
+    common_params = {
         "latitude": lat,
         "longitude": lon,
-        "start_date": start,
-        "end_date": end,
         "daily": ["temperature_2m_mean", "temperature_2m_min", "temperature_2m_max", "precipitation_sum"],
         "timezone": "Europe/Vilnius",
     }
-    url = "https://archive-api.open-meteo.com/v1/archive?" + urlencode(params, doseq=True)
+    archive_url = "https://archive-api.open-meteo.com/v1/archive?" + urlencode(
+        {**common_params, "start_date": start, "end_date": end}, doseq=True
+    )
+    # Fallback: free forecast API supports up to 92 past days, no hourly quota
+    from datetime import date as _date, timedelta
+    past_days = (_date.today() - _date.fromisoformat(start)).days
+    past_days = min(past_days, 92)
+    forecast_url = "https://api.open-meteo.com/v1/forecast?" + urlencode(
+        {**common_params, "past_days": past_days, "forecast_days": 1}, doseq=True
+    )
+
+    last_exc = None
     for attempt in range(5):
         try:
-            with urlopen(url, timeout=60) as response:
-                payload = json.load(response)["daily"]
-            break
+            print(f"  [{attempt+1}/5] Trying archive API ...", flush=True)
+            payload = _fetch_url(archive_url)
+            return pd.DataFrame(payload)
         except (TimeoutError, URLError) as e:
+            last_exc = e
+            is_429 = isinstance(e, HTTPError) and e.code == 429
+            if is_429:
+                print(f"  [{attempt+1}/5] Archive API 429 — trying forecast fallback ...", flush=True)
+                try:
+                    payload = _fetch_url(forecast_url)
+                    print(f"  Forecast fallback OK ({past_days} past days)", flush=True)
+                    return pd.DataFrame(payload)
+                except Exception as fe:
+                    print(f"  Forecast fallback also failed: {fe}", flush=True)
             if attempt == 4:
-                raise
-            # Back off longer on rate-limit (429) responses
-            delay = 10 * (attempt + 1) if isinstance(e, HTTPError) and e.code == 429 else 2 * (attempt + 1)
+                raise last_exc
+            delay = 60 * (attempt + 1) if is_429 else 2 * (attempt + 1)
+            print(
+                f"  [{attempt+1}/5] failed: {e} -- retrying in {delay}s ...",
+                flush=True,
+            )
             time.sleep(delay)
-    return pd.DataFrame(payload)
+    raise last_exc
 
 
 def build_country_daily(raw_daily: pd.DataFrame, current_end: date) -> pd.DataFrame:

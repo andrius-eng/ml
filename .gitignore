@@ -18,6 +18,7 @@ python/output/
 airflow/logs/
 airflow/.airflow/
 airflow/airflow/
+logs/
 
 # Kubernetes secrets — never commit real credentials
 kubernetes/base/secrets.yaml

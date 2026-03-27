@@ -5,8 +5,23 @@ The model learns to predict daily mean temperature (°C) from three features:
   year_norm         — normalised year (long-term warming trend)
 
 Training data is the chronological training split produced by climate_data.py.
-If MLflow is installed, params and per-epoch MSE are logged; otherwise training
-runs without experiment tracking.
+
+MLflow integration
+------------------
+``mlflow>=3.0.0`` is required (listed in requirements-airflow-runtime.txt).
+
+* ``--tracking-uri`` must be an HTTP URL (e.g. ``http://mlflow:5000``).
+  A local file path ``./mlruns`` is the CLI default but will not work inside
+  a Docker worker container without a shared volume.
+* MLflow 3.x does **not** auto-create the default experiment (ID 0).
+  The experiment ``climate-temperature-model`` is created explicitly via
+  ``mlflow.set_experiment()`` before every run.
+* Training params and per-epoch MSE are always logged to MLflow when the
+  package is importable.
+* Artifact logging (model .pth file) is best-effort: it is wrapped in a
+  try/except because the artifact backend inside the MLflow server may be a
+  local path inaccessible from the Airflow worker container.  The model file
+  is always saved to ``--model-path`` regardless.
 
 Usage:
   python python/climate_train.py --epochs 100 --lr 0.001
@@ -29,6 +44,7 @@ from model import ClimateModel
 
 try:
     import mlflow
+    import mlflow.pytorch
 except Exception:  # pragma: no cover - optional dependency path
     mlflow = None
 
@@ -44,6 +60,7 @@ def train(
 ) -> None:
     if mlflow is not None:
         mlflow.set_tracking_uri(tracking_uri)
+        mlflow.set_experiment('climate-temperature-model')
 
     df = pd.read_csv(train_path)
     X = df[['sin_doy', 'cos_doy', 'year_norm']].to_numpy(dtype=np.float32)
@@ -57,7 +74,7 @@ def train(
     criterion = nn.MSELoss()
 
     run_ctx = mlflow.start_run(run_name='train-climate-model') if mlflow is not None else nullcontext()
-    with run_ctx:
+    with run_ctx as active_run:
         if mlflow is not None:
             mlflow.log_params({
                 'epochs': epochs,
@@ -67,6 +84,12 @@ def train(
                 'dataset': 'ERA5-Lithuania-country-daily',
                 'train_rows': len(df),
             })
+            mlflow.set_tags({'stage': 'training', 'framework': 'pytorch'})
+            # Write run_id so downstream tasks (evaluate, plot, quality_gate) can resume this run
+            run_id_path = os.path.join(os.path.dirname(model_path) or '.', 'mlflow_run_id.txt')
+            os.makedirs(os.path.dirname(run_id_path) or '.', exist_ok=True)
+            with open(run_id_path, 'w') as _f:
+                _f.write(active_run.info.run_id)
         metrics = []
         for epoch in range(1, epochs + 1):
             model.train()
@@ -90,7 +113,19 @@ def train(
         os.makedirs(os.path.dirname(model_path) or '.', exist_ok=True)
         torch.save(model.state_dict(), model_path)
         if mlflow is not None:
-            mlflow.log_artifact(model_path)
+            try:
+                # Log and register the pytorch model — populates the MLflow Models tab
+                mlflow.pytorch.log_model(
+                    model,
+                    artifact_path='model',
+                    registered_model_name='ClimateTemperatureModel',
+                )
+            except Exception as e:
+                print(f'WARNING: could not log pytorch model to MLflow ({e}); trying log_artifact fallback ...')
+                try:
+                    mlflow.log_artifact(model_path)
+                except Exception as e2:
+                    print(f'WARNING: artifact logging failed entirely ({e2}); model already saved to {model_path}')
 
         os.makedirs(os.path.dirname(metrics_path) or '.', exist_ok=True)
         with open(metrics_path, 'w', newline='') as f:
