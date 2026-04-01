@@ -23,9 +23,48 @@ PyTorch training, Qdrant-backed retrieval, and a live dashboard.
 | Retrieval | Qdrant local store + lightweight TF-IDF |
 | Frontend | Vite/nginx, vanilla JS, Chart.js |
 | Live updates | Node 20 WebSocket server + periodic export |
-| Deployment | Docker Compose · Kubernetes (Kustomize) · ArgoCD |
+| Deployment | Docker Compose · Kubernetes (Kustomize) · ArgoCD · MicroShift |
 | CI | GitHub Actions (build + stack-smoke) |
 
+## MicroShift local Kubernetes (edge)
+
+This project supports local edge-style Kubernetes with MicroShift. Use the helper in `openshift-at-home/install-okd.sh`.
+
+1. Ensure Docker is running.
+
+```bash
+cd /home/andrius/Development/openshift-at-home
+sudo bash install-okd.sh microshift
+```
+
+2. Confirm the cluster is healthy:
+
+```bash
+kubectl --insecure-skip-tls-verify get nodes
+kubectl --insecure-skip-tls-verify get pods -A
+```
+
+3. Apply the ml stack overlay:
+
+```bash
+kubectl apply -k /home/andrius/Development/ml/kubernetes/overlays/minikube
+```
+
+4. Track readiness:
+
+```bash
+kubectl get pods -n ml-stack -w
+kubectl get pvc -n ml-stack
+```
+
+5. (Optional) use MicroShift explicit kubeconfig:
+
+```bash
+export KUBECONFIG=/tmp/microshift-config
+kubectl get nodes
+```
+
+> Note: if you run k3s/kind/minikube concurrently, stop those clusters first to avoid 6443 port conflict.
 
 ## Architecture
 
@@ -73,6 +112,35 @@ graph TB
     ML --> QD & OLL
     WS --> FE
     ML --> FE
+```
+
+## 8GB Local Kubernetes Tuning
+
+If your host has 8GB RAM, apply lower resource profiles before bootstrapping the full stack:
+
+1. set `ollama` replica count to `0` in `kubernetes/base/dashboard.yaml` (it is heavy).
+2. reduce Flink and Beam CPU/memory in `kubernetes/base/flink-beam.yaml` (JM=250m/512Mi, TM=250m/512Mi, Beam=150m/256Mi).
+3. reduce Airflow components in `kubernetes/base/airflow.yaml` (web/scheduler 80m/200Mi limit 150m/300Mi).
+4. reduce mlflow resources in `kubernetes/base/mlflow.yaml` (60m/150Mi limit 300m/500Mi).
+
+Re-apply with:
+
+```bash
+kubectl apply -f kubernetes/base/pvcs.yaml
+kubectl apply -f kubernetes/base/airflow.yaml
+kubectl apply -f kubernetes/base/mlflow.yaml
+kubectl apply -f kubernetes/base/dashboard.yaml
+kubectl apply -f kubernetes/base/flink-beam.yaml
+kubectl get pods -n ml-stack -w
+```
+
+For debugging:
+
+```bash
+kubectl describe pod -n ml-stack <pod-name>
+kubectl logs -n ml-stack <pod-name>
+kubectl top node
+kubectl top pods -n ml-stack
 ```
 
 ## Data Flow
@@ -141,6 +209,11 @@ Current DAG IDs:
 - lithuania_weather_analysis
 - vilnius_march_temperature_anomalies
 - llama_dag_finetune (manual)
+
+Simplified overlap note:
+
+- `vilnius_march_temperature_anomalies` now reuses `python/output/weather/raw_daily_weather.csv` produced by `lithuania_weather_analysis` instead of running a second API fetch.
+- Run `lithuania_weather_analysis` first when starting from an empty workspace.
 
 ## Recent Dashboard Notes
 

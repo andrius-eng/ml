@@ -1,0 +1,71 @@
+{
+  "country": "LT",
+  "data_lag_months": 15,
+  "data_through": "2024-12",
+  "fetched_at": "2026-03-30",
+  "heating_season": {
+    "anomaly": -166.5,
+    "baseline_mean_1991_2020": 1393.9,
+    "label": "2024/25",
+    "months_included": 3,
+    "total_hdd": 1227.3
+  },
+  "recent_months": [
+    {
+      "hdd": 697.31,
+      "month": "2024-01"
+    },
+    {
+      "hdd": 456.27,
+      "month": "2024-02"
+    },
+    {
+      "hdd": 414.6,
+      "month": "2024-03"
+    },
+    {
+      "hdd": 271.14,
+      "month": "2024-04"
+    },
+    {
+      "hdd": 96.81,
+      "month": "2024-05"
+    },
+    {
+      "hdd": 29.93,
+      "month": "2024-06"
+    },
+    {
+      "hdd": 1.81,
+      "month": "2024-07"
+    },
+    {
+      "hdd": 0.24,
+      "month": "2024-08"
+    },
+    {
+      "hdd": 29.72,
+      "month": "2024-09"
+    },
+    {
+      "hdd": 284.54,
+      "month": "2024-10"
+    },
+    {
+      "hdd": 432.03,
+      "month": "2024-11"
+    },
+    {
+      "hdd": 510.75,
+      "month": "2024-12"
+    }
+  ],
+  "unit": "HDD",
+  "ytd": {
+    "anomaly": -668.5,
+    "baseline_mean_1991_2020": 3893.6,
+    "label": "Full year 2024",
+    "months": 12,
+    "total_hdd": 3225.2
+  }
+}

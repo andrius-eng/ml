@@ -33,11 +33,11 @@ spec:
               mountPath: /opt/flink/job-archives
           resources:
             requests:
-              cpu: 500m
-              memory: 1Gi
+              cpu: 100m
+              memory: 180Mi
             limits:
-              cpu: 2
-              memory: 2Gi
+              cpu: 200m
+              memory: 256Mi
       volumes:
         - name: job-archives
           persistentVolumeClaim:
@@ -77,11 +77,11 @@ spec:
               mountPath: /opt/airflow/project/python/output
           resources:
             requests:
-              cpu: 1
-              memory: 2Gi
+              cpu: 120m
+              memory: 512Mi
             limits:
-              cpu: 4
-              memory: 4Gi
+              cpu: 500m
+              memory: 1100Mi
         - name: beam-worker-pool
           image: apache/beam_python3.12_sdk:2.71.0
           args: ["--worker_pool"]
@@ -90,11 +90,11 @@ spec:
               mountPath: /opt/airflow/project/python/output
           resources:
             requests:
-              cpu: 500m
-              memory: 512Mi
+              cpu: 100m
+              memory: 128Mi
             limits:
-              cpu: 2
-              memory: 2Gi
+              cpu: 300m
+              memory: 256Mi
       volumes:
         - name: beam-artifacts
           persistentVolumeClaim:
@@ -135,11 +135,11 @@ spec:
               mountPath: /opt/flink/job-archives
           resources:
             requests:
-              cpu: 100m
-              memory: 256Mi
+              cpu: 80m
+              memory: 120Mi
             limits:
-              cpu: 500m
-              memory: 512Mi
+              cpu: 250m
+              memory: 256Mi
       volumes:
         - name: job-archives
           persistentVolumeClaim:
@@ -165,7 +165,7 @@ spec:
           image: apache/beam_flink1.20_job_server:2.71.0
           args:
             - "--flink-master=flink-jobmanager:8081"
-            - "--job-host=beam-job-server"
+            - "--job-host=0.0.0.0"
           ports:
             - containerPort: 8098
             - containerPort: 8099
@@ -174,11 +174,11 @@ spec:
               mountPath: /tmp/beam-artifact-staging
           resources:
             requests:
-              cpu: 250m
-              memory: 512Mi
+              cpu: 150m
+              memory: 256Mi
             limits:
-              cpu: 1
-              memory: 1Gi
+              cpu: 500m
+              memory: 512Mi
       volumes:
         - name: beam-artifacts
           persistentVolumeClaim:

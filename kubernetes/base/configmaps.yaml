@@ -10,6 +10,7 @@ data:
   AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
   AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: "300"
   AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth"
+  AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "admin:Admin"
   PYTHONWARNINGS: "ignore::SyntaxWarning"
   MLFLOW_TRACKING_URI: "http://mlflow:5000"
   ML_PROJECT_ROOT: "/opt/airflow/project"
@@ -26,11 +27,14 @@ data:
     jobmanager.rpc.address: flink-jobmanager
     jobmanager.archive.fs.dir: file:///opt/flink/job-archives
     taskmanager.host: flink-taskmanager
-    taskmanager.numberOfTaskSlots: 4
-    taskmanager.memory.network.fraction: 0.2
-    taskmanager.memory.network.min: 268435456
-    taskmanager.memory.network.max: 1073741824
-    env.java.opts.taskmanager: -XX:MaxDirectMemorySize=512m
+    taskmanager.numberOfTaskSlots: 2
+    taskmanager.memory.process.size: 900m
+    taskmanager.memory.managed.fraction: 0.1
+    taskmanager.memory.network.fraction: 0.1
+    taskmanager.memory.network.min: 67108864
+    taskmanager.memory.network.max: 134217728
+    taskmanager.memory.jvm-overhead.min: 67108864
+    env.java.opts.taskmanager: -XX:MaxDirectMemorySize=128m
     historyserver.web.address: 0.0.0.0
     historyserver.web.port: 8082
     historyserver.archive.fs.dir: file:///opt/flink/job-archives

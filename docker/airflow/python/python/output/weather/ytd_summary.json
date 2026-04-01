@@ -1,0 +1,62 @@
+{
+  "coverage": {
+    "baseline_years": [
+      1991,
+      2025
+    ],
+    "days_observed": 87,
+    "period": "01-01 to 03-28",
+    "proxy_cities": [
+      "Vilnius",
+      "Kaunas",
+      "Klaipeda",
+      "Siauliai",
+      "Panevezys"
+    ]
+  },
+  "current": {
+    "ytd_mean_temp": -40.59416091954023,
+    "ytd_mean_wind_kmh": -32.20940229885057,
+    "ytd_total_et0_mm": 1.846,
+    "ytd_total_precip": -2918.46,
+    "ytd_total_snowfall_cm": 0.08399999999999999,
+    "ytd_total_sunshine_h": 11.8
+  },
+  "current_year": 2026,
+  "expected": {
+    "precip_mean": 148.44474285714284,
+    "precip_std": 34.77752844814226,
+    "temp_mean": -2.7946688834154356,
+    "temp_std": 2.466652810862623
+  },
+  "precipitation": {
+    "climatology_ytd_total": 147.62759999999997,
+    "deviation_vs_1991_2020_mean": -3066.904742857143,
+    "latest_7d_anomaly": -3005.907,
+    "latest_cumulative_anomaly": -3066.0876,
+    "latest_daily_anomaly": -1.23,
+    "percent_deviation_vs_1991_2020_mean": -2066.0244908831883,
+    "z_score_vs_baseline": -88.18639160716351
+  },
+  "snowfall": {
+    "baseline_mean_cm": 0.0,
+    "deviation_vs_baseline_cm": 0.08399999999999999,
+    "latest_7d_anomaly_cm": NaN,
+    "latest_daily_anomaly_cm": NaN,
+    "ytd_total_cm": 0.08399999999999999
+  },
+  "sunshine": {
+    "baseline_mean_hours": 0.0,
+    "deviation_vs_baseline_hours": 11.8,
+    "ytd_total_hours": 11.8
+  },
+  "temperature": {
+    "climatology_ytd_mean": -3.072635249042145,
+    "deviation_vs_1991_2020_mean": -37.799492036124796,
+    "latest_30d_anomaly": -96.70754666666667,
+    "latest_7d_anomaly": -426.0896285714286,
+    "latest_daily_anomaly": 2.6646,
+    "percent_deviation_vs_1991_2020_mean": -1352.5570868320215,
+    "z_score_vs_baseline": -15.32420447241855
+  }
+}

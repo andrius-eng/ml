@@ -13,38 +13,58 @@ spec:
       labels:
         app: mlflow
     spec:
-      containers:
-        - name: mlflow
-          image: ghcr.io/mlflow/mlflow:v3.10.1
-          command:
-            - /bin/sh
-            - -c
-            - |
-              mlflow db upgrade sqlite:////mlruns/mlflow.db && \
-              mlflow server \
-                --backend-store-uri sqlite:////mlruns/mlflow.db \
-                --default-artifact-root file:///mlartifacts \
-                --serve-artifacts \
-                --host 0.0.0.0 \
-                --port 5000
-          ports:
-            - containerPort: 5000
-          volumeMounts:
-            - name: mlflow-data
-              mountPath: /mlruns
-            - name: mlflow-artifacts
-              mountPath: /mlartifacts
+      initContainers:
+        - name: install-psycopg2
+          image: mlflow/mlflow:3.10.1
+          command: ["sh", "-c", "pip install psycopg2-binary --target /extra-pkgs --no-cache-dir --quiet"]
           resources:
             requests:
               cpu: 100m
               memory: 256Mi
             limits:
               cpu: 500m
-              memory: 1Gi
+              memory: 512Mi
+          volumeMounts:
+            - name: extra-pkgs
+              mountPath: /extra-pkgs
+      containers:
+        - name: mlflow
+          image: mlflow/mlflow:3.10.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PYTHONPATH
+              value: "/extra-pkgs"
+          command:
+            - mlflow
+            - server
+            - --backend-store-uri
+            - postgresql+psycopg2://airflow:airflow@postgres:5432/mlflow
+            - --default-artifact-root
+            - file:///mlartifacts
+            - --serve-artifacts
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "5000"
+            - --allowed-hosts
+            - "*"
+          ports:
+            - containerPort: 5000
+          volumeMounts:
+            - name: mlflow-artifacts
+              mountPath: /mlartifacts
+            - name: extra-pkgs
+              mountPath: /extra-pkgs
+          resources:
+            requests:
+              cpu: 60m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1500Mi
       volumes:
-        - name: mlflow-data
-          persistentVolumeClaim:
-            claimName: mlflow-data
         - name: mlflow-artifacts
           persistentVolumeClaim:
             claimName: mlflow-artifacts
+        - name: extra-pkgs
+          emptyDir: {}

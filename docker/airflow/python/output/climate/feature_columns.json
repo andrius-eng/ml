@@ -1,0 +1,10 @@
+[
+  "sin_doy",
+  "cos_doy",
+  "year_norm",
+  "precip_log1p",
+  "snow_log1p",
+  "sunshine_frac_day",
+  "wind_norm",
+  "et0_norm"
+]

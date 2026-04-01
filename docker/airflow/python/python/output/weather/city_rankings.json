@@ -1,0 +1,88 @@
+{
+  "combined": [
+    {
+      "city": "Siauliai",
+      "combined_score": 102.21403069888862,
+      "precipitation_z": -102.21403069888862,
+      "temperature_z": -14.783492049188801
+    },
+    {
+      "city": "Vilnius",
+      "combined_score": 92.00030130767122,
+      "precipitation_z": -92.00030130767122,
+      "temperature_z": -14.623441881525459
+    },
+    {
+      "city": "Kaunas",
+      "combined_score": 87.97639004580877,
+      "precipitation_z": -87.97639004580877,
+      "temperature_z": -14.683870594185958
+    },
+    {
+      "city": "Panevezys",
+      "combined_score": 87.83098396065071,
+      "precipitation_z": -87.83098396065071,
+      "temperature_z": -14.761460490189053
+    },
+    {
+      "city": "Klaipeda",
+      "combined_score": 66.71073992841856,
+      "precipitation_z": -66.71073992841856,
+      "temperature_z": -18.02513147325695
+    }
+  ],
+  "precipitation": [
+    {
+      "anomaly": -3055.9662857142857,
+      "city": "Siauliai",
+      "z_score": -102.21403069888862
+    },
+    {
+      "anomaly": -3068.632857142857,
+      "city": "Vilnius",
+      "z_score": -92.00030130767122
+    },
+    {
+      "anomaly": -3071.214857142857,
+      "city": "Kaunas",
+      "z_score": -87.97639004580877
+    },
+    {
+      "anomaly": -3063.880285714286,
+      "city": "Panevezys",
+      "z_score": -87.83098396065071
+    },
+    {
+      "anomaly": -3074.8294285714287,
+      "city": "Klaipeda",
+      "z_score": -66.71073992841856
+    }
+  ],
+  "temperature": [
+    {
+      "anomaly": -37.839348484848486,
+      "city": "Klaipeda",
+      "z_score": -18.02513147325695
+    },
+    {
+      "anomaly": -38.024617069711894,
+      "city": "Siauliai",
+      "z_score": -14.783492049188801
+    },
+    {
+      "anomaly": -38.05281426332289,
+      "city": "Panevezys",
+      "z_score": -14.761460490189053
+    },
+    {
+      "anomaly": -37.67728511718167,
+      "city": "Kaunas",
+      "z_score": -14.683870594185958
+    },
+    {
+      "anomaly": -37.40339524555903,
+      "city": "Vilnius",
+      "z_score": -14.623441881525459
+    }
+  ]
+}

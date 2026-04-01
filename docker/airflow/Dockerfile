@@ -1,4 +1,4 @@
-FROM apache/airflow:2.10.3
+FROM apache/airflow:3.0.0
 
 USER root
 
@@ -23,6 +23,16 @@ RUN pip install \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     -r /tmp/requirements-airflow-runtime.txt \
     -r /tmp/requirements-llm-train.txt
+
+# Bake DAGs and project code into the image.
+COPY airflow/dags /opt/airflow/dags
+COPY python /opt/airflow/project/python
+
+USER root
+RUN mkdir -p /opt/airflow/logs && \
+    chmod -R 775 /opt/airflow /opt/airflow/dags /opt/airflow/project /opt/airflow/logs && \
+    chown -R airflow: /opt/airflow
+USER airflow
 
 # Project code and DAGs are mounted at runtime via docker-compose volumes.
 # Keeping the image lean avoids long COPY phases on macOS file sharing.

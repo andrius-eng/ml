@@ -1,0 +1,80 @@
+{
+  "generated_at": "2026-03-27",
+  "collection": "climate_dashboard_docs",
+  "corpus_size": 13,
+  "questions": [
+    {
+      "question": "What will the temperature be tomorrow?",
+      "answer": "For tomorrow (2026-03-28) in Lithuania: adjusted estimate -97.3\u00b0C (baseline 2.3\u00b0C). Climatological baseline for 2026-03-28: 2.3\u00b0C\nYear-to-date (86 days observed): 2026 is running 43.1\u00b0C colder than the model expects.\nMost recent 30-day window: 99.6\u00b0C colder than expected.\nBias-adjusted estimate for tomorrow: -97.3\u00b0C\nNote: this is a climatological trend estimate, not a live weather forecast.",
+      "interpretation": "Baseline: 2.3\u00b0C | YTD bias: -43.1\u00b0C | Recent 30d bias: -99.6\u00b0C | Adjusted: -97.3\u00b0C",
+      "sources": [
+        {
+          "title": "ClimateModel (PyTorch MLP)",
+          "source": "climate/climate_model.pth",
+          "score": 1.0
+        },
+        {
+          "title": "2026 daily observations",
+          "source": "weather/country_daily_anomalies.csv",
+          "score": 1.0
+        }
+      ]
+    },
+    {
+      "question": "Is Lithuania currently warmer or colder than normal?",
+      "answer": "**Lithuania Heating Degree Days (Eurostat)**: Lithuania Heating Degree Days Full year 2024: 3225.2 HDD total, versus a 1991-2020 baseline of 3893.6 HDD (anomaly -668.5 HDD). A negative anomaly indicates lower heating demand than the historical average, consistent with a warmer-than-normal winter.\n\n**weather_summary narrative 1**: Lithuania Weather Summary\n\n**Climate model evaluation**: The climate model reports R2 0.7756, RMSE 4.1936, and MAE 3.2521 on held-out data. That indicates usable predictive skill for climate anomaly briefing rather than exact deterministic weather forecasting.",
+      "interpretation": "",
+      "sources": [
+        {
+          "title": "Lithuania Heating Degree Days (Eurostat)",
+          "source": "weather/hdd.json",
+          "score": 0.212
+        },
+        {
+          "title": "weather_summary narrative 1",
+          "source": "weather/weather_summary.md",
+          "score": 0.1147
+        },
+        {
+          "title": "Climate model evaluation",
+          "source": "climate/climate_evaluation.json",
+          "score": 0.049
+        }
+      ]
+    },
+    {
+      "question": "How unusual is this March in Vilnius?",
+      "answer": "**report narrative 1**: Vilnius March Temperature Anomalies\n\n**Vilnius March anomaly overview**: Vilnius March through day 27 in 2026 has mean temperature 6.68 C, an anomaly of 0.00 C, and z-score nan. The baseline mean is 6.68 C with standard deviation nan C.\n\n**report narrative 2**: Window: 1997 to 2026 March day cutoff used for every year: 03-27 Years analyzed: 1",
+      "interpretation": "",
+      "sources": [
+        {
+          "title": "report narrative 1",
+          "source": "vilnius_march/report.md",
+          "score": 0.448
+        },
+        {
+          "title": "Vilnius March anomaly overview",
+          "source": "vilnius_march/summary.json",
+          "score": 0.1335
+        },
+        {
+          "title": "report narrative 2",
+          "source": "vilnius_march/report.md",
+          "score": 0.0965
+        }
+      ]
+    },
+    {
+      "question": "Can I trust the climate model outputs?",
+      "answer": "**Climate model evaluation**: The climate model reports R2 0.7756, RMSE 4.1936, and MAE 3.2521 on held-out data. That indicates usable predictive skill for climate anomaly briefing rather than exact deterministic weather forecasting.",
+      "interpretation": "",
+      "sources": [
+        {
+          "title": "Climate model evaluation",
+          "source": "climate/climate_evaluation.json",
+          "score": 0.3127
+        }
+      ]
+    }
+  ]
+}

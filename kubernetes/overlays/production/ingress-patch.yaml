@@ -1,0 +1,44 @@
+---
+# Patch for k3s / Traefik ingress controller.
+# - Switches ingressClassName from nginx to traefik.
+# - Removes nginx-specific annotations (Traefik handles WebSocket natively).
+# - Keeps only the paths that do NOT need prefix stripping here; /api, /flink,
+#   and /mlflow are moved to their own Ingress objects in traefik-middlewares.yaml
+#   so each can carry the traefik router.middlewares annotation independently.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ml-stack-ingress
+  namespace: ml-stack
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: null
+    nginx.ingress.kubernetes.io/proxy-send-timeout: null
+    nginx.ingress.kubernetes.io/proxy-http-version: null
+    nginx.ingress.kubernetes.io/configuration-snippet: null
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: ml-stack.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: ws-server
+                port:
+                  number: 3000
+          - path: /airflow
+            pathType: Prefix
+            backend:
+              service:
+                name: airflow-webserver
+                port:
+                  number: 8080

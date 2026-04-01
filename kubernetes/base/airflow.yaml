@@ -10,14 +10,32 @@ spec:
   backoffLimit: 3
   template:
     spec:
+      securityContext:
+        fsGroup: 500
+      imagePullSecrets:
+        - name: ghcr-secret
       restartPolicy: OnFailure
       initContainers:
         - name: wait-postgres
           image: postgres:16-alpine
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
+        - name: db-upgrade
+          image: ghcr.io/andrius-eng/ml-airflow-custom:latest
+          command: ["airflow", "db", "migrate"]
+          envFrom:
+            - configMapRef:
+                name: airflow-config
+            - secretRef:
+                name: airflow-secrets
+          volumeMounts:
+            - name: airflow-data
+              mountPath: /opt/airflow
+            - name: ml-output
+              mountPath: /opt/airflow/project/python/output
       containers:
         - name: airflow-init
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/bash
             - -c
@@ -59,14 +77,27 @@ spec:
       labels:
         app: airflow-webserver
     spec:
+      securityContext:
+        fsGroup: 500
+      imagePullSecrets:
+        - name: ghcr-secret
       initContainers:
         - name: wait-postgres
           image: postgres:16-alpine
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
+        - name: fix-permissions
+          image: alpine:3.18
+          command: ["sh", "-c", "chown -R 500:500 /opt/airflow || true; chmod -R g+rwx /opt/airflow || true"]
+          volumeMounts:
+            - name: airflow-data
+              mountPath: /opt/airflow
+            - name: ml-output
+              mountPath: /opt/airflow/project/python/output
       containers:
         - name: webserver
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
-          command: ["airflow", "webserver"]
+          imagePullPolicy: IfNotPresent
+          command: ["airflow", "api-server", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
           ports:
             - containerPort: 8080
           envFrom:
@@ -81,18 +112,18 @@ spec:
               mountPath: /opt/airflow/project/python/output
           readinessProbe:
             httpGet:
-              path: /health
+              path: /api/v2/monitor/health
               port: 8080
             initialDelaySeconds: 60
             periodSeconds: 15
             failureThreshold: 10
           resources:
             requests:
-              cpu: 250m
-              memory: 512Mi
+              cpu: 80m
+              memory: 200Mi
             limits:
-              cpu: 1
-              memory: 1Gi
+              cpu: 150m
+              memory: 300Mi
       volumes:
         - name: airflow-data
           persistentVolumeClaim:
@@ -116,13 +147,34 @@ spec:
       labels:
         app: airflow-scheduler
     spec:
+      securityContext:
+        fsGroup: 500
+      imagePullSecrets:
+        - name: ghcr-secret
       initContainers:
         - name: wait-postgres
           image: postgres:16-alpine
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
+        - name: fix-permissions
+          image: alpine:3.18
+          command: ["sh", "-c", "chown -R 500:500 /opt/airflow || true; chmod -R g+rwx /opt/airflow || true"]
+          volumeMounts:
+            - name: airflow-data
+              mountPath: /opt/airflow
+            - name: ml-output
+              mountPath: /opt/airflow/project/python/output
+        - name: sync-dags
+          image: ghcr.io/andrius-eng/ml-airflow-custom:latest
+          imagePullPolicy: IfNotPresent
+          # Copy baked-in DAGs from image into the PVC (image dags hidden by PVC mount at /opt/airflow)
+          command: ["sh", "-c", "mkdir -p /mnt/airflow/dags && cp -rn /opt/airflow/dags/. /mnt/airflow/dags/ 2>/dev/null || true"]
+          volumeMounts:
+            - name: airflow-data
+              mountPath: /mnt/airflow
       containers:
         - name: scheduler
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
+          imagePullPolicy: IfNotPresent
           command: ["airflow", "scheduler"]
           envFrom:
             - configMapRef:
@@ -136,11 +188,71 @@ spec:
               mountPath: /opt/airflow/project/python/output
           resources:
             requests:
+              cpu: 150m
+              memory: 512Mi
+            limits:
               cpu: 500m
               memory: 1Gi
+      volumes:
+        - name: airflow-data
+          persistentVolumeClaim:
+            claimName: airflow-data
+        - name: ml-output
+          persistentVolumeClaim:
+            claimName: ml-output
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airflow-dag-processor
+  namespace: ml-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airflow-dag-processor
+  template:
+    metadata:
+      labels:
+        app: airflow-dag-processor
+    spec:
+      securityContext:
+        fsGroup: 500
+      imagePullSecrets:
+        - name: ghcr-secret
+      initContainers:
+        - name: wait-postgres
+          image: postgres:16-alpine
+          command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
+        - name: sync-dags
+          image: ghcr.io/andrius-eng/ml-airflow-custom:latest
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "mkdir -p /mnt/airflow/dags && cp -rn /opt/airflow/dags/. /mnt/airflow/dags/ 2>/dev/null || true"]
+          volumeMounts:
+            - name: airflow-data
+              mountPath: /mnt/airflow
+      containers:
+        - name: dag-processor
+          image: ghcr.io/andrius-eng/ml-airflow-custom:latest
+          imagePullPolicy: IfNotPresent
+          command: ["airflow", "dag-processor"]
+          envFrom:
+            - configMapRef:
+                name: airflow-config
+            - secretRef:
+                name: airflow-secrets
+          volumeMounts:
+            - name: airflow-data
+              mountPath: /opt/airflow
+            - name: ml-output
+              mountPath: /opt/airflow/project/python/output
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
             limits:
-              cpu: 2
-              memory: 2Gi
+              cpu: 500m
+              memory: 1Gi
       volumes:
         - name: airflow-data
           persistentVolumeClaim:
