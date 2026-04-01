@@ -21,10 +21,10 @@ resources:
 # Managed by scripts/pin-images.sh
 images:
   - name: ghcr.io/andrius-eng/ml-airflow-custom
-    newTag: b195352a597e4be8e9fe1d5f115cb1b45106ce44
+    newTag: c18e9bc496022406f2231d4ef55b49cecc7b7c72
   - name: ghcr.io/andrius-eng/ml-ml-pipeline
-    newTag: b195352a597e4be8e9fe1d5f115cb1b45106ce44
+    newTag: c18e9bc496022406f2231d4ef55b49cecc7b7c72
   - name: ghcr.io/andrius-eng/ml-frontend
-    newTag: b195352a597e4be8e9fe1d5f115cb1b45106ce44
+    newTag: c18e9bc496022406f2231d4ef55b49cecc7b7c72
   - name: ghcr.io/andrius-eng/ml-ws-server
-    newTag: b195352a597e4be8e9fe1d5f115cb1b45106ce44
+    newTag: c18e9bc496022406f2231d4ef55b49cecc7b7c72
