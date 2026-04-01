@@ -1,6 +1,5 @@
-# Production PVC patch — set storageClassName to your cluster's RWX class.
-# Common options: nfs-client, efs-sc (AWS), azurefile (Azure), cephfs (Rook)
-# RWO claims (postgres, ollama) use cluster default block class ("").
+# Production PVC patch — storageClassName set to k3s-hostpath (manual PVs bound).
+# Update to nfs-client / efs-sc / azurefile when migrating to a real NFS class.
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -8,7 +7,7 @@ metadata:
   name: airflow-data
   namespace: ml-stack
 spec:
-  storageClassName: nfs-client   # replace with your RWX class
+  storageClassName: k3s-hostpath
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -16,7 +15,7 @@ metadata:
   name: ml-output
   namespace: ml-stack
 spec:
-  storageClassName: nfs-client
+  storageClassName: k3s-hostpath
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -24,7 +23,7 @@ metadata:
   name: dashboard-data
   namespace: ml-stack
 spec:
-  storageClassName: nfs-client
+  storageClassName: k3s-hostpath
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -32,7 +31,7 @@ metadata:
   name: mlflow-artifacts
   namespace: ml-stack
 spec:
-  storageClassName: nfs-client
+  storageClassName: k3s-hostpath
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -40,7 +39,7 @@ metadata:
   name: beam-artifacts
   namespace: ml-stack
 spec:
-  storageClassName: nfs-client
+  storageClassName: k3s-hostpath
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -48,7 +47,7 @@ metadata:
   name: flink-job-archives
   namespace: ml-stack
 spec:
-  storageClassName: nfs-client
+  storageClassName: k3s-hostpath
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -56,7 +55,7 @@ metadata:
   name: postgres-data
   namespace: ml-stack
 spec:
-  storageClassName: ""
+  storageClassName: k3s-hostpath
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -64,7 +63,7 @@ metadata:
   name: mlflow-data
   namespace: ml-stack
 spec:
-  storageClassName: ""
+  storageClassName: k3s-hostpath
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -72,4 +71,4 @@ metadata:
   name: ollama-data
   namespace: ml-stack
 spec:
-  storageClassName: ""
+  storageClassName: k3s-hostpath

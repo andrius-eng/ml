@@ -15,11 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
+# Install uv for fast, reliable dependency resolution
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 # Install CPU-oriented runtime deps (no CUDA/NVIDIA stack) for faster builds
 COPY python/requirements-airflow-runtime.txt /app/requirements-runtime.txt
-RUN pip install --no-cache-dir \
-    --retries 10 \
-    --timeout 120 \
+RUN uv pip install --system --no-cache \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     -r requirements-runtime.txt
 

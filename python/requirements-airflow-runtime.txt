@@ -9,6 +9,6 @@ cryptography<45
 cffi<2
 torch==2.11.0 ; platform_system == "Linux" and platform_machine == "x86_64"
 torch==2.2.2 ; platform_system != "Linux" or platform_machine != "x86_64"
-apache-airflow==3.0.0
 redis>=5.0.0
 mlflow>=3.0.0
+
