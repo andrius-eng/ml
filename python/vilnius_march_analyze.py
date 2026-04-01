@@ -122,7 +122,7 @@ def main() -> None:
         "--job_endpoint", "beam-job-server:8099",
         "--artifact_endpoint", "beam-job-server:8098",
         "--environment_type", "EXTERNAL",
-        "--environment_config", "localhost:50000",
+        "--environment_config", "flink-taskmanager:50000",
         "--parallelism", "1",
     ]
 

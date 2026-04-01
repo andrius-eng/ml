@@ -354,7 +354,7 @@ def run_beam_analysis_with_fallback(analysis_end=None, **context):
             "--job_endpoint", "beam-job-server:8099",
             "--artifact_endpoint", "beam-job-server:8098",
             "--environment_type", "EXTERNAL",
-            "--environment_config", "localhost:50000",  # worker-pool shares flink-taskmanager network namespace
+            "--environment_config", "flink-taskmanager:50000",  # worker-pool shares flink-taskmanager network namespace
             "--parallelism", "1",
         ]
         rc = _stream_subprocess(cmd, logger, timeout=2700, label="PortableRunner")
