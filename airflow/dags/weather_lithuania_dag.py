@@ -272,9 +272,6 @@ def refresh_rag_context_data(analysis_end=None, **context):
         mlflow.log_param('analysis_end', analysis_end)
         """Refresh RAG pipeline context with latest analysis."""
         logger = logging.getLogger(__name__)
-
-    
-    try:
         run_script(
             RAG_PIPELINE_SCRIPT,
             [
@@ -283,9 +280,6 @@ def refresh_rag_context_data(analysis_end=None, **context):
             ],
             logger,
         )
-    finally:
-        if trace_ctx is not None:
-            trace_ctx.__exit__(None, None, None)
 
 
 def _stream_subprocess(cmd: list, logger, timeout: int, label: str) -> int:

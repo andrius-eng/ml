@@ -23,7 +23,7 @@ spec:
       containers:
         - name: ml-server
           image: ghcr.io/andrius-eng/ml-ml-pipeline:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command: ["sh", "-c", "cd /app/python && python -m uvicorn serve:app --host 0.0.0.0 --port 8000"]
           ports:
             - containerPort: 8000
@@ -83,7 +83,7 @@ spec:
       containers:
         - name: ws-server
           image: ghcr.io/andrius-eng/ml-ws-server:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 3000
           env:
@@ -137,7 +137,7 @@ spec:
       containers:
         - name: frontend
           image: ghcr.io/andrius-eng/ml-frontend:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - containerPort: 80
           volumeMounts:

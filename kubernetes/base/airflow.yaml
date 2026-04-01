@@ -23,6 +23,7 @@ spec:
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
         - name: db-upgrade
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
+          imagePullPolicy: Always
           command: ["airflow", "db", "migrate"]
           envFrom:
             - configMapRef:
