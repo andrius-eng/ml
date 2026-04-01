@@ -8,13 +8,13 @@ PyTorch training, Qdrant-backed retrieval, and a live dashboard.
 - Python 3.11+ managed by [uv](https://docs.astral.sh/uv/)
 - Node.js 18+ and npm
 - Docker and Docker Compose (for the full stack)
-- kubectl + minikube (optional — for Kubernetes deployment)
+- kubectl (optional — for Kubernetes deployment)
 
 ## Stack
 
 | Layer | Technology |
 |---|---|
-| Orchestration | Apache Airflow 2.10.3 + PostgreSQL 16 |
+| Orchestration | Apache Airflow 3.1.8 + PostgreSQL 16 |
 | Data | Open-Meteo ERA5 reanalysis · Eurostat HDD |
 | Distributed processing | Apache Beam 2.71.0 · PortableRunner → Flink 1.20.1 |
 | Local processing | Python 3.11, pandas, numpy |
@@ -70,9 +70,10 @@ kubectl get nodes
 
 ```mermaid
 graph TB
-    subgraph Orch["Orchestration — Airflow 2.10.3"]
+    subgraph Orch["Orchestration — Airflow 3.1.8"]
         SCHED[Scheduler]
-        WEB[Webserver :8080]
+        WEB[API Server :8080]
+        DP[Dag Processor]
     end
 
     subgraph DAGs["DAG Pipelines"]
@@ -360,7 +361,7 @@ The GHCR images are intended to stay private. Authenticate before pulling them
 locally. If you ever change a GHCR package to public in GitHub, GitHub does not
 allow changing that package back to private.
 
-Once running, trigger DAGs from Airflow UI at http://localhost:8080 (admin / admin).
+Once running, trigger DAGs from Airflow UI at http://localhost:8080. Login with `admin` and the auto-generated password from `/opt/airflow/simple_auth_manager_passwords.json.generated` inside the webserver pod.
 The dashboard at http://localhost:5173 updates automatically via WebSocket.
 
 ## Kubernetes Deployment
@@ -400,11 +401,30 @@ bash kubernetes/deploy-minikube.sh
 bash kubernetes/deploy-minikube.sh --argocd
 ```
 
-### Production — standalone
+### Production — standalone (k3s two-node)
+
+The production overlay targets a two-node k3s cluster connected via Tailscale:
+
+| Node | Role | Tailscale IP | Label |
+|------|------|-------------|-------|
+| `desktop-nnutaj7` (WSL) | control-plane + infra workloads | `100.95.8.71` | `workload-role=infra` |
+| `k3s-worker-worker` (Mac) | compute workloads | `100.66.184.9` | `workload-role=compute` |
+
+Compute pods (ollama, flink-taskmanager, beam-job-server) are scheduled on the Mac worker; infra pods (airflow, mlflow, postgres, flink-jobmanager) stay on WSL.
+
+All custom images are pulled from GHCR (`ghcr.io/andrius-eng/ml-*`). A `ghcr-secret` imagePullSecret must exist in `ml-stack`:
 
 ```bash
-# Edit nfs-client storageClass if needed:
-#   kubernetes/overlays/production/pvc-patch.yaml
+kubectl create secret docker-registry ghcr-secret \
+  --docker-server=ghcr.io \
+  --docker-username=andrius-eng \
+  --docker-password=$(gh auth token) \
+  -n ml-stack
+```
+
+Apply:
+
+```bash
 kubectl apply -k kubernetes/overlays/production
 ```
 
@@ -425,8 +445,23 @@ The ArgoCD application tracks the `kubernetes/overlays/production` path on the
   `nfs-client` in `overlays/production/pvc-patch.yaml` for your RWX class.
 - Services are exposed via a single nginx Ingress at `http://ml-stack.local`.
 
+### Airflow 3 notes
+
+Airflow 3.x introduces breaking changes versus 2.x:
+
+- The webserver is now an **API server** (`airflow api-server`) — the old `airflow webserver` command no longer exists.
+- A **separate dag-processor** deployment (`airflow dag-processor`) is required. It runs as its own pod and writes parsed DAGs to the DB. Setting `AIRFLOW__SCHEDULER__STANDALONE_DAG_PROCESSOR=False` keeps dag-processor integrated.
+- User management is handled by **SimpleAuthManager** via the `AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS` env var (e.g. `admin:Admin`). The `airflow users create` CLI command is removed.
+- Passwords for SimpleAuthManager are auto-generated on first start and written to `/opt/airflow/simple_auth_manager_passwords.json.generated` inside the pod.
+- The `AIRFLOW__API__AUTH_BACKENDS` setting from Airflow 2.x is deprecated and removed.
+- The `airflow-init` Job only runs `airflow db migrate` — no user creation needed.
+- DAGs baked into the image at `/opt/airflow/dags` are hidden by the `airflow-data` PVC mount. A `sync-dags` init container on scheduler and dag-processor copies them from the image into the PVC on startup.
+
 
 ## Airflow (Local Standalone)
+
+> **Note:** The Kubernetes deployment runs Airflow 3.1.8. The local standalone
+> below is for quick development iteration only.
 
 Run in its own terminal:
 
@@ -442,7 +477,7 @@ export TRAIN_PYTHON_BIN="$PWD/../.venv/bin/python"
 env -u VIRTUAL_ENV uv run airflow standalone
 ```
 
-Open http://localhost:8080 (admin / check .airflow/standalone_admin_password.txt).
+Open http://localhost:8080. Password is in `.airflow/simple_auth_manager_passwords.json.generated` (Airflow 3.x) or `.airflow/standalone_admin_password.txt` (Airflow 2.x).
 
 Trigger a DAG manually:
 
