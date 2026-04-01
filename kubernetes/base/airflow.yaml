@@ -41,9 +41,6 @@ spec:
             - -c
             - |
               airflow db migrate
-              airflow users create --username admin --password admin \
-                --firstname Airflow --lastname Admin \
-                --role Admin --email admin@example.com || true
           envFrom:
             - configMapRef:
                 name: airflow-config
