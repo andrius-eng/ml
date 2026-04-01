@@ -15,7 +15,7 @@ spec:
         app: flink-jobmanager
     spec:
       nodeSelector:
-        workload-role: compute
+        workload-role: infra
       containers:
         - name: jobmanager
           image: flink:1.20.1-scala_2.12-java11
@@ -63,7 +63,7 @@ spec:
         app: flink-taskmanager
     spec:
       nodeSelector:
-        workload-role: compute
+        workload-role: infra
       containers:
         - name: taskmanager
           image: flink:1.20.1-scala_2.12-java11

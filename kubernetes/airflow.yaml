@@ -150,7 +150,7 @@ spec:
         app: airflow-scheduler
     spec:
       nodeSelector:
-        workload-role: compute
+        workload-role: infra
       securityContext:
         fsGroup: 500
       imagePullSecrets:
@@ -221,7 +221,7 @@ spec:
         app: airflow-dag-processor
     spec:
       nodeSelector:
-        workload-role: compute
+        workload-role: infra
       securityContext:
         fsGroup: 500
       imagePullSecrets:

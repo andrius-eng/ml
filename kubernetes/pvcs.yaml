@@ -1,6 +1,35 @@
-# storageClassName: k3s-hostpath — rancher local-path (single node). Replace with Longhorn/NFS for true RWX multi-node.
-# RWX (k3s-hostpath supports RWX on single node): airflow-data, ml-output
-# RWO sufficient for: postgres-data, ollama-data
+# Static NFS PVs for cross-node RWX volumes (server: 100.95.8.71)
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-airflow-data-nfs
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: "100.95.8.71"
+    path: "/data/k8s-nfs/airflow-data"
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-ml-output-nfs
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: "100.95.8.71"
+    path: "/data/k8s-nfs/ml-output"
+# Storage classes used below:
+# - k3s-hostpath: single-node RWO/RWX (WARNING: RWX is NOT shared across nodes)
+# - nfs-client: true cross-node RWX (run scripts/setup-nfs-storage.sh first)
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -9,10 +38,11 @@ metadata:
   namespace: ml-stack
 spec:
   accessModes: [ReadWriteMany]
+  volumeName: pv-airflow-data-nfs
   resources:
     requests:
       storage: 5Gi
-  storageClassName: k3s-hostpath
+  storageClassName: ""
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -21,10 +51,11 @@ metadata:
   namespace: ml-stack
 spec:
   accessModes: [ReadWriteMany]
+  volumeName: pv-ml-output-nfs
   resources:
     requests:
       storage: 10Gi
-  storageClassName: k3s-hostpath
+  storageClassName: ""
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
