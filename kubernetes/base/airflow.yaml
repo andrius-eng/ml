@@ -10,6 +10,8 @@ spec:
   backoffLimit: 3
   template:
     spec:
+      nodeSelector:
+        workload-role: infra
       securityContext:
         fsGroup: 500
       imagePullSecrets:
@@ -35,7 +37,7 @@ spec:
       containers:
         - name: airflow-init
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command:
             - /bin/bash
             - -c
@@ -74,6 +76,8 @@ spec:
       labels:
         app: airflow-webserver
     spec:
+      nodeSelector:
+        workload-role: infra
       securityContext:
         fsGroup: 500
       imagePullSecrets:
@@ -93,7 +97,7 @@ spec:
       containers:
         - name: webserver
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command: ["airflow", "api-server", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
           ports:
             - containerPort: 8080
@@ -144,6 +148,8 @@ spec:
       labels:
         app: airflow-scheduler
     spec:
+      nodeSelector:
+        workload-role: infra
       securityContext:
         fsGroup: 500
       imagePullSecrets:
@@ -162,7 +168,7 @@ spec:
               mountPath: /opt/airflow/project/python/output
         - name: sync-dags
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           # Copy baked-in DAGs from image into the PVC (image dags hidden by PVC mount at /opt/airflow)
           command: ["sh", "-c", "mkdir -p /mnt/airflow/dags && cp -rn /opt/airflow/dags/. /mnt/airflow/dags/ 2>/dev/null || true"]
           volumeMounts:
@@ -171,7 +177,7 @@ spec:
       containers:
         - name: scheduler
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command: ["airflow", "scheduler"]
           envFrom:
             - configMapRef:
@@ -213,6 +219,8 @@ spec:
       labels:
         app: airflow-dag-processor
     spec:
+      nodeSelector:
+        workload-role: infra
       securityContext:
         fsGroup: 500
       imagePullSecrets:
@@ -223,7 +231,7 @@ spec:
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
         - name: sync-dags
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command: ["sh", "-c", "mkdir -p /mnt/airflow/dags && cp -rn /opt/airflow/dags/. /mnt/airflow/dags/ 2>/dev/null || true"]
           volumeMounts:
             - name: airflow-data
@@ -231,7 +239,7 @@ spec:
       containers:
         - name: dag-processor
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command: ["airflow", "dag-processor"]
           envFrom:
             - configMapRef:

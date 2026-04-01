@@ -13,6 +13,8 @@ spec:
       labels:
         app: mlflow
     spec:
+      nodeSelector:
+        workload-role: infra
       initContainers:
         - name: install-psycopg2
           image: mlflow/mlflow:3.10.1
