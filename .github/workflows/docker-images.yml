@@ -81,5 +81,6 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           bash scripts/pin-images.sh "${{ github.sha }}"
-          git add kubernetes/overlays/production/kustomization.yaml
+          git add kubernetes/kustomization.yaml
           git diff --cached --quiet || git commit -m "chore(k8s): pin production images to ${{ github.sha }} [skip ci]"
+          git push
