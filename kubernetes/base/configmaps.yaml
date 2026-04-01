@@ -14,6 +14,7 @@ data:
   AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
   AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: "120"
   AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "admin:Admin"
+  # Format: "username:role" — password is auto-generated to $AIRFLOW_HOME/simple_auth_manager_passwords.json.generated
   AIRFLOW__SCHEDULER__STANDALONE_DAG_PROCESSOR: "True"
   AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
   AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: "300"
@@ -21,7 +22,7 @@ data:
   MLFLOW_TRACKING_URI: "http://mlflow:5000"
   ML_PROJECT_ROOT: "/opt/airflow/project"
   BEAM_RUNNER: "PortableRunner"
-  BEAM_PIPELINE_ARGS: "--flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities"
+  BEAM_PIPELINE_ARGS: "--flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=flink-taskmanager:50000 --no-fetch-missing-cities"
 ---
 apiVersion: v1
 kind: ConfigMap

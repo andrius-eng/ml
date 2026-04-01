@@ -885,3 +885,23 @@ networks:
 ```yaml
 ML_PROJECT_ROOT: /opt/airflow/project/ml
 ```
+
+### Kubernetes Migration & Performance Tuning
+
+Moving from a local Docker Compose setup to a resource-constrained Kubernetes environment (like K3s or Minikube) surfaced several architectural bottlenecks.
+
+**Findings & Fixes:**
+1. **Airflow 3.x Task SDK Webserver Exhaustion:** In Airflow 3, the Task Execution API is completely separated and runs inside the Webserver. Limiting the Webserver to `150m` CPU forces Uvicorn to run a single async worker. The `LocalExecutor` default parallelism (32) immediately exhausted this worker, causing `Connection Refused` on health probes, leading K8s to pull the pod from the service endpoint.
+   *Fix:* Drastically reduced `AIRFLOW__CORE__PARALLELISM: "2"` and `AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "2"` via ConfigMap.
+2. **Hardcoded `localhost` in Flink Submissions:** `environment_config` was set to `"localhost:50000"` in Python scripts. In Docker Compose, the sidecar shared the host network namespace smoothly. In Kubernetes, the Airflow pod resolved `localhost` to its *own* loopback, failing to reach the Flink TaskManager.
+   *Fix:* Updated the `environment_config` to explicitly use the Kubernetes service DNS: `"flink-taskmanager:50000"`.
+3. **Duplicate DAG Parsing Overhead:** The scheduler was running its own DAG parsing loop (`STANDALONE_DAG_PROCESSOR=False`) while a separate `airflow-dag-processor` deployment was also active, effectively doubling the RAM requirement.
+   *Fix:* Set `AIRFLOW__SCHEDULER__STANDALONE_DAG_PROCESSOR: "True"` in the ConfigMap.
+
+**Next Steps / Operations Checklist:**
+- [x] Fix Flink TaskManager networking (localhost -> `flink-taskmanager`).
+- [x] Limit Airflow parallelism for low-resource K8s environments.
+- [x] Disable Airflow Scheduler's duplicate DAG parser loop.
+- [ ] Confirm that DAGs complete seamlessly and register runs to MLflow.
+- [ ] Tune Flink TaskManager and Beam Worker Pool memory bounds for production-sized data runs if required.
+- [ ] Verify that MLflow models and artifacts are securely persisted to the correct PV (`ml-output`).

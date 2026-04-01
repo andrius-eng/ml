@@ -49,7 +49,7 @@ try:
         """Decorator to trace RAG operations if MLflow is available."""
         def decorator(func):
             if _mlflow_available and MLFLOW_TRACKING_URI:
-                return _mlflow.trace(name)(func)
+                return _mlflow.trace(name=name)(func)
             return func
         return decorator
 except Exception:

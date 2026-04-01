@@ -28,3 +28,4 @@ kubernetes/base/secrets.yaml
 
 # TLS certificates — private keys must never be committed
 kubernetes/certs/
+kubernetes/overlays/production/ml-stack-tls-secret.yaml
