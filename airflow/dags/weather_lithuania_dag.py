@@ -13,12 +13,13 @@ from airflow.operators.python import PythonOperator
 from airflow.sensors.python import PythonSensor
 from airflow.utils.trigger_rule import TriggerRule
 import logging
-import mlflow
 
 MLFLOW_TRACKING_URI = os.environ.get('MLFLOW_TRACKING_URI', 'http://mlflow:5000')
 
 
 def _set_mlflow_experiment(experiment_name: str):
+    global mlflow  # lazy import to avoid slow DAG parse
+    import mlflow
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment(experiment_name)
 

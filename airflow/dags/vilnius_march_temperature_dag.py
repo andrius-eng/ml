@@ -13,11 +13,11 @@ from pathlib import Path
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
-import mlflow
 
 MLFLOW_TRACKING_URI = os.environ.get('MLFLOW_TRACKING_URI', 'http://mlflow:5000')
 
 def _set_mlflow_experiment(experiment_name: str):
+    import mlflow  # lazy import to avoid slow DAG parse
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment(experiment_name)
 
