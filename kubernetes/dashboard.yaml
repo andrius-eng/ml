@@ -15,7 +15,7 @@ spec:
         app: ml-server
     spec:
       nodeSelector:
-        workload-role: infra
+        workload-role: compute
       initContainers:
         - name: wait-mlflow
           image: busybox:1.36
@@ -77,7 +77,7 @@ spec:
         app: ws-server
     spec:
       nodeSelector:
-        workload-role: infra
+        workload-role: compute
       imagePullSecrets:
         - name: ghcr-secret
       containers:
@@ -131,7 +131,7 @@ spec:
         app: frontend
     spec:
       nodeSelector:
-        workload-role: infra
+        workload-role: compute
       imagePullSecrets:
         - name: ghcr-secret
       containers:

@@ -27,6 +27,20 @@ spec:
   nfs:
     server: "100.95.8.71"
     path: "/data/k8s-nfs/ml-output"
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-dashboard-data-nfs
+spec:
+  capacity:
+    storage: 512Mi
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: "100.95.8.71"
+    path: "/data/k8s-nfs/dashboard-data"
 # Storage classes used below:
 # - k3s-hostpath: single-node RWO/RWX (WARNING: RWX is NOT shared across nodes)
 # - nfs-client: true cross-node RWX (run scripts/setup-nfs-storage.sh first)
@@ -63,11 +77,12 @@ metadata:
   name: dashboard-data
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
+  volumeName: pv-dashboard-data-nfs
   resources:
     requests:
       storage: 512Mi
-  storageClassName: k3s-hostpath
+  storageClassName: ""
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
