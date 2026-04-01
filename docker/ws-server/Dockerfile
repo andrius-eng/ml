@@ -7,7 +7,7 @@ WORKDIR /app
 # uv bypasses Alpine's PEP 668 externally-managed restriction cleanly.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 RUN apk add --no-cache python3 py3-pandas \
-	&& uv pip install --system --no-cache 'qdrant-client>=1.9.0'
+	&& uv pip install --system --break-system-packages --no-cache 'qdrant-client>=1.9.0'
 
 # Install dependencies first for layer caching
 COPY server/package.json server/package-lock.json ./
