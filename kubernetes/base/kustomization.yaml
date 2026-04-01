@@ -14,4 +14,4 @@ resources:
   - flink-beam.yaml
   - dashboard.yaml
   - services.yaml
-  - ingress.yaml
+  - gateway.yaml

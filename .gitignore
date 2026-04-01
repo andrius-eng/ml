@@ -25,3 +25,6 @@ logs/
 
 # Kubernetes secrets — never commit real credentials
 kubernetes/base/secrets.yaml
+
+# TLS certificates — private keys must never be committed
+kubernetes/certs/

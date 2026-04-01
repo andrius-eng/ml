@@ -1,0 +1,165 @@
+# Gateway API resources — replaces Ingress.
+# Requires Traefik 3.x with kubernetesGateway provider enabled.
+# See kubernetes/scripts/setup-gateway.sh for prerequisites.
+#
+# NOTE: GatewayClass is cluster-scoped and lives in gatewayclass.yaml
+# to avoid kustomize injecting a namespace on it.
+---
+# Gateway — HTTP entry point.
+# Port 8000 matches Traefik's internal 'web' entrypoint
+# (k3s service maps external :80 → container :8000).
+# Production overlay patches in the HTTPS listener (port 8443).
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: ml-stack-gateway
+  namespace: ml-stack
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: http
+      port: 8000
+      protocol: HTTP
+      hostname: ml-stack.local
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+# Frontend — catch-all, lowest specificity.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: frontend
+  namespace: ml-stack
+spec:
+  parentRefs:
+    - name: ml-stack-gateway
+  hostnames:
+    - ml-stack.local
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: frontend
+          port: 80
+---
+# WebSocket server — /ws prefix, no strip (ws-server handles its own /ws path).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ws-server
+  namespace: ml-stack
+spec:
+  parentRefs:
+    - name: ml-stack-gateway
+  hostnames:
+    - ml-stack.local
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /ws
+      backendRefs:
+        - name: ws-server
+          port: 3000
+---
+# ML API — strip /api prefix; ml-server serves from /.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ml-server
+  namespace: ml-stack
+spec:
+  parentRefs:
+    - name: ml-stack-gateway
+  hostnames:
+    - ml-stack.local
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
+      backendRefs:
+        - name: ml-server
+          port: 8000
+---
+# Airflow API server — /airflow prefix, no strip.
+# Note: configure AIRFLOW__API_SERVER__BASE_URL=/airflow for proper UI links.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: airflow
+  namespace: ml-stack
+spec:
+  parentRefs:
+    - name: ml-stack-gateway
+  hostnames:
+    - ml-stack.local
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /airflow
+      backendRefs:
+        - name: airflow-webserver
+          port: 8080
+---
+# Flink UI — strip /flink prefix; Flink serves from /.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: flink
+  namespace: ml-stack
+spec:
+  parentRefs:
+    - name: ml-stack-gateway
+  hostnames:
+    - ml-stack.local
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /flink
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
+      backendRefs:
+        - name: flink-jobmanager
+          port: 8081
+---
+# MLflow — strip /mlflow prefix; MLflow serves from /.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mlflow
+  namespace: ml-stack
+spec:
+  parentRefs:
+    - name: ml-stack-gateway
+  hostnames:
+    - ml-stack.local
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /mlflow
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
+      backendRefs:
+        - name: mlflow
+          port: 5000
