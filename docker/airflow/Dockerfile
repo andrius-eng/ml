@@ -18,6 +18,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY python/requirements-airflow-runtime.txt /tmp/requirements-airflow-runtime.txt
 COPY python/requirements-llm-train.txt /tmp/requirements-llm-train.txt
 RUN uv pip install --system --no-cache \
+    --index-strategy unsafe-best-match \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     -r /tmp/requirements-airflow-runtime.txt \
     -r /tmp/requirements-llm-train.txt

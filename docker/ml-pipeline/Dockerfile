@@ -21,6 +21,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Install CPU-oriented runtime deps (no CUDA/NVIDIA stack) for faster builds
 COPY python/requirements-airflow-runtime.txt /app/requirements-runtime.txt
 RUN uv pip install --system --no-cache \
+    --index-strategy unsafe-best-match \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     -r requirements-runtime.txt
 
