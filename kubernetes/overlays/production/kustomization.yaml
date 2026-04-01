@@ -5,6 +5,7 @@ namespace: ml-stack
 
 resources:
   - ../../base
+  - ml-stack-tls-secret.yaml
 
 patches:
   - path: pvc-patch.yaml
@@ -13,9 +14,14 @@ patches:
   # Pins heavy pods (Ollama, Flink, MLflow) to the Mac worker node.
   # - path: node-affinity-patch.yaml
 
-# Pin image tags for production
-# images:
-#   - name: ghcr.io/andrius-eng/ml-airflow-custom
-#     newTag: "sha-<commit>"
-#   - name: ghcr.io/andrius-eng/ml-ml-pipeline
-#     newTag: "sha-<commit>"
+# Image tags are pinned to the git SHA by the docker-images CI workflow.
+# Update with: bash scripts/pin-images.sh <sha>
+images:
+  - name: ghcr.io/andrius-eng/ml-airflow-custom
+    newTag: latest
+  - name: ghcr.io/andrius-eng/ml-ml-pipeline
+    newTag: latest
+  - name: ghcr.io/andrius-eng/ml-frontend
+    newTag: latest
+  - name: ghcr.io/andrius-eng/ml-ws-server
+    newTag: latest

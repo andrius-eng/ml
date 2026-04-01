@@ -428,6 +428,18 @@ Apply:
 kubectl apply -k kubernetes/overlays/production
 ```
 
+TLS cert note (production overlay):
+
+- `kubernetes/overlays/production/ml-stack-tls-secret.yaml` is applied with the overlay.
+- Regenerate it after certificate rotation:
+
+```bash
+kubectl create secret tls ml-stack-tls -n ml-stack \
+  --cert=kubernetes/certs/tls.crt \
+  --key=kubernetes/certs/tls.key \
+  --dry-run=client -o yaml > kubernetes/overlays/production/ml-stack-tls-secret.yaml
+```
+
 ### Production — ArgoCD GitOps
 
 ```bash
