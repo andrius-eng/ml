@@ -1,5 +1,5 @@
 # storageClassName: k3s-hostpath — rancher local-path (single node). Replace with Longhorn/NFS for true RWX multi-node.
-# RWX required for: airflow-data, ml-output, dashboard-data, beam-artifacts, flink-job-archives
+# RWX (k3s-hostpath supports RWX on single node): airflow-data, ml-output
 # RWO sufficient for: postgres-data, ollama-data
 ---
 apiVersion: v1
@@ -32,7 +32,7 @@ metadata:
   name: dashboard-data
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteMany]
+  accessModes: [ReadWriteOnce]
   resources:
     requests:
       storage: 512Mi
@@ -57,6 +57,7 @@ metadata:
   namespace: ml-stack
 spec:
   accessModes: [ReadWriteOnce]
+  volumeName: pv-mlflow-data
   resources:
     requests:
       storage: 5Gi
@@ -69,6 +70,7 @@ metadata:
   namespace: ml-stack
 spec:
   accessModes: [ReadWriteOnce]
+  volumeName: pv-mlflow-artifacts
   resources:
     requests:
       storage: 10Gi
@@ -80,7 +82,7 @@ metadata:
   name: beam-artifacts
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteMany]
+  accessModes: [ReadWriteOnce]
   resources:
     requests:
       storage: 2Gi
@@ -92,7 +94,7 @@ metadata:
   name: flink-job-archives
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteMany]
+  accessModes: [ReadWriteOnce]
   resources:
     requests:
       storage: 2Gi
