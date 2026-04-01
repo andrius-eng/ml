@@ -1,4 +1,6 @@
-# Minikube/k3s: use k3s-hostpath StorageClass (hostPath). Works for RWX on single-node.
+# storageClassName: k3s-hostpath — rancher local-path (single node). Replace with Longhorn/NFS for true RWX multi-node.
+# RWX required for: airflow-data, ml-output, dashboard-data, beam-artifacts, flink-job-archives
+# RWO sufficient for: postgres-data, ollama-data
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -6,7 +8,10 @@ metadata:
   name: airflow-data
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 5Gi
   storageClassName: k3s-hostpath
 ---
 apiVersion: v1
@@ -15,7 +20,10 @@ metadata:
   name: ml-output
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 10Gi
   storageClassName: k3s-hostpath
 ---
 apiVersion: v1
@@ -24,7 +32,10 @@ metadata:
   name: dashboard-data
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 512Mi
   storageClassName: k3s-hostpath
 ---
 apiVersion: v1
@@ -34,6 +45,9 @@ metadata:
   namespace: ml-stack
 spec:
   accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
   storageClassName: k3s-hostpath
 ---
 apiVersion: v1
@@ -43,6 +57,9 @@ metadata:
   namespace: ml-stack
 spec:
   accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
   storageClassName: k3s-hostpath
 ---
 apiVersion: v1
@@ -52,6 +69,9 @@ metadata:
   namespace: ml-stack
 spec:
   accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
   storageClassName: k3s-hostpath
 ---
 apiVersion: v1
@@ -60,7 +80,10 @@ metadata:
   name: beam-artifacts
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 2Gi
   storageClassName: k3s-hostpath
 ---
 apiVersion: v1
@@ -69,7 +92,10 @@ metadata:
   name: flink-job-archives
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
+  resources:
+    requests:
+      storage: 2Gi
   storageClassName: k3s-hostpath
 ---
 apiVersion: v1
@@ -79,4 +105,7 @@ metadata:
   namespace: ml-stack
 spec:
   accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
   storageClassName: k3s-hostpath
