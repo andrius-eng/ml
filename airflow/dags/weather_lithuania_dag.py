@@ -376,6 +376,7 @@ def run_beam_analysis_with_fallback(analysis_end=None, **context):
             "--input", str(RAW_WEATHER_PATH),
             "--output-dir", str(BEAM_OUTPUT_DIR),
             "--end-date", analysis_end,
+            "--no-fetch-missing-cities",
             "--runner", "DirectRunner",
         ]
         rc = _stream_subprocess(cmd, logger, timeout=2700, label="DirectRunner")
