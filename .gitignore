@@ -18,6 +18,8 @@ python/output/**
 !python/output/**/*.dvc
 !python/output/**/.gitignore
 
+.dvc-storage/
+
 airflow/logs/
 airflow/.airflow/
 airflow/airflow/
