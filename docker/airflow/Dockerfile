@@ -10,6 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openjdk-17-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PATH="$JAVA_HOME/bin:$PATH"
+
 # Install uv for fast, reliable dependency resolution
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
@@ -31,6 +34,29 @@ RUN mkdir -p /opt/airflow/logs && \
     chmod -R 775 /opt/airflow /opt/airflow/dags /opt/airflow/project /opt/airflow/logs && \
     chown -R airflow: /opt/airflow
 USER airflow
+
+RUN python - <<'PY'
+required = [
+    "apache_beam",
+    "mlflow",
+    "torch",
+    "datasets",
+    "transformers",
+    "peft",
+    "accelerate",
+]
+missing = []
+for name in required:
+    try:
+        __import__(name)
+    except Exception as exc:
+        missing.append(f"{name}: {exc}")
+
+if missing:
+    raise SystemExit("Missing required Airflow image modules:\n" + "\n".join(missing))
+
+print("Validated Airflow image modules:", ", ".join(required))
+PY
 
 # Project code and DAGs are mounted at runtime via docker-compose volumes.
 # Keeping the image lean avoids long COPY phases on macOS file sharing.

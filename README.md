@@ -121,7 +121,7 @@ If your host has 8GB RAM, apply lower resource profiles before bootstrapping the
 
 1. set `ollama` replica count to `0` in `kubernetes/base/dashboard.yaml` (it is heavy).
 2. reduce Flink and Beam CPU/memory in `kubernetes/base/flink-beam.yaml` (JM=250m/512Mi, TM=250m/512Mi, Beam=150m/256Mi).
-3. reduce Airflow components in `kubernetes/base/airflow.yaml` (web/scheduler 80m/200Mi limit 150m/300Mi).
+3. keep the Airflow API server above its minimum concurrency floor in `kubernetes/airflow.yaml` (use at least 2 `airflow api-server` workers and roughly `200m` CPU / `512Mi` memory request with a `1Gi` limit); reduce scheduler and dag-processor more cautiously.
 4. reduce mlflow resources in `kubernetes/base/mlflow.yaml` (60m/150Mi limit 300m/500Mi).
 
 Re-apply with:
@@ -497,6 +497,7 @@ Airflow 3.x introduces breaking changes versus 2.x:
 - The `AIRFLOW__API__AUTH_BACKENDS` setting from Airflow 2.x is deprecated and removed.
 - The `airflow-init` Job only runs `airflow db migrate` — no user creation needed.
 - DAGs baked into the image at `/opt/airflow/dags` are hidden by the `airflow-data` PVC mount. A `sync-dags` init container on scheduler and dag-processor copies them from the image into the PVC on startup.
+- On NFS-backed deployments, pre-own the `airflow-data` export as UID `50000` and GID `500`, and run Airflow pods with the same `50000:500` identity. Leaving the primary group as `0` causes new DAG and log files to drift to `*:0` ownership on restart.
 
 
 ## Airflow (Local Standalone)
@@ -758,6 +759,7 @@ GitHub Actions workflows:
 - .github/workflows/docker-images.yml
   - builds and pushes images to ghcr.io on push to main/master and manual dispatch
   - images: ml-airflow-custom, ml-ws-server, ml-frontend, ml-ml-pipeline
+  - airflow and ml-pipeline Docker builds now fail fast if required runtime modules such as `apache_beam`, `mlflow`, or `torch` are missing from the image
   - images are expected to remain private in GHCR; local pulls require auth
 
 ## Notes
@@ -897,6 +899,12 @@ Moving from a local Docker Compose setup to a resource-constrained Kubernetes en
    *Fix:* Updated the `environment_config` to explicitly use the Kubernetes service DNS: `"flink-taskmanager:50000"`.
 3. **Duplicate DAG Parsing Overhead:** The scheduler was running its own DAG parsing loop (`STANDALONE_DAG_PROCESSOR=False`) while a separate `airflow-dag-processor` deployment was also active, effectively doubling the RAM requirement.
    *Fix:* Set `AIRFLOW__SCHEDULER__STANDALONE_DAG_PROCESSOR: "True"` in the ConfigMap.
+4. **Airflow 3 Execution API Starvation:** The Kubernetes webserver runs `airflow api-server`, and the LocalExecutor workers talk to it through `AIRFLOW__CORE__EXECUTION_API_SERVER_URL`. With a single api-server worker, a `300Mi` memory limit, and a `1s` readiness timeout, the pod oscillated between `OOMKilled`, `ReadTimeout`, and `notReady`, which removed it from the `airflow-webserver` Service and caused queued tasks to fail before user code started.
+  *Fix:* Run the api-server with at least 2 workers, raise its CPU/memory headroom (`200m`/`512Mi` request, `750m`/`1Gi` limit), and use a less brittle readiness timeout.
+5. **Dag Processor Log Permission Drift:** The dedicated `airflow-dag-processor` deployment was missing the `fix-permissions` init container used by the scheduler and webserver, so it crash-looped with `PermissionError` on `/opt/airflow/logs/dag_processor/...`.
+  *Fix:* Add the same log-directory bootstrap/chmod step to the dag-processor init containers so it can create parse logs on the shared PVC.
+6. **Airflow DAG NFS Ownership Drift:** The shared `airflow-data` export was mounted correctly, but ownership still drifted between `50000:500`, `500:500`, and `*:0` whenever the host-side export and the pod runtime identity were not aligned.
+  *Fix:* Provision the NFS export as `50000:500` in `kubernetes/scripts/setup-nfs-storage.sh` and run all Airflow pods as `50000:500` in `kubernetes/airflow.yaml`.
 
 **Next Steps / Operations Checklist:**
 - [x] Fix Flink TaskManager networking (localhost -> `flink-taskmanager`).

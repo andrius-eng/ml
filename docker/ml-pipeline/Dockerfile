@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gcc \
     libgomp1 \
-    openjdk-21-jre-headless \
+    openjdk-17-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
@@ -28,6 +28,21 @@ RUN uv pip install --system --no-cache \
 # Copy project source
 COPY python/ /app/python/
 COPY src/data/ /app/src/data/
+
+RUN python - <<'PY'
+required = ["apache_beam", "mlflow", "torch", "pandas", "numpy"]
+missing = []
+for name in required:
+    try:
+        __import__(name)
+    except Exception as exc:
+        missing.append(f"{name}: {exc}")
+
+if missing:
+    raise SystemExit("Missing required ml-pipeline image modules:\n" + "\n".join(missing))
+
+print("Validated ml-pipeline image modules:", ", ".join(required))
+PY
 
 # Default: run export script to refresh dashboard.json from pipeline outputs
 CMD ["python", "python/export_frontend_data.py"]

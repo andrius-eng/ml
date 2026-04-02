@@ -13,6 +13,8 @@ spec:
       nodeSelector:
         workload-role: infra
       securityContext:
+        runAsUser: 50000
+        runAsGroup: 500
         fsGroup: 500
       imagePullSecrets:
         - name: ghcr-secret
@@ -80,6 +82,8 @@ spec:
       nodeSelector:
         workload-role: infra
       securityContext:
+        runAsUser: 50000
+        runAsGroup: 500
         fsGroup: 500
       imagePullSecrets:
         - name: ghcr-secret
@@ -89,7 +93,10 @@ spec:
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
         - name: fix-permissions
           image: alpine:3.18
-          command: ["sh", "-c", "chown -R 500:500 /opt/airflow || true; chmod -R g+rwx /opt/airflow || true"]
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          command: ["sh", "-c", "mkdir -p /opt/airflow/logs /opt/airflow/logs/dag_processor /opt/airflow/logs/scheduler && chown -R 50000:500 /opt/airflow || true; chmod -R ug+rwx /opt/airflow || true"]
           volumeMounts:
             - name: airflow-data
               mountPath: /opt/airflow
@@ -99,7 +106,7 @@ spec:
         - name: webserver
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
           imagePullPolicy: Always
-          command: ["airflow", "api-server", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
+          command: ["airflow", "api-server", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]
           ports:
             - containerPort: 8080
           envFrom:
@@ -118,14 +125,15 @@ spec:
               port: 8080
             initialDelaySeconds: 60
             periodSeconds: 15
+            timeoutSeconds: 5
             failureThreshold: 10
           resources:
             requests:
-              cpu: 80m
-              memory: 200Mi
+              cpu: 200m
+              memory: 512Mi
             limits:
-              cpu: 150m
-              memory: 300Mi
+              cpu: 750m
+              memory: 1Gi
       volumes:
         - name: airflow-data
           persistentVolumeClaim:
@@ -152,6 +160,8 @@ spec:
       nodeSelector:
         workload-role: infra
       securityContext:
+        runAsUser: 50000
+        runAsGroup: 500
         fsGroup: 500
       imagePullSecrets:
         - name: ghcr-secret
@@ -161,7 +171,10 @@ spec:
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
         - name: fix-permissions
           image: alpine:3.18
-          command: ["sh", "-c", "chown -R 500:500 /opt/airflow || true; chmod -R g+rwx /opt/airflow || true"]
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          command: ["sh", "-c", "mkdir -p /opt/airflow/logs /opt/airflow/logs/dag_processor /opt/airflow/logs/scheduler && chown -R 50000:500 /opt/airflow || true; chmod -R ug+rwx /opt/airflow || true"]
           volumeMounts:
             - name: airflow-data
               mountPath: /opt/airflow
@@ -223,6 +236,8 @@ spec:
       nodeSelector:
         workload-role: infra
       securityContext:
+        runAsUser: 50000
+        runAsGroup: 500
         fsGroup: 500
       imagePullSecrets:
         - name: ghcr-secret
@@ -230,6 +245,17 @@ spec:
         - name: wait-postgres
           image: postgres:16-alpine
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
+        - name: fix-permissions
+          image: alpine:3.18
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+          command: ["sh", "-c", "mkdir -p /opt/airflow/logs /opt/airflow/logs/dag_processor /opt/airflow/logs/scheduler && chown -R 50000:500 /opt/airflow || true; chmod -R ug+rwx /opt/airflow || true"]
+          volumeMounts:
+            - name: airflow-data
+              mountPath: /opt/airflow
+            - name: ml-output
+              mountPath: /opt/airflow/project/python/output
         - name: sync-dags
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
           imagePullPolicy: Always

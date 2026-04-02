@@ -16,14 +16,23 @@ INFRA_TS_IP="100.95.8.71"          # infra node Tailscale IP (NFS server)
 NFS_EXPORT_DIR="/data/k8s-nfs"
 POD_CIDR="10.42.0.0/16"
 COMPUTE_TS_IP="100.66.184.9"       # worker node Tailscale IP
+AIRFLOW_UID="50000"                # apache/airflow image runtime user
+AIRFLOW_GID="500"                  # airflow group used in k8s manifests
 
 echo "=== Step 1: Install NFS server packages ==="
 sudo apt-get install -y nfs-kernel-server nfs-common
 
 echo "=== Step 2: Create export directories ==="
-sudo mkdir -p "${NFS_EXPORT_DIR}/airflow-data"
+sudo mkdir -p "${NFS_EXPORT_DIR}/airflow-data/dags"
+sudo mkdir -p "${NFS_EXPORT_DIR}/airflow-data/logs/dag_processor"
+sudo mkdir -p "${NFS_EXPORT_DIR}/airflow-data/logs/scheduler"
+sudo mkdir -p "${NFS_EXPORT_DIR}/airflow-data/project/python/output"
 sudo mkdir -p "${NFS_EXPORT_DIR}/ml-output"
+sudo chown -R "${AIRFLOW_UID}:${AIRFLOW_GID}" "${NFS_EXPORT_DIR}/airflow-data"
+sudo chown -R "${AIRFLOW_UID}:${AIRFLOW_GID}" "${NFS_EXPORT_DIR}/ml-output"
 sudo chmod -R 777 "${NFS_EXPORT_DIR}"
+sudo find "${NFS_EXPORT_DIR}/airflow-data" -type d -exec chmod g+s {} +
+sudo find "${NFS_EXPORT_DIR}/ml-output" -type d -exec chmod g+s {} +
 
 echo "=== Step 3: Configure /etc/exports ==="
 cat << EXPORTS | sudo tee /etc/exports

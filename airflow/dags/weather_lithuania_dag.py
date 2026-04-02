@@ -15,6 +15,10 @@ from airflow.utils.trigger_rule import TriggerRule
 import logging
 
 MLFLOW_TRACKING_URI = os.environ.get('MLFLOW_TRACKING_URI', 'http://mlflow:5000')
+FLINK_OVERVIEW_URL = os.environ.get('FLINK_OVERVIEW_URL', 'http://flink-jobmanager:8081/v1/overview')
+FLINK_READY_REQUEST_TIMEOUT = int(os.environ.get('FLINK_READY_REQUEST_TIMEOUT_SECONDS', '5'))
+FLINK_READY_POKE_INTERVAL = int(os.environ.get('FLINK_READY_POKE_INTERVAL_SECONDS', '10'))
+FLINK_READY_TIMEOUT = int(os.environ.get('FLINK_READY_TIMEOUT_SECONDS', '1800'))
 
 
 def _set_mlflow_experiment(experiment_name: str):
@@ -39,7 +43,7 @@ def check_flink_ready(**context):
     import requests
     
     try:
-        response = requests.get("http://flink-jobmanager:8081/v1/overview", timeout=5)
+        response = requests.get(FLINK_OVERVIEW_URL, timeout=FLINK_READY_REQUEST_TIMEOUT)
         response.raise_for_status()
         data = response.json()
         
@@ -468,9 +472,9 @@ with DAG(
     wait_for_flink = PythonSensor(
         task_id="wait_for_flink_jobmanager",
         python_callable=check_flink_ready,
-        poke_interval=5,
-        timeout=600,
-        mode="poke",
+        poke_interval=FLINK_READY_POKE_INTERVAL,
+        timeout=FLINK_READY_TIMEOUT,
+        mode="reschedule",
     )
 
     beam_regional_analysis = PythonOperator(
