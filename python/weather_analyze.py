@@ -157,6 +157,9 @@ def main() -> None:
     args = parser.parse_args()
 
     raw = pd.read_csv(args.raw_input)
+    # Replace -999 sentinel values (open-meteo fill for recent unprocessed days)
+    _num_cols = raw.select_dtypes(include="number").columns
+    raw[_num_cols] = raw[_num_cols].replace(-999.0, float("nan"))
     current_end = date.fromisoformat(args.current_end)
     current_year = args.current_year or current_end.year
     country_daily = build_country_daily(raw, current_end)

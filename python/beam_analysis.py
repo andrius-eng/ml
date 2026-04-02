@@ -237,6 +237,9 @@ def run(
 
     if input_csv and Path(input_csv).exists():
         raw_df = pd.read_csv(input_csv)
+        # Replace -999 sentinel values (open-meteo fill for recent unprocessed days)
+        _num_cols = raw_df.select_dtypes(include="number").columns
+        raw_df[_num_cols] = raw_df[_num_cols].replace(-999.0, float("nan"))
         existing_cities = set(raw_df["city"].unique())
 
         extra = {c: coord for c, coord in cities.items() if c not in existing_cities}
