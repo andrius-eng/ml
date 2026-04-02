@@ -39,8 +39,8 @@ data:
     taskmanager.memory.process.size: 900m
     taskmanager.memory.managed.fraction: 0.1
     taskmanager.memory.network.fraction: 0.1
-    taskmanager.memory.network.min: 33554432
-    taskmanager.memory.network.max: 67108864
+    taskmanager.memory.network.min: 67108864
+    taskmanager.memory.network.max: 134217728
     taskmanager.memory.jvm-overhead.min: 67108864
     env.java.opts.taskmanager: -XX:MaxDirectMemorySize=256m
     historyserver.web.address: 0.0.0.0
