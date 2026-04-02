@@ -424,6 +424,9 @@ kubectl create secret docker-registry ghcr-secret \
   --docker-username=andrius-eng \
   --docker-password=$(gh auth token) \
   -n ml-stack
+
+cp kubernetes/secrets.example.yaml kubernetes/secrets.yaml
+# edit kubernetes/secrets.yaml and replace all placeholder values before apply
 ```
 
 Apply:

@@ -26,6 +26,7 @@ airflow/airflow/
 logs/
 
 # Kubernetes secrets — never commit real credentials
+kubernetes/secrets.yaml
 kubernetes/base/secrets.yaml
 
 # TLS certificates — private keys must never be committed
