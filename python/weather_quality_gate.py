@@ -40,7 +40,10 @@ def main() -> int:
     temp_z = float(_temp_z_raw) if _temp_z_raw is not None else float('nan')
     precip_z = float(_precip_z_raw) if _precip_z_raw is not None else float('nan')
 
-    weak_months = monthly[monthly["days"] < args.min_month_days]
+    # Exclude the latest (current, in-progress) month from the sparse-days check
+    # since it is expected to be incomplete when we are early in that month.
+    completed_months = monthly[monthly["month"] < monthly["month"].max()]
+    weak_months = completed_months[completed_months["days"] < args.min_month_days]
     extreme_temp_months = monthly[monthly["temp_zscore"].abs() > args.max_monthly_temp_abs_z]
     extreme_precip_months = monthly[monthly["precip_zscore"].abs() > args.max_monthly_precip_abs_z]
 
