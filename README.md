@@ -462,8 +462,13 @@ The ArgoCD application tracks the `kubernetes/overlays/production` path on the
   sharing the network namespace (equivalent to `network_mode: service:flink-taskmanager` in Compose).
 - Portable Beam submissions must use `--environment_config=localhost:50000` so the Flink TaskManager reaches the sidecar over the shared pod loopback.
 - Airflow runs behind Gateway API on the `/airflow` subpath. Keep both
-  `AIRFLOW__API__BASE_URL=/airflow` and FAB proxy-fix enabled so UI routes,
-  auth redirects, and task-detail requests honor the forwarded host/prefix.
+  `AIRFLOW__API__BASE_URL=/airflow`,
+  `AIRFLOW__CORE__EXECUTION_API_SERVER_URL=http://airflow-webserver:8080/airflow/execution/`,
+  and FAB proxy-fix enabled so UI routes, executor task-start requests, auth
+  redirects, and task-detail requests honor the forwarded host/prefix.
+- MLflow and Flink are exposed on stripped subpaths. Keep canonical entry URLs
+  at `/mlflow/` and `/flink/` or redirect bare `/mlflow` and `/flink` to the
+  trailing-slash forms so their relative asset and API URLs resolve correctly.
 - All RWX PVCs use `storageClassName: standard` on minikube (hostPath). Swap
   `nfs-client` in `overlays/production/pvc-patch.yaml` for your RWX class.
 - Services are exposed via Gateway API (HTTPRoutes) with HTTPS terminated at `https://ml-stack.local`.
@@ -508,6 +513,10 @@ Airflow 3.x introduces breaking changes versus 2.x:
 - The `AIRFLOW__API__AUTH_BACKENDS` setting from Airflow 2.x is deprecated and removed.
 - The `airflow-init` Job only runs `airflow db migrate` — no user creation needed.
 - DAGs baked into the image at `/opt/airflow/dags` are hidden by the `airflow-data` PVC mount. A `sync-dags` init container on scheduler and dag-processor copies them from the image into the PVC on startup.
+- When Airflow is reverse-proxied under `/airflow`, keep
+  `AIRFLOW__CORE__EXECUTION_API_SERVER_URL` pointed at
+  `http://airflow-webserver:8080/airflow/execution/`; omitting the `/airflow`
+  prefix causes task startup PATCH calls to hit a 404 before DAG code runs.
 - On NFS-backed deployments, pre-own the `airflow-data` export as UID `50000` and GID `500`, and run Airflow pods with the same `50000:500` identity. Leaving the primary group as `0` causes new DAG and log files to drift to `*:0` ownership on restart.
 
 

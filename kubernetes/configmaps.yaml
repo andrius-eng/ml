@@ -8,7 +8,7 @@ data:
   AIRFLOW__CORE__PARALLELISM: "2"
   AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "2"
   AIRFLOW__WEBSERVER__WORKERS: "2"
-  AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-webserver:8080/execution/"
+  AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-webserver:8080/airflow/execution/"
   AIRFLOW__CORE__INTERNAL_API_SECRET_KEY: "changeme-strong-secret"
   AIRFLOW__CORE__LOAD_EXAMPLES: "false"
   AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"

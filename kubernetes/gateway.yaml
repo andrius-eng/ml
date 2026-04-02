@@ -113,7 +113,31 @@ spec:
         - name: airflow-webserver
           port: 8080
 ---
-# Flink UI — strip /flink prefix; Flink serves from /.
+# Flink UI — redirect bare /flink to the slash-suffixed canonical path.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: flink-canonical
+  namespace: ml-stack
+spec:
+  parentRefs:
+    - name: ml-stack-gateway
+  hostnames:
+    - ml-stack.local
+  rules:
+    - matches:
+        - path:
+            type: Exact
+            value: /flink
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: /flink/
+            statusCode: 301
+---
+# Flink UI — strip /flink/ prefix; Flink serves from /.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -128,7 +152,7 @@ spec:
     - matches:
         - path:
             type: PathPrefix
-            value: /flink
+            value: /flink/
       filters:
         - type: URLRewrite
           urlRewrite:
@@ -139,7 +163,31 @@ spec:
         - name: flink-jobmanager
           port: 8081
 ---
-# MLflow — strip /mlflow prefix; MLflow serves from /.
+# MLflow — redirect bare /mlflow to the slash-suffixed canonical path.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mlflow-canonical
+  namespace: ml-stack
+spec:
+  parentRefs:
+    - name: ml-stack-gateway
+  hostnames:
+    - ml-stack.local
+  rules:
+    - matches:
+        - path:
+            type: Exact
+            value: /mlflow
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: /mlflow/
+            statusCode: 301
+---
+# MLflow — strip /mlflow/ prefix; MLflow serves from /.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -154,7 +202,7 @@ spec:
     - matches:
         - path:
             type: PathPrefix
-            value: /mlflow
+            value: /mlflow/
       filters:
         - type: URLRewrite
           urlRewrite:
