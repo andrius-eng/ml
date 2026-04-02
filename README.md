@@ -759,7 +759,7 @@ GitHub Actions workflows:
 - .github/workflows/docker-images.yml
   - builds and pushes images to ghcr.io on push to main/master and manual dispatch
   - images: ml-airflow-custom, ml-ws-server, ml-frontend, ml-ml-pipeline
-  - airflow and ml-pipeline Docker builds now fail fast if required runtime modules such as `apache_beam`, `mlflow`, or `torch` are missing from the image
+  - airflow and ml-pipeline Docker builds now fail fast if required runtime modules such as `apache_beam`, `mlflow`, or `torch` are missing from the image, and the Airflow check runs against the same `/home/airflow/.local` interpreter used at runtime
   - images are expected to remain private in GHCR; local pulls require auth
 
 ## Notes

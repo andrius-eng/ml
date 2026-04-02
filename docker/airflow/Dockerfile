@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ENV PATH="$JAVA_HOME/bin:$PATH"
+ENV AIRFLOW_PYTHON=/home/airflow/.local/bin/python
 
 # Install uv for fast, reliable dependency resolution
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -20,7 +21,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Use CPU-only torch wheels in Linux containers to avoid pulling CUDA stacks.
 COPY python/requirements-airflow-runtime.txt /tmp/requirements-airflow-runtime.txt
 COPY python/requirements-llm-train.txt /tmp/requirements-llm-train.txt
-RUN uv pip install --system --no-cache \
+RUN uv pip install --python "${AIRFLOW_PYTHON}" --no-cache \
     --index-strategy unsafe-best-match \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     -r /tmp/requirements-airflow-runtime.txt \
@@ -32,10 +33,10 @@ COPY python /opt/airflow/project/python
 
 RUN mkdir -p /opt/airflow/logs && \
     chmod -R 775 /opt/airflow /opt/airflow/dags /opt/airflow/project /opt/airflow/logs && \
-    chown -R airflow: /opt/airflow
+    chown -R airflow: /opt/airflow /home/airflow/.local
 USER airflow
 
-RUN python - <<'PY'
+RUN "${AIRFLOW_PYTHON}" - <<'PY'
 required = [
     "apache_beam",
     "mlflow",
