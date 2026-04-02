@@ -159,17 +159,21 @@ flowchart LR
 
 ### SFT dataset (`llama_prepare_sft.py`)
 
-Reads all pipeline artifacts and generates **68 instruction-answer pairs**
-(54 train / 14 eval) covering:
+Reads pipeline artifacts and generates a deterministic instruction-answer
+dataset whose size depends on the currently available DAG outputs. The examples
+cover:
 
 - Lithuania weather summaries and anomaly assessments
 - City-level anomaly rankings
 - Vilnius month anomaly context with z-score interpretation
 - Climate model performance (R², RMSE, MAE)
+- Beam/Flink regional monthly anomaly summaries
 - **Year-vs-year March comparisons** — 29 pairs of the form
   *"Is this March warmer than 2003? Yes, 2026 (4.80 °C) is warmer by +5.73 °C"*
 
-The dataset uses only stdlib `csv` (no pandas dependency in the prep step).
+The prep step uses only deterministic artifact fields. It intentionally
+excludes `rag_demo.json` answers and skips implausible outlier signals so the
+adapter does not learn generated or pathological numeric values.
 
 ### Model (`llama_train_lora.py`)
 
@@ -178,8 +182,15 @@ The dataset uses only stdlib `csv` (no pandas dependency in the prep step).
 | Base model | `distilgpt2` (82M params) | `LLAMA_BASE_MODEL` env var |
 | Adapter method | LoRA (PEFT) | — |
 | Max sequence length | 256 tokens | `--max-length` CLI arg |
-| Training speed | ~1–2 min on CPU | — |
+| Epochs | 3 | `--epochs` CLI arg |
+| Learning rate | `5e-4` | `--learning-rate` CLI arg |
+| Loss masking | Response tokens only | — |
+| Training speed | CPU-friendly with `distilgpt2`; runtime depends on host and dataset size | — |
 | Adapter output | `python/output/llm/lora-adapter/` | `--output-dir` |
+
+When running in Kubernetes, keep the Airflow webserver and scheduler at `2Gi`
+memory. The previous `1Gi` limit was not enough for in-cluster `distilgpt2`
+LoRA startup and the process was OOM-killed.
 
 The LoRA adapter is a thin layer on top of the frozen base model; it is **not
 used by Ollama at runtime** — the two subsystems are independent. The adapter is

@@ -33,6 +33,162 @@ def load_json(path: Path) -> dict:
         return json.load(f)
 
 
+def load_optional_json(path: Path) -> dict | list | None:
+    if not path.exists():
+        return None
+    return load_json(path)
+
+
+def _prepare_vilnius_annual(annual: pd.DataFrame, *, recompute_stats: bool = False) -> pd.DataFrame:
+    prepared = annual.copy()
+    prepared["year"] = pd.to_numeric(prepared["year"], errors="coerce")
+    prepared["mean_temp_c"] = pd.to_numeric(prepared["mean_temp_c"], errors="coerce")
+    if "days_observed" in prepared.columns:
+        prepared["days_observed"] = pd.to_numeric(prepared["days_observed"], errors="coerce")
+
+    prepared = prepared.dropna(subset=["year", "mean_temp_c"]).sort_values("year").reset_index(drop=True)
+    if prepared.empty:
+        raise ValueError("Vilnius monthly anomaly dataset is empty")
+
+    baseline_mean = float(prepared["mean_temp_c"].mean())
+    baseline_std = float(prepared["mean_temp_c"].std(ddof=1)) if len(prepared) > 1 else 0.0
+
+    if recompute_stats or "anomaly_c" not in prepared.columns:
+        prepared["anomaly_c"] = prepared["mean_temp_c"] - baseline_mean
+    else:
+        prepared["anomaly_c"] = pd.to_numeric(prepared["anomaly_c"], errors="coerce")
+        prepared["anomaly_c"] = prepared["anomaly_c"].fillna(prepared["mean_temp_c"] - baseline_mean)
+
+    if recompute_stats or "zscore" not in prepared.columns:
+        prepared["zscore"] = prepared["anomaly_c"] / baseline_std if baseline_std else 0.0
+    else:
+        prepared["zscore"] = pd.to_numeric(prepared["zscore"], errors="coerce")
+        prepared["zscore"] = prepared["zscore"].fillna(
+            prepared["anomaly_c"] / baseline_std if baseline_std else 0.0
+        )
+
+    prepared["year"] = prepared["year"].astype(int)
+    return prepared
+
+
+def _build_vilnius_summary_from_annual(
+    annual: pd.DataFrame,
+    *,
+    month: int,
+    cutoff_day: int | None = None,
+    execution_date: date | None = None,
+) -> dict:
+    latest_row = annual.sort_values("year").iloc[-1]
+    latest_year = int(latest_row["year"])
+
+    if cutoff_day is None:
+        if "days_observed" in annual.columns and pd.notna(latest_row.get("days_observed")):
+            cutoff_day = int(latest_row["days_observed"])
+        else:
+            cutoff_day = calendar.monthrange(latest_year, month)[1]
+
+    max_day = calendar.monthrange(latest_year, month)[1]
+    cutoff_day = max(1, min(int(cutoff_day), max_day))
+    execution_date = execution_date or date(latest_year, month, cutoff_day)
+
+    return {
+        "month": month,
+        "month_name": calendar.month_name[month],
+        "window": {
+            "start_year": int(annual["year"].min()),
+            "end_year": latest_year,
+            "years_included": int(len(annual)),
+            "cutoff_day": cutoff_day,
+            "execution_date": execution_date.isoformat(),
+        },
+        "baseline": {
+            "mean_temp_c": float(annual["mean_temp_c"].mean()),
+            "std_temp_c": float(annual["mean_temp_c"].std(ddof=1)) if len(annual) > 1 else 0.0,
+        },
+        "latest_year": latest_year,
+    }
+
+
+def _derive_vilnius_month_from_raw(
+    raw_weather_path: Path,
+    *,
+    month: int,
+    window_years: int = 30,
+) -> tuple[dict, pd.DataFrame]:
+    raw = pd.read_csv(raw_weather_path)
+    if "time" not in raw.columns:
+        raise ValueError(f"{raw_weather_path} is missing the 'time' column")
+
+    temp_column = next(
+        (column for column in ("temperature_2m_mean", "mean_temp_c") if column in raw.columns),
+        None,
+    )
+    if temp_column is None:
+        raise ValueError(f"{raw_weather_path} is missing a mean-temperature column")
+
+    prepared = raw.copy()
+    prepared["time"] = pd.to_datetime(prepared["time"], errors="coerce")
+    prepared[temp_column] = pd.to_numeric(prepared[temp_column], errors="coerce")
+    if "city" in prepared.columns:
+        prepared = prepared[prepared["city"].astype(str).str.casefold() == "vilnius"]
+
+    prepared = prepared.dropna(subset=["time", temp_column])
+    prepared = prepared[prepared["time"].dt.month == month].copy()
+    if prepared.empty:
+        raise FileNotFoundError(
+            f"No Vilnius month={month} rows were found in {raw_weather_path}"
+        )
+
+    latest_observation = prepared["time"].max()
+    cutoff_day = int(latest_observation.day)
+    prepared = prepared[prepared["time"].dt.day <= cutoff_day].copy()
+    prepared["year"] = prepared["time"].dt.year
+
+    annual = (
+        prepared.groupby("year", as_index=False)
+        .agg(mean_temp_c=(temp_column, "mean"), days_observed=("time", "count"))
+        .sort_values("year")
+        .reset_index(drop=True)
+    )
+    if annual.empty:
+        raise FileNotFoundError(
+            f"Unable to derive Vilnius month={month} annual aggregates from {raw_weather_path}"
+        )
+
+    latest_year = int(annual["year"].max())
+    start_year = max(int(annual["year"].min()), latest_year - window_years + 1)
+    annual = annual[annual["year"] >= start_year].reset_index(drop=True)
+    annual = _prepare_vilnius_annual(annual, recompute_stats=True)
+
+    return _build_vilnius_summary_from_annual(
+        annual,
+        month=month,
+        cutoff_day=cutoff_day,
+        execution_date=latest_observation.date(),
+    ), annual
+
+
+def _load_vilnius_month_payload(output_dir: Path, month: int) -> tuple[dict, pd.DataFrame]:
+    month_slug = calendar.month_name[month].lower()
+    month_dir = output_dir / f"vilnius_{month_slug}"
+    month_summary = load_optional_json(month_dir / "summary.json")
+    month_csv = month_dir / f"{month_slug}_temperature_anomalies.csv"
+    raw_weather_csv = output_dir / "weather" / "raw_daily_weather.csv"
+
+    if month_csv.exists():
+        annual = _prepare_vilnius_annual(pd.read_csv(month_csv))
+        if isinstance(month_summary, dict):
+            return month_summary, annual
+        return _build_vilnius_summary_from_annual(annual, month=month), annual
+
+    if raw_weather_csv.exists():
+        return _derive_vilnius_month_from_raw(raw_weather_csv, month=month)
+
+    raise FileNotFoundError(
+        f"Missing Vilnius monthly outputs under {month_dir} and no fallback raw weather CSV was found at {raw_weather_csv}"
+    )
+
+
 def _sample_predictions(df: pd.DataFrame, max_points: int = 200) -> list[dict]:
     """Downsample predictions for frontend chart rendering."""
     if df.empty:
@@ -62,10 +218,8 @@ def main() -> None:
     out = Path(args.output_dir)
     month_slug = calendar.month_name[args.month].lower()
     month_name = calendar.month_name[args.month]
-    month_csv_name = f"{month_slug}_temperature_anomalies.csv"
 
-    month_summary = load_json(out / f"vilnius_{month_slug}" / "summary.json")
-    month_annual = pd.read_csv(out / f"vilnius_{month_slug}" / month_csv_name)
+    month_summary, month_annual = _load_vilnius_month_payload(out, args.month)
     weather_summary = load_json(out / "weather" / "ytd_summary.json")
     city_rankings = load_json(out / "weather" / "city_rankings.json")
     # Prefer the real-data climate model evaluation; fall back to legacy synthetic run

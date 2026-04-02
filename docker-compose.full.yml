@@ -24,7 +24,7 @@ services:
         airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true
     environment:
       BEAM_RUNNER: PortableRunner
-      BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities
+      BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=localhost:50000 --no-fetch-missing-cities
       MLFLOW_TRACKING_URI: http://mlflow:5000
       ML_PROJECT_ROOT: /opt/airflow/project/ml
       AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -47,7 +47,7 @@ services:
     - 8080:8080
     environment:
       BEAM_RUNNER: PortableRunner
-      BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities
+      BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=localhost:50000 --no-fetch-missing-cities
       MLFLOW_TRACKING_URI: http://mlflow:5000
       ML_PROJECT_ROOT: /opt/airflow/project/ml
       AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -74,7 +74,7 @@ services:
       - beam-worker-pool
     environment:
       BEAM_RUNNER: PortableRunner
-      BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities
+      BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=localhost:50000 --no-fetch-missing-cities
       MLFLOW_TRACKING_URI: http://mlflow:5000
       ML_PROJECT_ROOT: /opt/airflow/project/ml
       AIRFLOW__CORE__EXECUTOR: CeleryExecutor
@@ -265,7 +265,7 @@ services:
     command: celery worker
     environment:
       BEAM_RUNNER: PortableRunner
-      BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=beam-worker-pool:50000 --no-fetch-missing-cities
+      BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=localhost:50000 --no-fetch-missing-cities
       MLFLOW_TRACKING_URI: http://mlflow:5000
       ML_PROJECT_ROOT: /opt/airflow/project/ml
       AIRFLOW__CORE__EXECUTOR: CeleryExecutor

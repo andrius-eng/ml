@@ -130,10 +130,10 @@ spec:
           resources:
             requests:
               cpu: 200m
-              memory: 512Mi
+              memory: 1Gi
             limits:
               cpu: 750m
-              memory: 1Gi
+              memory: 2Gi
       volumes:
         - name: airflow-data
           persistentVolumeClaim:
@@ -206,10 +206,10 @@ spec:
           resources:
             requests:
               cpu: 150m
-              memory: 512Mi
+              memory: 1Gi
             limits:
               cpu: 500m
-              memory: 1Gi
+              memory: 2Gi
       volumes:
         - name: airflow-data
           persistentVolumeClaim:

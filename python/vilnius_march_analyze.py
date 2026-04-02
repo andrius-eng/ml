@@ -97,6 +97,7 @@ def main() -> None:
     parser.add_argument("--report-output", type=str, default=None)
     parser.add_argument("--execution-date", type=str, default=date.today().isoformat())
     parser.add_argument("--window-years", type=int, default=30)
+    parser.add_argument("--require-flink", action="store_true", help="Fail instead of falling back to DirectRunner")
     args = parser.parse_args()
 
     month_slug = calendar.month_name[args.month].lower()
@@ -122,7 +123,7 @@ def main() -> None:
         "--job_endpoint", "beam-job-server:8099",
         "--artifact_endpoint", "beam-job-server:8098",
         "--environment_type", "EXTERNAL",
-        "--environment_config", "flink-taskmanager:50000",
+        "--environment_config", "localhost:50000",
         "--parallelism", "1",
     ]
 
@@ -140,6 +141,8 @@ def main() -> None:
         )
         print("[beam] PortableRunner succeeded")
     except Exception as exc:
+        if args.require_flink:
+            raise RuntimeError(f"PortableRunner failed and --require-flink is set: {exc}") from exc
         print(f"[beam] PortableRunner failed ({exc}); falling back to DirectRunner")
         beam_analysis.run(
             start_date=f"{start_year}-01-01",

@@ -33,6 +33,7 @@ spec:
           volumeMounts:
             - name: project
               mountPath: /project
+              subPath: project
             - name: ml-output
               mountPath: /project/python/output
             - name: dashboard-data
@@ -98,6 +99,9 @@ spec:
           volumeMounts:
             - name: project
               mountPath: /project
+              subPath: project
+            - name: ml-output
+              mountPath: /project/python/output
             - name: dashboard-data
               mountPath: /project/src/data
           resources:
@@ -111,6 +115,9 @@ spec:
         - name: project
           persistentVolumeClaim:
             claimName: airflow-data
+        - name: ml-output
+          persistentVolumeClaim:
+            claimName: ml-output
         - name: dashboard-data
           persistentVolumeClaim:
             claimName: dashboard-data

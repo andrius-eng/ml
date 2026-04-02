@@ -19,7 +19,7 @@ PyTorch training, Qdrant-backed retrieval, and a live dashboard.
 | Distributed processing | Apache Beam 2.71.0 · PortableRunner → Flink 1.20.1 |
 | Local processing | Python 3.11, pandas, numpy |
 | Modeling | PyTorch, MLflow-skinny · ClimateModel dynamic input_dim (3–8 features) |
-| LLM fine-tuning | distilgpt2 + LoRA (PEFT), 68 SFT examples |
+| LLM fine-tuning | distilgpt2 + LoRA (PEFT), deterministic artifact-derived SFT |
 | Retrieval | Qdrant local store + lightweight TF-IDF |
 | Frontend | Vite/nginx, vanilla JS, Chart.js |
 | Live updates | Node 20 WebSocket server + periodic export |
@@ -120,7 +120,7 @@ graph TB
 If your host has 8GB RAM, apply lower resource profiles before bootstrapping the full stack:
 
 1. set `ollama` replica count to `0` in `kubernetes/base/dashboard.yaml` (it is heavy).
-2. reduce Flink and Beam CPU/memory in `kubernetes/base/flink-beam.yaml` (JM=250m/512Mi, TM=250m/512Mi, Beam=150m/256Mi).
+2. reduce Flink CPU first, but keep the Beam worker pool above the OOM floor in `kubernetes/flink-beam.yaml` (JM=250m/512Mi, TM=250m/512Mi, Beam request at least 256Mi and limit at least 768Mi).
 3. keep the Airflow API server above its minimum concurrency floor in `kubernetes/airflow.yaml` (use at least 2 `airflow api-server` workers and roughly `200m` CPU / `512Mi` memory request with a `1Gi` limit); reduce scheduler and dag-processor more cautiously.
 4. reduce mlflow resources in `kubernetes/base/mlflow.yaml` (60m/150Mi limit 300m/500Mi).
 
@@ -221,6 +221,10 @@ Simplified overlap note:
 - Heating Degree Days (HDD) use Eurostat's `nrg_chdd_m` dataset, which can lag
   current time by many months. The dashboard now falls back to the latest year
   with published data instead of showing zeroes for the current year.
+- `export_frontend_data.py` now reconstructs the Vilnius monthly anomaly panel
+  from `python/output/weather/raw_daily_weather.csv` when the dedicated
+  `vilnius_<month>/summary.json` artifact is missing, so one missing DAG output
+  no longer blanks the whole dashboard.
 - Regional Beam heatmaps are backed by full month-by-month anomaly data in
   `beam_summary.json`. Historical years contain 12 months; only the current
   in-progress year may have partial months.
@@ -453,6 +457,10 @@ The ArgoCD application tracks the `kubernetes/overlays/production` path on the
 
 - `beam-worker-pool` runs as a **sidecar** in the `flink-taskmanager` pod,
   sharing the network namespace (equivalent to `network_mode: service:flink-taskmanager` in Compose).
+- Portable Beam submissions must use `--environment_config=localhost:50000` so the Flink TaskManager reaches the sidecar over the shared pod loopback.
+- Airflow runs behind Gateway API on the `/airflow` subpath. Keep both
+  `AIRFLOW__API__BASE_URL=/airflow` and FAB proxy-fix enabled so UI routes,
+  auth redirects, and task-detail requests honor the forwarded host/prefix.
 - All RWX PVCs use `storageClassName: standard` on minikube (hostPath). Swap
   `nfs-client` in `overlays/production/pvc-patch.yaml` for your RWX class.
 - Services are exposed via Gateway API (HTTPRoutes) with HTTPS terminated at `https://ml-stack.local`.
@@ -620,7 +628,7 @@ docker compose --project-directory . -f airflow/docker-compose.yml -f docker-com
     --job_endpoint beam-job-server:8099 \
     --artifact_endpoint beam-job-server:8098 \
     --environment_type EXTERNAL \
-    --environment_config beam-worker-pool:50000 \
+    --environment_config localhost:50000 \
     --parallelism 1 \
     --input python/output/weather/raw_daily_weather.csv \
     --output-dir python/output/beam \
@@ -678,6 +686,8 @@ uv run python python/llama_train_lora.py \
   --eval-jsonl python/output/llm/sft_eval.jsonl \
   --base-model distilgpt2 \
   --max-length 256 \
+  --epochs 3 \
+  --learning-rate 5e-4 \
   --output-dir python/output/llm/lora-adapter
 ```
 
@@ -685,7 +695,10 @@ Or trigger in Airflow UI:
 
 - DAG: `llama_dag_finetune`
 - Tasks: `prepare_sft_dataset` -> `train_lora_adapter`
-- Default base model: `distilgpt2` (82M params, trains in ~1-2 min on CPU)
+- Default base model: `distilgpt2` (82M params, CPU-friendly)
+- SFT data is built only from deterministic pipeline artifacts; `rag_demo.json` is excluded.
+- Training masks instruction/input tokens so only response tokens contribute to loss.
+- Kubernetes note: keep the Airflow webserver and scheduler at `2Gi` memory; `1Gi` pods were OOM-killed during in-cluster LoRA startup.
 - Override with env var `LLAMA_BASE_MODEL` for a larger model (e.g. `TinyLlama/TinyLlama-1.1B-Chat-v1.0`).
 
 Expected output path after a successful run:
@@ -895,8 +908,8 @@ Moving from a local Docker Compose setup to a resource-constrained Kubernetes en
 **Findings & Fixes:**
 1. **Airflow 3.x Task SDK Webserver Exhaustion:** In Airflow 3, the Task Execution API is completely separated and runs inside the Webserver. Limiting the Webserver to `150m` CPU forces Uvicorn to run a single async worker. The `LocalExecutor` default parallelism (32) immediately exhausted this worker, causing `Connection Refused` on health probes, leading K8s to pull the pod from the service endpoint.
    *Fix:* Drastically reduced `AIRFLOW__CORE__PARALLELISM: "2"` and `AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "2"` via ConfigMap.
-2. **Hardcoded `localhost` in Flink Submissions:** `environment_config` was set to `"localhost:50000"` in Python scripts. In Docker Compose, the sidecar shared the host network namespace smoothly. In Kubernetes, the Airflow pod resolved `localhost` to its *own* loopback, failing to reach the Flink TaskManager.
-   *Fix:* Updated the `environment_config` to explicitly use the Kubernetes service DNS: `"flink-taskmanager:50000"`.
+2. **Conflicting Beam worker endpoint configs:** Part of the repo used `localhost:50000` while another part had drifted to `flink-taskmanager:50000`. With the current Kubernetes design, `beam-worker-pool` is a sidecar in the same pod as `flink-taskmanager`, so the intended path is shared loopback.
+  *Fix:* Standardized Beam submissions on `"localhost:50000"` in DAG code and ConfigMaps.
 3. **Duplicate DAG Parsing Overhead:** The scheduler was running its own DAG parsing loop (`STANDALONE_DAG_PROCESSOR=False`) while a separate `airflow-dag-processor` deployment was also active, effectively doubling the RAM requirement.
    *Fix:* Set `AIRFLOW__SCHEDULER__STANDALONE_DAG_PROCESSOR: "True"` in the ConfigMap.
 4. **Airflow 3 Execution API Starvation:** The Kubernetes webserver runs `airflow api-server`, and the LocalExecutor workers talk to it through `AIRFLOW__CORE__EXECUTION_API_SERVER_URL`. With a single api-server worker, a `300Mi` memory limit, and a `1s` readiness timeout, the pod oscillated between `OOMKilled`, `ReadTimeout`, and `notReady`, which removed it from the `airflow-webserver` Service and caused queued tasks to fail before user code started.
@@ -905,11 +918,13 @@ Moving from a local Docker Compose setup to a resource-constrained Kubernetes en
   *Fix:* Add the same log-directory bootstrap/chmod step to the dag-processor init containers so it can create parse logs on the shared PVC.
 6. **Airflow DAG NFS Ownership Drift:** The shared `airflow-data` export was mounted correctly, but ownership still drifted between `50000:500`, `500:500`, and `*:0` whenever the host-side export and the pod runtime identity were not aligned.
   *Fix:* Provision the NFS export as `50000:500` in `kubernetes/scripts/setup-nfs-storage.sh` and run all Airflow pods as `50000:500` in `kubernetes/airflow.yaml`.
+7. **Beam worker pool OOM during Flink execution:** The Flink TaskManager pod stayed healthy, but the `beam-worker-pool` sidecar was OOMKilled at 256Mi. That caused PortableRunner gRPC cancellations and a fallback to DirectRunner.
+  *Fix:* Raised the Beam worker pool bounds in `kubernetes/flink-beam.yaml` to `256Mi` request / `768Mi` limit and added a DAG check that fails if the run falls back to DirectRunner.
 
 **Next Steps / Operations Checklist:**
-- [x] Fix Flink TaskManager networking (localhost -> `flink-taskmanager`).
+- [x] Standardize Flink worker endpoint on shared loopback (`localhost:50000`).
 - [x] Limit Airflow parallelism for low-resource K8s environments.
 - [x] Disable Airflow Scheduler's duplicate DAG parser loop.
 - [ ] Confirm that DAGs complete seamlessly and register runs to MLflow.
-- [ ] Tune Flink TaskManager and Beam Worker Pool memory bounds for production-sized data runs if required.
+- [x] Raise Beam Worker Pool memory bounds above the observed OOM threshold.
 - [ ] Verify that MLflow models and artifacts are securely persisted to the correct PV (`ml-output`).

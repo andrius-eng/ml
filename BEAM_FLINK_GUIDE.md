@@ -109,7 +109,7 @@ BEAM_PIPELINE_ARGS: >-
   --flink_master=flink-jobmanager:8081
   --parallelism=1
   --environment_type=EXTERNAL
-  --environment_config=beam-worker-pool:50000
+  --environment_config=localhost:50000
 ```
 
 ## Running Distributed Jobs
@@ -125,7 +125,7 @@ python python/beam_analysis.py \
   --job_endpoint beam-job-server:8099 \
   --artifact_endpoint beam-job-server:8098 \
   --environment_type EXTERNAL \
-  --environment_config beam-worker-pool:50000 \
+  --environment_config localhost:50000 \
   --parallelism 1
 
 # Test locally with DirectRunner first
@@ -145,7 +145,7 @@ docker compose --project-directory . -f airflow/docker-compose.yml -f docker-com
     --job_endpoint beam-job-server:8099 \
     --artifact_endpoint beam-job-server:8098 \
     --environment_type EXTERNAL \
-    --environment_config beam-worker-pool:50000 \
+    --environment_config localhost:50000 \
     --parallelism 1 \
     --input python/output/weather/raw_daily_weather.csv \
     --output-dir python/output/beam \
@@ -225,7 +225,7 @@ beam-worker-pool:
     - flink-taskmanager
   restart: unless-stopped
 ```
-In `BEAM_PIPELINE_ARGS` use `--environment_type=EXTERNAL --environment_config=beam-worker-pool:50000`.
+In `BEAM_PIPELINE_ARGS` use `--environment_type=EXTERNAL --environment_config=localhost:50000`.
 ### Kubernetes equivalent
 
 In Kubernetes the `beam-worker-pool` runs as a **sidecar container** in the same
@@ -243,8 +243,8 @@ containers:
     args: ["--worker_pool"]
 ```
 
-The `BEAM_PIPELINE_ARGS` ConfigMap includes `--environment_config=beam-worker-pool:50000`
-which resolves to the sidecar via the shared pod network.
+The `BEAM_PIPELINE_ARGS` ConfigMap should include `--environment_config=localhost:50000`
+because the TaskManager and worker pool share the same pod network namespace.
 
 
 The worker pool must share the TaskManager network namespace so `localhost:50000` is reachable from inside the Flink JVM.
@@ -369,6 +369,7 @@ Use this when `beam_regional_analysis` falls through to DirectRunner or fails:
 - **Shared artifact volume** `beam-artifacts:/tmp/beam-artifact-staging` on both `beam-job-server` and `flink-taskmanager`
 - **TaskManager JVM guardrail**: `env.java.opts.taskmanager: -XX:MaxDirectMemorySize=512m`
 - **Pipeline arg**: `--environment_config localhost:50000` (worker pool on shared loopback)
+- **Beam worker pool sizing**: keep Kubernetes worker pool memory at or above `256Mi` request / `768Mi` limit to avoid `OOMKilled` PortableRunner failures on the regional anomaly pipeline
 - Flink batch jobs verified FINISHED: WordCount JAR (<500ms), direct script Lithuanian weather anomaly pipeline (85s — **job 87841ef8969fa81dc5400e6b2da74451**), and Airflow DAG `lithuania_weather_analysis` on Flink (**job 36a69bc10c22635740031e5aebe36e24**, FINISHED, 47s)
 - Flink UI at `http://localhost:8082` for job monitoring
 
@@ -377,6 +378,7 @@ Use this when `beam_regional_analysis` falls through to DirectRunner or fails:
 - Beam's `ServerFactory` always binds Fn API services to loopback (`127.0.0.1`); `--job-host` and `taskmanager.host` do NOT fix per-worker endpoints — only network namespace sharing resolves this
 - `beam-worker-pool` must be restarted whenever `flink-taskmanager` is restarted (network namespace sharing ties them together)
 - Repeated failed or interrupted runs can exhaust TaskManager Netty direct buffers (`OutOfMemoryError: Direct buffer memory`). Recovery is: cancel the stuck Flink job, recreate `flink-taskmanager`, recreate `beam-worker-pool`, then re-run.
+- If the Beam worker pool is `OOMKilled`, PortableRunner typically fails with `CANCELLED: call already cancelled` or `Connection refused` on the worker endpoint. In this repo, the DAG now treats that fallback as a failure so Flink regressions stay visible.
 - Streaming mode requires different error handling
 - State management needs backups for fault tolerance
 

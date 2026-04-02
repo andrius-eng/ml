@@ -19,11 +19,18 @@ data:
   AIRFLOW__DAG_PROCESSOR__DAG_FILE_PROCESSOR_TIMEOUT: "120"
   AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
   AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: "300"
+  AIRFLOW__API__BASE_URL: "/airflow"
+  AIRFLOW__FAB__ENABLE_PROXY_FIX: "true"
+  AIRFLOW__FAB__PROXY_FIX_X_FOR: "1"
+  AIRFLOW__FAB__PROXY_FIX_X_HOST: "1"
+  AIRFLOW__FAB__PROXY_FIX_X_PORT: "1"
+  AIRFLOW__FAB__PROXY_FIX_X_PROTO: "1"
+  AIRFLOW__FAB__PROXY_FIX_X_PREFIX: "1"
   PYTHONWARNINGS: "ignore::SyntaxWarning"
   MLFLOW_TRACKING_URI: "http://mlflow:5000"
   ML_PROJECT_ROOT: "/opt/airflow/project"
   BEAM_RUNNER: "PortableRunner"
-  BEAM_PIPELINE_ARGS: "--flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=flink-taskmanager:50000 --no-fetch-missing-cities"
+  BEAM_PIPELINE_ARGS: "--flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=localhost:50000 --no-fetch-missing-cities"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -39,8 +46,8 @@ data:
     taskmanager.memory.process.size: 900m
     taskmanager.memory.managed.fraction: 0.1
     taskmanager.memory.network.fraction: 0.1
-    taskmanager.memory.network.min: 67108864
-    taskmanager.memory.network.max: 134217728
+    taskmanager.memory.network.min: 134217728
+    taskmanager.memory.network.max: 268435456
     taskmanager.memory.jvm-overhead.min: 67108864
     env.java.opts.taskmanager: -XX:MaxDirectMemorySize=256m
     historyserver.web.address: 0.0.0.0

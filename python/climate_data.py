@@ -28,6 +28,7 @@ import pandas as pd
 def aggregate_to_country(df: pd.DataFrame) -> pd.DataFrame:
     """Average city-level rows to one country row per day."""
     df = df.copy()
+    df = df.replace(-999.0, np.nan)
     df['time'] = pd.to_datetime(df['time'])
     value_cols = [
         c
@@ -49,6 +50,7 @@ def aggregate_to_country(df: pd.DataFrame) -> pd.DataFrame:
 
 def build_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
+    df = df.replace(-999.0, np.nan)
     df['time'] = pd.to_datetime(df['time'])
     df = df.sort_values('time').reset_index(drop=True)
     df['year'] = df['time'].dt.year

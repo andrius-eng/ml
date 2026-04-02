@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from airflow import DAG
+from airflow.exceptions import AirflowFailException
 from airflow.operators.python import PythonOperator
 from airflow.sensors.python import PythonSensor
 from airflow.utils.trigger_rule import TriggerRule
@@ -61,6 +62,32 @@ def check_flink_ready(**context):
     except Exception as e:
         logging.getLogger(__name__).warning(f"Flink health check failed: {e}")
         return False
+
+
+def _push_beam_execution_metadata(context: dict, *, runner: str, started_on_flink: bool):
+    task_instance = context.get("task_instance")
+    if task_instance is None:
+        return
+
+    task_instance.xcom_push(key="beam_runner", value=runner)
+    task_instance.xcom_push(key="beam_started_on_flink", value=started_on_flink)
+
+
+def verify_beam_started_on_flink(**context):
+    task_instance = context["task_instance"]
+    beam_runner = task_instance.xcom_pull(task_ids="beam_regional_analysis", key="beam_runner")
+    beam_started_on_flink = task_instance.xcom_pull(
+        task_ids="beam_regional_analysis",
+        key="beam_started_on_flink",
+    )
+
+    if beam_runner == "PortableRunner" and beam_started_on_flink:
+        logging.getLogger(__name__).info("✓ Beam regional analysis executed on Flink")
+        return
+
+    raise AirflowFailException(
+        "beam_regional_analysis did not start on Flink; PortableRunner fell back to DirectRunner"
+    )
 
 
 def run_script(script_path: Path, args: list, logger, timeout: int = 300):
@@ -359,12 +386,13 @@ def run_beam_analysis_with_fallback(analysis_end=None, **context):
             "--job_endpoint", "beam-job-server:8099",
             "--artifact_endpoint", "beam-job-server:8098",
             "--environment_type", "EXTERNAL",
-            "--environment_config", "flink-taskmanager:50000",  # worker-pool shares flink-taskmanager network namespace
+            "--environment_config", "localhost:50000",  # worker-pool shares flink-taskmanager network namespace
             "--parallelism", "1",
         ]
         rc = _stream_subprocess(cmd, logger, timeout=2700, label="PortableRunner")
         if rc != 0:
             raise subprocess.CalledProcessError(rc, cmd)
+        _push_beam_execution_metadata(context, runner="PortableRunner", started_on_flink=True)
         logger.info("✅ Beam pipeline completed successfully on Flink via PortableRunner")
         return
     except subprocess.TimeoutExpired:
@@ -386,6 +414,7 @@ def run_beam_analysis_with_fallback(analysis_end=None, **context):
         rc = _stream_subprocess(cmd, logger, timeout=2700, label="DirectRunner")
         if rc != 0:
             raise subprocess.CalledProcessError(rc, cmd)
+        _push_beam_execution_metadata(context, runner="DirectRunner", started_on_flink=False)
         logger.warning("⚠️ Beam pipeline completed with DirectRunner (fallback - Flink unavailable)")
     except subprocess.CalledProcessError as e:
         logger.error(f"DirectRunner also failed (exit {e.returncode})")
@@ -484,6 +513,11 @@ with DAG(
         trigger_rule=TriggerRule.NONE_FAILED,
     )
 
+    verify_beam_on_flink = PythonOperator(
+        task_id="verify_beam_started_on_flink",
+        python_callable=verify_beam_started_on_flink,
+    )
+
     fetch_eurostat_hdd = PythonOperator(
         task_id="fetch_eurostat_hdd",
         python_callable=lambda **ctx: run_script(
@@ -494,6 +528,6 @@ with DAG(
     )
 
     fetch_weather >> analyze_weather >> [plot_weather, quality_gate, wait_for_flink]
-    fetch_eurostat_hdd >> beam_regional_analysis >> refresh_rag_context
+    fetch_eurostat_hdd >> beam_regional_analysis >> verify_beam_on_flink >> refresh_rag_context
     wait_for_flink >> beam_regional_analysis
-    [plot_weather, quality_gate, beam_regional_analysis] >> refresh_rag_context
+    [plot_weather, quality_gate, verify_beam_on_flink] >> refresh_rag_context

@@ -23,9 +23,9 @@ def _load_deps():
         from transformers import (  # type: ignore
             AutoModelForCausalLM,
             AutoTokenizer,
-            DataCollatorForLanguageModeling,
             Trainer,
             TrainingArguments,
+            default_data_collator,
         )
     except Exception as exc:
         raise RuntimeError(
@@ -42,24 +42,82 @@ def _load_deps():
         "get_peft_model": get_peft_model,
         "AutoModelForCausalLM": AutoModelForCausalLM,
         "AutoTokenizer": AutoTokenizer,
-        "DataCollatorForLanguageModeling": DataCollatorForLanguageModeling,
         "Trainer": Trainer,
         "TrainingArguments": TrainingArguments,
+        "default_data_collator": default_data_collator,
     }
 
 
-def format_example(row: dict) -> str:
+def format_prompt(row: dict) -> str:
     instruction = row.get("instruction", "")
     inp = row.get("input", "")
-    out = row.get("output", "")
     return (
         "### Instruction:\n"
         f"{instruction}\n\n"
         "### Input:\n"
         f"{inp}\n\n"
         "### Response:\n"
-        f"{out}"
     )
+
+
+def format_response(row: dict) -> str:
+    return row.get("output", "")
+
+
+def format_example(row: dict) -> str:
+    return f"{format_prompt(row)}{format_response(row)}"
+
+
+def tokenize_supervised_example(row: dict, tokenizer, max_length: int) -> dict:
+    prompt_text = format_prompt(row)
+    response_text = format_response(row)
+
+    prompt_ids_full = tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
+    response_ids = tokenizer(response_text, add_special_tokens=False)["input_ids"]
+    if tokenizer.eos_token_id is not None:
+        response_ids = response_ids + [tokenizer.eos_token_id]
+
+    token_budget = max_length
+    input_ids: list[int] = []
+    labels: list[int] = []
+
+    if tokenizer.bos_token_id is not None:
+        input_ids.append(tokenizer.bos_token_id)
+        labels.append(-100)
+        token_budget -= 1
+
+    if token_budget <= 0:
+        raise ValueError("max_length must be at least 2 for supervised fine-tuning")
+
+    if len(response_ids) >= token_budget:
+        response_ids = response_ids[:token_budget]
+        if tokenizer.eos_token_id is not None:
+            response_ids[-1] = tokenizer.eos_token_id
+        prompt_ids = []
+    else:
+        prompt_budget = token_budget - len(response_ids)
+        prompt_ids = prompt_ids_full[:prompt_budget]
+
+    input_ids.extend(prompt_ids)
+    labels.extend([-100] * len(prompt_ids))
+    input_ids.extend(response_ids)
+    labels.extend(response_ids.copy())
+
+    attention_mask = [1] * len(input_ids)
+    pad_length = max_length - len(input_ids)
+    if pad_length > 0:
+        input_ids.extend([tokenizer.pad_token_id] * pad_length)
+        attention_mask.extend([0] * pad_length)
+        labels.extend([-100] * pad_length)
+
+    if not any(label != -100 for label in labels):
+        raise ValueError("Example lost all response tokens; increase max_length or shorten inputs")
+
+    return {
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
+        "labels": labels,
+    }
 
 
 def main() -> None:
@@ -69,9 +127,9 @@ def main() -> None:
     parser.add_argument("--base-model", type=str, default="distilgpt2")
     parser.add_argument("--output-dir", type=str, default="python/output/llm/lora-adapter")
     parser.add_argument("--max-length", type=int, default=256)
-    parser.add_argument("--epochs", type=int, default=1)
+    parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=1)
-    parser.add_argument("--learning-rate", type=float, default=2e-4)
+    parser.add_argument("--learning-rate", type=float, default=5e-4)
     args = parser.parse_args()
 
     deps = _load_deps()
@@ -81,9 +139,9 @@ def main() -> None:
     get_peft_model = deps["get_peft_model"]
     AutoModelForCausalLM = deps["AutoModelForCausalLM"]
     AutoTokenizer = deps["AutoTokenizer"]
-    DataCollatorForLanguageModeling = deps["DataCollatorForLanguageModeling"]
     Trainer = deps["Trainer"]
     TrainingArguments = deps["TrainingArguments"]
+    default_data_collator = deps["default_data_collator"]
     torch = deps["torch"]
 
     if _parse_major_minor(torch.__version__) < (2, 2):
@@ -107,23 +165,24 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(args.base_model, use_fast=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    if tokenizer.pad_token_id is None:
+        raise RuntimeError("Tokenizer must define a pad token for supervised fine-tuning")
 
     def tok(row):
-        # row is a single example dict when batched=False (the default)
-        text = format_example(row)
-        encoded = tokenizer(
-            text,
-            truncation=True,
-            max_length=args.max_length,
-            padding="max_length",
-        )
-        encoded["labels"] = encoded["input_ids"].copy()
-        return encoded
+        return tokenize_supervised_example(row, tokenizer, args.max_length)
 
     train_ds = dataset["train"].map(tok, remove_columns=dataset["train"].column_names)
     eval_ds = dataset["eval"].map(tok, remove_columns=dataset["eval"].column_names)
 
-    model = AutoModelForCausalLM.from_pretrained(args.base_model)
+    try:
+        model = AutoModelForCausalLM.from_pretrained(
+            args.base_model,
+            low_cpu_mem_usage=True,
+        )
+    except TypeError:
+        model = AutoModelForCausalLM.from_pretrained(args.base_model)
+    if hasattr(model.config, "use_cache"):
+        model.config.use_cache = False
 
     # Pick LoRA target modules based on model architecture.
     # GPT-2 family uses c_attn/c_proj; Llama/Mistral/TinyLlama use q/k/v/o_proj.
@@ -144,6 +203,10 @@ def main() -> None:
         target_modules=_target_modules,
     )
     model = get_peft_model(model, lora_cfg)
+    if hasattr(model, "gradient_checkpointing_enable"):
+        model.gradient_checkpointing_enable()
+    if hasattr(model, "enable_input_require_grads"):
+        model.enable_input_require_grads()
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -154,20 +217,22 @@ def main() -> None:
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
         learning_rate=args.learning_rate,
-        evaluation_strategy="epoch",
-        save_strategy="epoch",
+        evaluation_strategy="no",
+        save_strategy="no",
         logging_steps=10,
         fp16=False,
         report_to=[],
+        seed=42,
+        dataloader_pin_memory=False,
+        gradient_checkpointing=True,
     )
 
     trainer = Trainer(
         model=model,
         args=train_args,
         train_dataset=train_ds,
-        eval_dataset=eval_ds,
         tokenizer=tokenizer,
-        data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
+        data_collator=default_data_collator,
     )
     trainer.train()
 

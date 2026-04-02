@@ -18,7 +18,9 @@ Data sources used:
   climate/climate_predictions.csv     - 1180 prediction vs actual rows
   beam/beam_summary.json              - regional monthly anomaly by city
   beam/monthly_anomaly_matrix.csv     - flat matrix of regional anomalies
-  rag/rag_demo.json                   - curated Q&A pairs from RAG pipeline
+
+Generated RAG answers are intentionally excluded so the adapter learns only
+from deterministic pipeline artifacts.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import random
 from pathlib import Path
 
@@ -70,10 +73,64 @@ def add_example(
 
 
 def _f(val, decimals: int = 2) -> float:
-    try:
-        return round(float(val), decimals)
-    except (TypeError, ValueError):
+    parsed = _float_or_none(val)
+    if parsed is None:
         return 0.0
+    return round(parsed, decimals)
+
+
+def _float_or_none(val) -> float | None:
+    try:
+        parsed = float(val)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return parsed
+
+
+def _is_reasonable_temperature_signal(anomaly_c, z_score) -> bool:
+    anomaly = _float_or_none(anomaly_c)
+    z_value = _float_or_none(z_score)
+    return (
+        anomaly is not None
+        and z_value is not None
+        and abs(anomaly) <= 15.0
+        and abs(z_value) <= 6.0
+    )
+
+
+def _is_reasonable_precip_signal(anomaly_mm, z_score) -> bool:
+    anomaly = _float_or_none(anomaly_mm)
+    z_value = _float_or_none(z_score)
+    return (
+        anomaly is not None
+        and z_value is not None
+        and abs(anomaly) <= 600.0
+        and abs(z_value) <= 8.0
+    )
+
+
+def _is_reasonable_mean_temperature(temp_c) -> bool:
+    value = _float_or_none(temp_c)
+    return value is not None and abs(value) <= 25.0
+
+
+def _iter_city_ytd_records(city_ytd: dict | list) -> list[tuple[str, dict]]:
+    records: list[tuple[str, dict]] = []
+    if isinstance(city_ytd, dict):
+        for city, data in city_ytd.items():
+            if isinstance(data, dict):
+                records.append((str(city), data))
+        return records
+    if isinstance(city_ytd, list):
+        for entry in city_ytd:
+            if not isinstance(entry, dict):
+                continue
+            city = str(entry.get("city", "")).strip()
+            if city:
+                records.append((city, entry))
+    return records
 
 
 # ---------------------------------------------------------------------------
@@ -91,16 +148,21 @@ def _examples_ytd_summary(output_dir: Path, examples: list[dict]) -> None:
     t_z = _f(temp.get("z_score_vs_baseline", 0))
     p_dev = _f(precip.get("deviation_vs_1991_2020_mean", 0), 1)
     p_z = _f(precip.get("z_score_vs_baseline", 0))
+    if not _is_reasonable_temperature_signal(t_dev, t_z):
+        return
     direction = "warmer" if t_dev > 0 else "colder"
     significance = "significantly " if abs(t_z) > 1.5 else ""
+    precip_sentence = ""
+    if _is_reasonable_precip_signal(p_dev, p_z):
+        precip_sentence = f" Precipitation deviation is {p_dev:+.1f} mm (z={p_z:+.2f})."
     add_example(
         examples,
         "Summarize Lithuania year-to-date weather anomaly signal.",
         json.dumps(weather, ensure_ascii=False),
         (
             f"For {period}, Lithuania is {significance}{direction} than the "
-            f"1991-2020 baseline by {abs(t_dev):.2f} C (z={t_z:+.2f}). "
-            f"Precipitation deviation is {p_dev:+.1f} mm (z={p_z:+.2f})."
+            f"1991-2020 baseline by {abs(t_dev):.2f} C (z={t_z:+.2f})."
+            f"{precip_sentence}"
         ),
         "weather/ytd_summary.json",
     )
@@ -119,14 +181,14 @@ def _examples_ytd_summary(output_dir: Path, examples: list[dict]) -> None:
 
 def _examples_city_ytd(output_dir: Path, examples: list[dict]) -> None:
     city_ytd = load_json(output_dir / "weather" / "city_ytd_summary.json")
-    if not isinstance(city_ytd, dict):
+    if not isinstance(city_ytd, (dict, list)):
         return
-    for city, data in city_ytd.items():
-        if not isinstance(data, dict):
-            continue
+    for city, data in _iter_city_ytd_records(city_ytd):
         temp = data.get("temperature", {})
         t_dev = _f(temp.get("deviation_vs_1991_2020_mean", 0))
         t_z = _f(temp.get("z_score_vs_baseline", 0))
+        if not _is_reasonable_temperature_signal(t_dev, t_z):
+            continue
         direction = "warmer" if t_dev > 0 else "colder"
         add_example(
             examples,
@@ -148,31 +210,41 @@ def _examples_city_rankings(output_dir: Path, examples: list[dict]) -> None:
     if combined:
         top = combined[0]
         bottom = combined[-1]
-        add_example(
-            examples,
-            "Which city currently has the strongest combined anomaly signal?",
-            json.dumps(city_rankings, ensure_ascii=False),
-            (
-                f"The strongest combined anomaly is in {top.get('city', '?')} "
-                f"(score {_f(top.get('combined_score', 0)):+.2f}). "
-                f"The weakest is {bottom.get('city', '?')} "
-                f"(score {_f(bottom.get('combined_score', 0)):+.2f})."
-            ),
-            "weather/city_rankings.json",
-        )
+        top_score = _float_or_none(top.get("combined_score", 0))
+        bottom_score = _float_or_none(bottom.get("combined_score", 0))
+        if (
+            top_score is not None
+            and bottom_score is not None
+            and abs(top_score) <= 15.0
+            and abs(bottom_score) <= 15.0
+        ):
+            add_example(
+                examples,
+                "Which city currently has the strongest combined anomaly signal?",
+                json.dumps(city_rankings, ensure_ascii=False),
+                (
+                    f"The strongest combined anomaly is in {top.get('city', '?')} "
+                    f"(score {top_score:+.2f}). "
+                    f"The weakest is {bottom.get('city', '?')} "
+                    f"(score {bottom_score:+.2f})."
+                ),
+                "weather/city_rankings.json",
+            )
     temp_rank = city_rankings.get("temperature", [])
     if temp_rank:
         top_t = temp_rank[0]
-        add_example(
-            examples,
-            "Which city has the most extreme temperature anomaly right now?",
-            json.dumps({"temperature_rankings": temp_rank}, ensure_ascii=False),
-            (
-                f"{top_t.get('city', '?')} has the highest temperature z-score "
-                f"at {_f(top_t.get('temp_zscore', 0)):+.2f}."
-            ),
-            "weather/city_rankings.json",
-        )
+        t_z = _float_or_none(top_t.get("z_score", top_t.get("temp_zscore", 0)))
+        if _is_reasonable_temperature_signal(top_t.get("anomaly", 0), t_z):
+            add_example(
+                examples,
+                "Which city has the most extreme temperature anomaly right now?",
+                json.dumps({"temperature_rankings": temp_rank}, ensure_ascii=False),
+                (
+                    f"{top_t.get('city', '?')} has the most extreme temperature z-score "
+                    f"at {_f(t_z):+.2f}."
+                ),
+                "weather/city_rankings.json",
+            )
 
 
 def _examples_annual_trend(output_dir: Path, examples: list[dict]) -> None:
@@ -235,15 +307,20 @@ def _examples_city_monthly(output_dir: Path, examples: list[dict]) -> None:
         t_z = _f(row.get("temp_zscore", 0))
         p_anom = _f(row.get("precip_anomaly", 0), 1)
         p_z = _f(row.get("precip_zscore", 0))
+        if not _is_reasonable_temperature_signal(t_anom, t_z):
+            continue
         t_dir = "warmer" if t_anom > 0 else "colder"
+        precip_sentence = ""
+        if _is_reasonable_precip_signal(p_anom, p_z):
+            precip_sentence = f" Precipitation anomaly: {p_anom:+.1f} mm (z={p_z:+.2f})."
         add_example(
             examples,
             f"Describe the weather anomaly for {city} in month {month} of {year}.",
             json.dumps(row, ensure_ascii=False),
             (
                 f"{city} in month {month}/{year} was {t_dir} than the climatology "
-                f"by {abs(t_anom):.2f} C (z={t_z:+.2f}). "
-                f"Precipitation anomaly: {p_anom:+.1f} mm (z={p_z:+.2f})."
+                f"by {abs(t_anom):.2f} C (z={t_z:+.2f})."
+                f"{precip_sentence}"
             ),
             "weather/city_monthly_anomalies.csv",
         )
@@ -251,8 +328,12 @@ def _examples_city_monthly(output_dir: Path, examples: list[dict]) -> None:
     most_recent_month = rows[-1].get("month") if rows else None
     most_recent_year = rows[-1].get("year") if rows else None
     if most_recent_month:
-        month_rows = [r for r in rows if r.get("month") == most_recent_month
-                      and r.get("year") == most_recent_year]
+        month_rows = [
+            r for r in rows
+            if r.get("month") == most_recent_month
+            and r.get("year") == most_recent_year
+            and _is_reasonable_temperature_signal(r.get("temp_anomaly", 0), r.get("temp_zscore", 0))
+        ]
         if len(month_rows) >= 2:
             sorted_by_z = sorted(month_rows, key=lambda r: _f(r.get("temp_zscore", 0)), reverse=True)
             warmest_city = sorted_by_z[0]
@@ -280,15 +361,21 @@ def _examples_country_monthly(output_dir: Path, examples: list[dict]) -> None:
         t_anom = _f(row.get("temp_anomaly", 0))
         t_z = _f(row.get("temp_zscore", 0))
         p_anom = _f(row.get("precip_anomaly", 0), 1)
+        p_z = _f(row.get("precip_zscore", 0))
+        if not _is_reasonable_temperature_signal(t_anom, t_z):
+            continue
         direction = "above" if t_anom > 0 else "below"
+        precip_sentence = ""
+        if _is_reasonable_precip_signal(p_anom, p_z):
+            precip_sentence = f" precipitation anomaly {p_anom:+.1f} mm."
         add_example(
             examples,
             f"Describe the national weather anomaly for Lithuania in month {month} of {year}.",
             json.dumps(row, ensure_ascii=False),
             (
                 f"Lithuania month {month}/{year}: temperature was {direction} "
-                f"normal by {abs(t_anom):.2f} C (z={t_z:+.2f}); "
-                f"precipitation anomaly {p_anom:+.1f} mm."
+                f"normal by {abs(t_anom):.2f} C (z={t_z:+.2f});"
+                f"{precip_sentence}"
             ),
             "weather/country_monthly_anomalies.csv",
         )
@@ -305,8 +392,17 @@ def _examples_city_daily_rolling(output_dir: Path, examples: list[dict]) -> None
         if city:
             by_city[city] = row  # last row per city is most recent date
     for city, row in by_city.items():
-        roll7 = _f(row.get("rolling_7d_temp_anomaly", 0))
-        roll30 = _f(row.get("rolling_30d_temp_anomaly", 0))
+        roll7_value = _float_or_none(row.get("rolling_7d_temp_anomaly", 0))
+        roll30_value = _float_or_none(row.get("rolling_30d_temp_anomaly", 0))
+        if (
+            roll7_value is None
+            or roll30_value is None
+            or abs(roll7_value) > 15.0
+            or abs(roll30_value) > 15.0
+        ):
+            continue
+        roll7 = round(roll7_value, 2)
+        roll30 = round(roll30_value, 2)
         date = row.get("time", "?")
         add_example(
             examples,
@@ -339,11 +435,19 @@ def _examples_vilnius_monthly(output_dir: Path, examples: list[dict]) -> None:
         anomaly_val, z_val = None, None
         if csv_path.exists():
             csv_rows = load_csv(csv_path)
-            for r in csv_rows:
-                if str(r.get("year", "")) == str(latest_year):
-                    anomaly_val = _f(r.get("anomaly_c", 0))
-                    z_val = _f(r.get("zscore", 0))
-                    break
+            for r in reversed(csv_rows):
+                candidate_anomaly = r.get("anomaly_c", 0)
+                candidate_z = r.get("zscore", 0)
+                candidate_temp = r.get("mean_temp_c", 0)
+                if not (
+                    _is_reasonable_temperature_signal(candidate_anomaly, candidate_z)
+                    and _is_reasonable_mean_temperature(candidate_temp)
+                ):
+                    continue
+                latest_year = r.get("year", latest_year)
+                anomaly_val = _f(candidate_anomaly)
+                z_val = _f(candidate_z)
+                break
 
         if anomaly_val is not None:
             direction = "above" if anomaly_val > 0 else "below"
@@ -368,7 +472,11 @@ def _examples_vilnius_monthly(output_dir: Path, examples: list[dict]) -> None:
 
 
 def _examples_vilnius_march_trend(output_dir: Path, examples: list[dict]) -> None:
-    rows = load_csv(output_dir / "vilnius_march" / "march_temperature_anomalies.csv")
+    rows = [
+        row for row in load_csv(output_dir / "vilnius_march" / "march_temperature_anomalies.csv")
+        if _is_reasonable_mean_temperature(row.get("mean_temp_c", 0))
+        and _is_reasonable_temperature_signal(row.get("anomaly_c", 0), row.get("zscore", 0))
+    ]
     if len(rows) < 5:
         return
     # Is March warming over time?
@@ -419,7 +527,11 @@ def _examples_march_year_comparisons(output_dir: Path, examples: list[dict]) -> 
     The answer is pre-computed so the tiny model never needs to do arithmetic.
     Context includes the full CSV table so the model learns to read it.
     """
-    rows = load_csv(output_dir / "vilnius_march" / "march_temperature_anomalies.csv")
+    rows = [
+        row for row in load_csv(output_dir / "vilnius_march" / "march_temperature_anomalies.csv")
+        if _is_reasonable_mean_temperature(row.get("mean_temp_c", 0))
+        and _is_reasonable_temperature_signal(row.get("anomaly_c", 0), row.get("zscore", 0))
+    ]
     if len(rows) < 2:
         return
 
@@ -522,10 +634,10 @@ def _examples_beam(output_dir: Path, examples: list[dict]) -> None:
             month_points = []
             for m in sorted(latest_data.keys(), key=lambda x: int(x)):
                 entry = latest_data[m]
-                anomaly = entry.get("anomaly")
-                if anomaly is None:
+                anomaly = _float_or_none(entry.get("anomaly"))
+                if anomaly is None or abs(anomaly) > 15.0:
                     continue
-                month_points.append(f"month {m}: {float(anomaly):+.2f} C")
+                month_points.append(f"month {m}: {anomaly:+.2f} C")
             if not month_points:
                 continue
             add_example(
@@ -541,7 +653,13 @@ def _examples_beam(output_dir: Path, examples: list[dict]) -> None:
 
     beam_matrix_path = output_dir / "beam" / "monthly_anomaly_matrix.csv"
     matrix_rows = load_csv(beam_matrix_path)
-    valid = [r for r in matrix_rows if r.get("anomaly") not in (None, "", "nan")]
+    valid = [
+        r for r in matrix_rows
+        if _float_or_none(r.get("anomaly")) is not None
+        and _float_or_none(r.get("z_score")) is not None
+        and abs(_float_or_none(r.get("anomaly")) or 0.0) <= 15.0
+        and abs(_float_or_none(r.get("z_score")) or 0.0) <= 6.0
+    ]
     if valid:
         top = sorted(valid, key=lambda r: abs(_f(r.get("anomaly", 0))), reverse=True)[:10]
         records_str = "; ".join(
@@ -603,7 +721,8 @@ def build_examples(output_dir: Path) -> list[dict]:
     _examples_march_year_comparisons(output_dir, examples)
     _examples_climate_model(output_dir, examples)
     _examples_beam(output_dir, examples)
-    _examples_rag_qa(output_dir, examples)
+    # Exclude rag_demo.json because it contains model-generated answers rather
+    # than deterministic labels from pipeline artifacts.
 
     # Shuffle so train/eval split is not source-ordered
     random.seed(42)

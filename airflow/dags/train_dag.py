@@ -111,7 +111,7 @@ with DAG(
             "set -euo pipefail\n"
             f'test -f "{CLIMATE_TRAIN_SCRIPT}"\n'
             f'_TRACKING="${{MLFLOW_TRACKING_URI:-{TRACKING_DIR}}}"\n'
-            f'{project_python_command(str(CLIMATE_TRAIN_SCRIPT), "--train-data", str(TRAIN_SET_PATH), "--epochs", "200", "--lr", "0.001", "--batch-size", "128", "--tracking-uri", "$_TRACKING", "--model-path", str(MODEL_PATH), "--metrics-path", str(METRICS_PATH))}'
+            f'{project_python_command(str(CLIMATE_TRAIN_SCRIPT), "--train-data", str(TRAIN_SET_PATH), "--epochs", "50", "--lr", "0.01", "--batch-size", "256", "--tracking-uri", "$_TRACKING", "--model-path", str(MODEL_PATH), "--metrics-path", str(METRICS_PATH))}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
         append_env=True,

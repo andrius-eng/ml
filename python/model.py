@@ -38,7 +38,7 @@ class ClimateModel(nn.Module):
 
         # Deep branch: BatchNorm → Linear → ReLU → Dropout, ×3
         self.block = nn.Sequential(
-            nn.BatchNorm1d(input_dim),
+            nn.LayerNorm(input_dim),
             nn.Linear(input_dim, 128),
             nn.ReLU(),
             nn.Dropout(dropout),

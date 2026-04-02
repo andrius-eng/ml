@@ -92,7 +92,8 @@ spec:
           port: 8000
 ---
 # Airflow API server — /airflow prefix, no strip.
-# Note: configure AIRFLOW__API_SERVER__BASE_URL=/airflow for proper UI links.
+# Note: configure AIRFLOW__API__BASE_URL=/airflow so the UI renders with the
+# correct subpath base href and router links.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
