@@ -496,8 +496,6 @@ spec:
             - --storage.tsdb.retention.time=7d
             - --storage.tsdb.retention.size=4GB
             - --web.enable-lifecycle
-            - --web.external-url=/prometheus
-            - --web.route-prefix=/
           ports:
             - containerPort: 9090
           resources:

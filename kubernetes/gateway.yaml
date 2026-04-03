@@ -366,7 +366,7 @@ spec:
         - name: grafana
           port: 3000
 ---
-# Prometheus — /prometheus prefix. Prometheus served with --web.external-url=/prometheus.
+# Prometheus — /prometheus prefix, strip prefix so Prometheus sees bare paths.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -380,6 +380,12 @@ spec:
         - path:
             type: PathPrefix
             value: /prometheus
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplacePrefixMatch
+              replacePrefixMatch: /
       backendRefs:
         - name: prometheus
           port: 9090
