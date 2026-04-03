@@ -31,6 +31,13 @@ spec:
       allowedRoutes:
         namespaces:
           from: All
+    # Catch-all: accepts any Host (raw IPs, short MagicDNS name, etc.)
+    - name: http-any
+      port: 8000
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: All
 ---
 # Frontend — catch-all, lowest specificity.
 apiVersion: gateway.networking.k8s.io/v1
@@ -41,9 +48,6 @@ metadata:
 spec:
   parentRefs:
     - name: ml-stack-gateway
-  hostnames:
-    - ml-stack.local
-    - "desktop-nnutaj7.tail6964b3.ts.net"
   rules:
     - matches:
         - path:
@@ -83,9 +87,6 @@ metadata:
 spec:
   parentRefs:
     - name: ml-stack-gateway
-  hostnames:
-    - ml-stack.local
-    - "desktop-nnutaj7.tail6964b3.ts.net"
   rules:
     - matches:
         - path:
@@ -235,9 +236,6 @@ metadata:
 spec:
   parentRefs:
     - name: ml-stack-gateway
-  hostnames:
-    - ml-stack.local
-    - "desktop-nnutaj7.tail6964b3.ts.net"
   rules:
     - matches:
         - path:
@@ -261,9 +259,6 @@ metadata:
 spec:
   parentRefs:
     - name: ml-stack-gateway
-  hostnames:
-    - ml-stack.local
-    - "desktop-nnutaj7.tail6964b3.ts.net"
   rules:
     - matches:
         - path:
