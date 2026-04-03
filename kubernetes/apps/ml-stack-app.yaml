@@ -15,6 +15,13 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: ml-stack
+  ignoreDifferences:
+    - group: batch
+      kind: Job
+      name: airflow-init
+      jsonPointers:
+        - /spec/selector
+        - /spec/template/metadata/labels
   syncPolicy:
     automated:
       prune: true
