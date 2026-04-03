@@ -52,13 +52,13 @@ def project_python_command(*args: str) -> str:
 
 
 with DAG(
-    dag_id="llama_dag_finetune",
+    dag_id="llama_lora_finetune",
     default_args=DEFAULT_ARGS,
-    description="Prepare SFT data from DAG artifacts and fine-tune a local Llama LoRA adapter",
+    description="Prepare SFT dataset from pipeline artifacts and fine-tune a local Llama LoRA adapter",
     schedule=None,
     start_date=datetime(2025, 1, 1),
     catchup=False,
-    tags=["llm", "lora", "dag-artifacts"],
+    tags=["llm", "lora", "finetune", "llama"],
 ) as dag:
     prepare_sft = BashOperator(
         task_id="prepare_sft_dataset",

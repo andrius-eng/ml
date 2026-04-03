@@ -436,13 +436,13 @@ RAG_DEMO_PATH = PROJECT_ROOT / "python" / "output" / "rag" / "rag_demo.json"
 
 
 with DAG(
-    dag_id="lithuania_weather_analysis",
+    dag_id="lithuania_weather_anomaly",
     default_args=DEFAULT_ARGS,
-    description="Compare Lithuania 2026 year-to-date weather with historical expectations",
+    description="Fetch ERA5 + Eurostat HDD, run Beam/Flink regional analysis, publish anomaly data for dashboard and RAG",
     schedule="0 6 * * *",
     start_date=datetime(2025, 1, 1),
     catchup=False,
-    tags=["weather", "analytics", "lithuania"],
+    tags=["weather", "analytics", "lithuania", "era5", "beam", "flink"],
 ) as dag:
     fetch_weather = PythonOperator(
         task_id="fetch_weather_data",

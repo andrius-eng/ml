@@ -138,7 +138,7 @@ and computes the difference:
 
 ## 2 — LoRA fine-tuning (Airflow DAG)
 
-The `llama_dag_finetune` DAG is a **manual-trigger only** pipeline that adapts a
+The `llama_lora_finetune` DAG is a **manual-trigger only** pipeline that adapts a
 lightweight language model to the vocabulary and structure of this project's data.
 
 ### Pipeline steps
@@ -264,14 +264,14 @@ matches as the answer. This is the default behaviour in CI (via
 
 ## 6 — Trigger the fine-tuning DAG
 
-In the Airflow UI (<http://localhost:8080>), find **llama_dag_finetune** and
+In the Airflow UI (<http://localhost:8080>), find **llama_lora_finetune** and
 click **Trigger DAG**. No parameters needed.
 
 From the CLI:
 
 ```bash
 docker compose --project-directory . -f airflow/docker-compose.yml \
-  exec airflow-webserver airflow dags trigger llama_dag_finetune
+  exec airflow-webserver airflow dags trigger llama_lora_finetune
 ```
 
 The adapter will appear at `python/output/llm/lora-adapter/` when the run

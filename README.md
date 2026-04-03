@@ -77,10 +77,10 @@ graph TB
     end
 
     subgraph DAGs["DAG Pipelines"]
-        D1[climate_temperature_model]
-        D2[lithuania_weather_analysis]
-        D3[vilnius_march_temperature_anomalies]
-        D4[llama_dag_finetune]
+        D1[era5_temperature_forecast_retrain]
+        D2[lithuania_weather_anomaly]
+        D3[vilnius_march_anomaly]
+        D4[llama_lora_finetune]
     end
 
     subgraph Beam["Distributed Processing"]
@@ -207,15 +207,15 @@ flowchart LR
 
 Current DAG IDs:
 
-- climate_temperature_model
-- lithuania_weather_analysis
-- vilnius_march_temperature_anomalies
-- llama_dag_finetune (manual)
+- era5_temperature_forecast_retrain
+- lithuania_weather_anomaly
+- vilnius_march_anomaly
+- llama_lora_finetune (manual)
 
 Simplified overlap note:
 
-- `vilnius_march_temperature_anomalies` now reuses `python/output/weather/raw_daily_weather.csv` produced by `lithuania_weather_analysis` instead of running a second API fetch.
-- Run `lithuania_weather_analysis` first when starting from an empty workspace.
+- `vilnius_march_anomaly` now reuses `python/output/weather/raw_daily_weather.csv` produced by `lithuania_weather_anomaly` instead of running a second API fetch.
+- Run `lithuania_weather_anomaly` first when starting from an empty workspace.
 
 ## Recent Dashboard Notes
 
@@ -553,7 +553,7 @@ env -u VIRTUAL_ENV \
   AIRFLOW__CORE__LOAD_EXAMPLES=False \
   ML_PROJECT_ROOT="$PWD/.." \
   TRAIN_PYTHON_BIN="$PWD/../.venv/bin/python" \
-  ./.venv/bin/airflow dags trigger lithuania_weather_analysis
+  ./.venv/bin/airflow dags trigger lithuania_weather_anomaly
 ```
 
 ## Live RAG Query API
@@ -621,7 +621,7 @@ docker compose --project-directory . -f airflow/docker-compose.yml -f docker-com
 
 ## Beam DAG Task
 
-The weather DAG (`lithuania_weather_analysis`) includes a `beam_regional_analysis`
+The weather DAG (`lithuania_weather_anomaly`) includes a `beam_regional_analysis`
 task that runs the Beam pipeline via `PortableRunner` against the dedicated
 `beam-job-server`, which submits the job to Flink.
 
@@ -636,7 +636,7 @@ Trigger the DAG:
 
 ```bash
 docker exec airflow-airflow-scheduler-1 \
-  airflow dags trigger lithuania_weather_analysis
+  airflow dags trigger lithuania_weather_anomaly
 ```
 
 Run the Beam pipeline directly (outside Airflow):

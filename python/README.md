@@ -193,14 +193,14 @@ ConfigMap (`airflow-config`).
 
 Current DAG IDs and major script paths:
 
-- climate_temperature_model: climate_data, climate_train, climate_evaluate, plot, diagnostics, quality_gate, rag_pipeline
-- lithuania_weather_analysis: weather_fetch, weather_analyze, weather_plot, weather_quality_gate, rag_pipeline
-- vilnius_march_temperature_anomalies: vilnius_march_fetch, vilnius_march_analyze, vilnius_march_plot, vilnius_march_quality_gate, rag_pipeline
-- llama_dag_finetune: llama_prepare_sft, llama_train_lora
+- era5_temperature_forecast_retrain: climate_data, climate_train, climate_evaluate, plot, diagnostics, quality_gate, rag_pipeline
+- lithuania_weather_anomaly: weather_fetch, weather_analyze, weather_plot, weather_quality_gate, rag_pipeline
+- vilnius_march_anomaly: vilnius_march_fetch, vilnius_march_analyze, vilnius_march_plot, vilnius_march_quality_gate, rag_pipeline
+- llama_lora_finetune: llama_prepare_sft, llama_train_lora
 
 ## LoRA Troubleshooting (Airflow)
 
-If `llama_dag_finetune.train_lora_adapter` fails with messages like:
+If `llama_lora_finetune.train_lora_adapter` fails with messages like:
 
 - `Disabling PyTorch because PyTorch >= 2.4 is required`
 - `NameError: LRScheduler is not defined`

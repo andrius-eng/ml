@@ -155,16 +155,16 @@ docker compose --project-directory . -f airflow/docker-compose.yml -f docker-com
 
 ### Option 3: Via Airflow DAG Trigger
 
-The `lithuania_weather_analysis` DAG is pre-configured for PortableRunner:
+The `lithuania_weather_anomaly` DAG is pre-configured for PortableRunner:
 
 ```bash
 # Trigger the DAG (includes Beam job via PortableRunner → beam-job-server → Flink)
 docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml exec airflow-scheduler \
-  airflow dags trigger lithuania_weather_analysis
+  airflow dags trigger lithuania_weather_anomaly
 
 # Check status
 docker compose -f airflow/docker-compose.yml -f docker-compose.full.yml exec airflow-scheduler \
-  airflow tasks states-for-dag-run lithuania_weather_analysis $(date -u +%Y-%m-%dT%H:%M:%S+00:00 | sed 's/:/%3A/g' | sed 's/+/%2B/g')
+  airflow tasks states-for-dag-run lithuania_weather_anomaly $(date -u +%Y-%m-%dT%H:%M:%S+00:00 | sed 's/:/%3A/g' | sed 's/+/%2B/g')
 ```
 
 ## Monitoring Job Execution
@@ -268,7 +268,7 @@ Mitigation:
 
 ### Root Cause Analysis
 
-The `lithuania_weather_analysis` DAG contains a `beam_regional_analysis` task that
+The `lithuania_weather_anomaly` DAG contains a `beam_regional_analysis` task that
 should execute the Python Beam pipeline on the Flink cluster. An investigation found
 **five issues** preventing successful Flink execution:
 
@@ -370,7 +370,7 @@ Use this when `beam_regional_analysis` falls through to DirectRunner or fails:
 - **TaskManager JVM guardrail**: `env.java.opts.taskmanager: -XX:MaxDirectMemorySize=512m`
 - **Pipeline arg**: `--environment_config localhost:50000` (worker pool on shared loopback)
 - **Beam worker pool sizing**: keep Kubernetes worker pool memory at or above `256Mi` request / `768Mi` limit to avoid `OOMKilled` PortableRunner failures on the regional anomaly pipeline
-- Flink batch jobs verified FINISHED: WordCount JAR (<500ms), direct script Lithuanian weather anomaly pipeline (85s — **job 87841ef8969fa81dc5400e6b2da74451**), and Airflow DAG `lithuania_weather_analysis` on Flink (**job 36a69bc10c22635740031e5aebe36e24**, FINISHED, 47s)
+- Flink batch jobs verified FINISHED: WordCount JAR (<500ms), direct script Lithuanian weather anomaly pipeline (85s — **job 87841ef8969fa81dc5400e6b2da74451**), and Airflow DAG `lithuania_weather_anomaly` on Flink (**job 36a69bc10c22635740031e5aebe36e24**, FINISHED, 47s)
 - Flink UI at `http://localhost:8082` for job monitoring
 
 ### ⚠️ Known Limitations
@@ -471,7 +471,7 @@ if __name__ == '__main__':
 
 ## Next Steps
 
-1. ✅ Trigger `lithuania_weather_analysis` DAG to verify PortableRunner works
+1. ✅ Trigger `lithuania_weather_anomaly` DAG to verify PortableRunner works
 2. ✅ Monitor jobs via Flink web UI
 3. ✅ Experiment with parallelism (add TaskManagers before increasing > 1)
 4. ✅ Modify `test_flink_runner.py` to process your own data
@@ -662,7 +662,7 @@ always `touch` before triggering to avoid HTTP 429 from external weather API:
 
 ```bash
 touch ~/Development/ml/python/output/weather/raw_daily_weather.csv
-docker exec airflow-airflow-scheduler-1 airflow dags trigger lithuania_weather_analysis
+docker exec airflow-airflow-scheduler-1 airflow dags trigger lithuania_weather_anomaly
 ```
 
 ### Starting the Stack

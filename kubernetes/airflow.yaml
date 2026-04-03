@@ -203,6 +203,11 @@ spec:
               mountPath: /opt/airflow
             - name: ml-output
               mountPath: /opt/airflow/project/python/output
+            # dashboard-data is the PVC read by ml-server/ws-server/frontend at
+            # /project/src/data. Mount it here so export_frontend_data.py writes
+            # directly to the same PVC instead of airflow-data (which is shadowed).
+            - name: dashboard-data
+              mountPath: /opt/airflow/project/src/data
           resources:
             requests:
               cpu: 300m
@@ -217,6 +222,9 @@ spec:
         - name: ml-output
           persistentVolumeClaim:
             claimName: ml-output
+        - name: dashboard-data
+          persistentVolumeClaim:
+            claimName: dashboard-data
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -278,6 +286,8 @@ spec:
               mountPath: /opt/airflow
             - name: ml-output
               mountPath: /opt/airflow/project/python/output
+            - name: dashboard-data
+              mountPath: /opt/airflow/project/src/data
           resources:
             requests:
               cpu: 100m
@@ -292,3 +302,6 @@ spec:
         - name: ml-output
           persistentVolumeClaim:
             claimName: ml-output
+        - name: dashboard-data
+          persistentVolumeClaim:
+            claimName: dashboard-data

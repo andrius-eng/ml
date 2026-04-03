@@ -1,6 +1,6 @@
 """Prepare climate regression data from Lithuania ERA5 country daily weather.
 
-Reads the country_daily_weather.csv produced by the lithuania_weather_analysis DAG,
+Reads the country_daily_weather.csv produced by the lithuania_weather_anomaly DAG,
 engineers three temporal features, and writes a chronological train/test split.
 
 Features
@@ -89,7 +89,7 @@ def main() -> None:
         '--input',
         type=str,
         default='python/output/weather/raw_daily_weather.csv',
-        help='raw_daily_weather.csv (city-level) produced by the lithuania_weather_analysis DAG',
+        help='raw_daily_weather.csv (city-level) produced by the lithuania_weather_anomaly DAG',
     )
     parser.add_argument(
         '--train-output',

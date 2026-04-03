@@ -767,8 +767,7 @@ function renderPipeline() {
       tags: ["ERA5", "Anomaly detection", "Apache Beam", "Vega/Matplotlib"],
     },
     {
-      name: "vilnius_march_temperature_anomalies",
-      name: `vilnius_${d.vilnius_month_anomaly ? d.vilnius_month_anomaly.month_name.toLowerCase() : "march"}_temperature_anomalies`,
+      name: `vilnius_${d.vilnius_month_anomaly ? d.vilnius_month_anomaly.month_name.toLowerCase() : "march"}_anomaly`,
       desc: `Historical 30-year deep-dive: extracts every ${d.vilnius_month_anomaly ? d.vilnius_month_anomaly.month_name : "March"} 1–N slice, computes year-by-year temperature anomaly and z-score, generates a longitudinal trend chart.`,
       steps: [
         "fetch_vilnius_march",

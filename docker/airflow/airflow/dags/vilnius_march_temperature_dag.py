@@ -64,13 +64,13 @@ def project_python_command(*args: str) -> str:
 
 
 with DAG(
-    dag_id=f"vilnius_{MONTH_SLUG}_temperature_anomalies",
+    dag_id=f"vilnius_{MONTH_SLUG}_anomaly",
     default_args=DEFAULT_ARGS,
-    description=f"Compare Vilnius {calendar.month_name[MONTH]} temperature slices across the last 30 years",
+    description=f"Compute 30-year {calendar.month_name[MONTH]} temperature anomalies for Vilnius; feeds RAG context, LLM SFT, and frontend dashboard",
     schedule="0 7 * * *",
     start_date=datetime(2025, 1, 1),
     catchup=False,
-    tags=["weather", "vilnius", "temperature", MONTH_SLUG],
+    tags=["weather", "vilnius", "temperature", "anomaly", MONTH_SLUG],
 ) as dag:
     ensure_weather_artifact = BashOperator(
         task_id="ensure_weather_artifact",
@@ -78,7 +78,7 @@ with DAG(
         bash_command=(
             "set -euo pipefail\n"
             f'test -f "{RAW_PATH}" || '
-            f'{{ echo "ERROR: {RAW_PATH} not found. Run DAG lithuania_weather_analysis first."; exit 1; }}\n'
+            f'{{ echo "ERROR: {RAW_PATH} not found. Run DAG lithuania_weather_anomaly first."; exit 1; }}\n'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
         append_env=True,

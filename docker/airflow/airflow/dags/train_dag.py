@@ -2,7 +2,7 @@
 
 Trains a PyTorch residual MLP (BatchNorm + skip connection + Dropout) to predict
 daily mean temperature for Lithuania using real ERA5 data (1991–present) fetched
-by the lithuania_weather_analysis DAG.
+by the lithuania_weather_anomaly DAG.
 --------
 prepare_data        climate_data.py     feature engineering + train/test split
     ↓
@@ -55,7 +55,7 @@ DIAGNOSTICS_SCRIPT = PROJECT_ROOT / "python" / "diagnostics.py"
 QUALITY_GATE_SCRIPT = PROJECT_ROOT / "python" / "quality_gate.py"
 RAG_PIPELINE_SCRIPT = PROJECT_ROOT / "python" / "rag_pipeline.py"
 
-# Input: raw city-level data produced by the lithuania_weather_analysis DAG
+# Input: raw city-level data produced by the lithuania_weather_anomaly DAG
 # climate_data.py aggregates cities → country-level internally
 WEATHER_DAILY_PATH = PROJECT_ROOT / "python" / "output" / "weather" / "raw_daily_weather.csv"
 
@@ -79,17 +79,17 @@ def project_python_command(*args: str) -> str:
 
 
 with DAG(
-    dag_id="climate_temperature_model",
+    dag_id="era5_temperature_forecast_retrain",
     default_args=DEFAULT_ARGS,
     description=(
-        "Train a PyTorch residual MLP on real ERA5 Lithuania daily weather data (1991–2022) "
-        "and evaluate on held-out 2023+ years, logging metrics to MLflow."
+        "Daily retrain of PyTorch residual MLP on ERA5 Lithuania temperatures (1991–present); "
+        "logs to MLflow and promotes @champion on passing quality gate."
     ),
     schedule="0 5 * * *",
     start_date=datetime(2025, 1, 1),
     catchup=False,
     max_active_runs=1,
-    tags=["ml", "mlflow", "climate", "era5", "torch"],
+    tags=["ml", "mlflow", "climate", "era5", "torch", "retrain"],
 ) as dag:
 
     prepare_data = BashOperator(
@@ -98,7 +98,7 @@ with DAG(
         bash_command=(
             "set -euo pipefail\n"
             f'test -f "{WEATHER_DAILY_PATH}" || '
-            f'{{ echo "ERROR: Run the lithuania_weather_analysis DAG first to produce country_daily_weather.csv"; exit 1; }}\n'
+            f'{{ echo "ERROR: Run the lithuania_weather_anomaly DAG first to produce country_daily_weather.csv"; exit 1; }}\n'
             f'test -f "{CLIMATE_DATA_SCRIPT}"\n'
             f'{project_python_command(str(CLIMATE_DATA_SCRIPT), "--input", str(WEATHER_DAILY_PATH), "--train-output", str(TRAIN_SET_PATH), "--test-output", str(TEST_SET_PATH), "--test-from-year", "2023")}'
         ),
