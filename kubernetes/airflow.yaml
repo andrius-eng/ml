@@ -205,11 +205,11 @@ spec:
               mountPath: /opt/airflow/project/python/output
           resources:
             requests:
-              cpu: 150m
+              cpu: 300m
               memory: 1Gi
             limits:
-              cpu: 500m
-              memory: 2Gi
+              cpu: 1500m
+              memory: 3Gi
       volumes:
         - name: airflow-data
           persistentVolumeClaim:

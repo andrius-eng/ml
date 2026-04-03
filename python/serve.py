@@ -142,23 +142,25 @@ def get_model() -> ClimateModel | None:
     if _mlflow_available and MLFLOW_TRACKING_URI:
         try:
             mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-            loaded = mlflow.pytorch.load_model(
-                f'models:/{MODEL_REGISTRY_NAME}@{MODEL_ALIAS}'
+            # Resolve alias → model version → run_id, then load via runs:/ URI.
+            # MLflow 3 places downloaded artifacts one directory deeper than
+            # load_model expects when using models:/ URIs, causing a missing
+            # MLmodel error. Using runs:/{run_id}/{artifact_path} avoids this.
+            alias_mv = MlflowClient().get_model_version_by_alias(
+                MODEL_REGISTRY_NAME, MODEL_ALIAS
             )
+            _model_version = int(alias_mv.version)
+            run_id = alias_mv.run_id
+            # source is e.g. "runs:/<run_id>/model" — extract artifact_path
+            artifact_path = alias_mv.source.split('/', 2)[-1] if alias_mv.source.startswith('runs:/') else 'model'
+            loaded = mlflow.pytorch.load_model(f'runs:/{run_id}/{artifact_path}')
             loaded.eval()
             _model_cache = attach_feature_spec(loaded, feature_spec)
-            try:
-                alias_mv = MlflowClient().get_model_version_by_alias(
-                    MODEL_REGISTRY_NAME, MODEL_ALIAS
-                )
-                _model_version = int(alias_mv.version)
-            except Exception:
-                _model_version = -1
             if _prometheus_available:
                 MODEL_VERSION_GAUGE.set(_model_version)
             print(
                 f'Loaded {MODEL_REGISTRY_NAME} v{_model_version} '
-                f'from MLflow registry @{MODEL_ALIAS}'
+                f'from MLflow registry @{MODEL_ALIAS} (run {run_id[:8]})'
             )
             return _model_cache
         except Exception as _e:
