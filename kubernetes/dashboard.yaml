@@ -184,7 +184,7 @@ spec:
         app: ollama
     spec:
       nodeSelector:
-        kubernetes.io/hostname: desktop-0qvhfr9
+        high-memory: "true"
       containers:
         - name: ollama
           image: ollama/ollama:latest
