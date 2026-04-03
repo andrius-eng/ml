@@ -6,6 +6,8 @@ kind: Job
 metadata:
   name: airflow-init
   namespace: ml-stack
+  annotations:
+    argocd.argoproj.io/compare-options: IgnoreExtraneous
 spec:
   backoffLimit: 3
   template:
