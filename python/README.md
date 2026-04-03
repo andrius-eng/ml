@@ -90,6 +90,7 @@ instead of returning zeros for the current year.
 
 - rag_pipeline.py: builds retrieval corpus and answers questions
 - Structured RAG queries (year-vs-year, warmest/coldest year, year-month extremes) are answered directly from source artifacts before falling back to vector retrieval
+- If `vilnius_<month>/<month>_temperature_anomalies.csv` is missing, month-extremes queries fall back to `beam/beam_summary.json` (defaults to Vilnius when city is not specified).
 - export_frontend_data.py: creates src/data/dashboard.json and sanitizes
   non-JSON float tokens (NaN/Infinity) to null so Vite/CI strict JSON parsing
   cannot fail.

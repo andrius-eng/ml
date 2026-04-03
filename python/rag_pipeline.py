@@ -617,15 +617,98 @@ def _answer_extremes_question(question: str, output_dir: Path) -> dict | None:
 
     # Detect month name
     month_names = {name.lower(): name for idx, name in enumerate(calendar.month_name) if name}
+    month_numbers = {name.lower(): idx for idx, name in enumerate(calendar.month_name) if name}
     month_name = next((name for name in month_names if name in normalized), None)
     if month_name is None:
         return None
 
     month_label = month_names[month_name]
+    month_number = month_numbers[month_name]
     month_dir = output_dir / f"vilnius_{month_name}"
     csv_path = month_dir / f"{month_name}_temperature_anomalies.csv"
     if not csv_path.exists():
-        return None
+        beam_path = output_dir / "beam" / "beam_summary.json"
+        if not beam_path.exists():
+            return None
+
+        with open(beam_path, encoding="utf-8") as fh:
+            beam = json.load(fh)
+
+        cities_data = beam.get("cities", {})
+        if not isinstance(cities_data, dict) or not cities_data:
+            return None
+
+        chosen_city = None
+        for city in cities_data:
+            if city.lower() in normalized:
+                chosen_city = city
+                break
+        if chosen_city is None:
+            chosen_city = "Vilnius" if "Vilnius" in cities_data else sorted(cities_data.keys())[0]
+
+        years_data = cities_data.get(chosen_city, {}).get("data", {})
+        rows: list[dict] = []
+        for year_s, months in years_data.items():
+            if not isinstance(months, dict):
+                continue
+            month_entry = months.get(str(month_number))
+            if not isinstance(month_entry, dict):
+                continue
+            anomaly = month_entry.get("anomaly")
+            temp = month_entry.get("temp")
+            if anomaly is None or temp is None:
+                continue
+            try:
+                rows.append({
+                    "year": int(year_s),
+                    "anomaly_c": float(anomaly),
+                    "mean_temp_c": float(temp),
+                    "zscore": float(month_entry.get("z", 0.0)),
+                })
+            except (TypeError, ValueError):
+                continue
+
+        if not rows:
+            return None
+
+        annual = pd.DataFrame(rows)
+
+        if extreme == "coldest":
+            row = annual.loc[annual["anomaly_c"].idxmin()]
+            superlative = "coldest"
+        else:
+            row = annual.loc[annual["anomaly_c"].idxmax()]
+            superlative = "warmest"
+
+        year = int(row["year"])
+        anomaly = float(row["anomaly_c"])
+        mean_temp = float(row["mean_temp_c"])
+        zscore = float(row.get("zscore", 0.0)) if "zscore" in row.index else 0.0
+
+        other = annual.loc[annual["anomaly_c"].idxmax()] if extreme == "coldest" else annual.loc[annual["anomaly_c"].idxmin()]
+        other_year = int(other["year"])
+        other_anomaly = float(other["anomaly_c"])
+
+        answer = (
+            f"The {superlative} {month_label} in the {chosen_city} record was {year}, "
+            f"with a mean temperature of {mean_temp:.1f} degC and anomaly {anomaly:+.2f} degC"
+            f" (z-score {zscore:+.2f}). "
+            f"For comparison, the {'warmest' if extreme == 'coldest' else 'coldest'} was {other_year} "
+            f"with anomaly {other_anomaly:+.2f} degC."
+        )
+
+        return {
+            "question": question,
+            "answer": answer,
+            "interpretation": f"{year} was the {superlative} {month_label} in {chosen_city} in the dataset.",
+            "sources": [
+                {
+                    "title": f"{chosen_city} regional anomalies (Beam)",
+                    "source": "beam/beam_summary.json",
+                    "score": 1.0,
+                }
+            ],
+        }
 
     annual = pd.read_csv(csv_path)
     if annual.empty:
