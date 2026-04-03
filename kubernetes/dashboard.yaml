@@ -24,7 +24,7 @@ spec:
         - name: ml-server
           image: ghcr.io/andrius-eng/ml-ml-pipeline:latest
           imagePullPolicy: Always
-          command: ["sh", "-c", "cd /app/python && python -m uvicorn serve:app --host 0.0.0.0 --port 8000"]
+          command: ["sh", "-c", "cd /project/python && python -m uvicorn serve:app --host 0.0.0.0 --port 8000"]
           ports:
             - containerPort: 8000
           envFrom:
@@ -47,10 +47,10 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 150Mi
-            limits:
-              cpu: 200m
               memory: 384Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
       volumes:
         - name: project
           persistentVolumeClaim:
