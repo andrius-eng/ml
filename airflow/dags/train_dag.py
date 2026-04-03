@@ -88,6 +88,7 @@ with DAG(
     schedule="0 5 * * *",
     start_date=datetime(2025, 1, 1),
     catchup=False,
+    max_active_runs=1,
     tags=["ml", "mlflow", "climate", "era5", "torch"],
 ) as dag:
 

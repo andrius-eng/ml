@@ -120,6 +120,64 @@ MLFLOW_TRACKING_URI=http://localhost:5000 uv run python python/scripts/register_
 MLFLOW_TRACKING_URI=http://localhost:5000 uv run python python/scripts/register_climate_model.py
 ```
 
+## Model Features & Metrics Reference
+
+### Feature columns
+
+The climate model is trained on an ordered feature vector. The exact set is
+recorded in `python/output/climate/feature_columns.json` after each
+`prepare_climate_data` run. All scripts load this manifest so training,
+evaluation, and inference always use the same column order.
+
+| Column | How it is computed | Why it is needed |
+|---|---|---|
+| `sin_doy` | $\sin\!\left(\frac{2\pi \cdot \text{DOY}}{365}\right)$ | Encodes the seasonal cycle (see *DOY encoding* below) |
+| `cos_doy` | $\cos\!\left(\frac{2\pi \cdot \text{DOY}}{365}\right)$ | Paired with `sin_doy` to give the model a complete seasonal phase |
+| `year_norm` | $\frac{\text{year} - 1991}{30}$ | Linear warming trend; 0 = 1991, 1 = 2021 |
+| `precip_log1p` | $\ln(1 + \text{daily precipitation mm})$ | Log-transform compresses the heavy right tail of rainfall |
+| `snow_log1p` | $\ln(1 + \text{daily snowfall cm})$ | Same reason as precipitation |
+| `sunshine_frac_day` | $\frac{\text{sunshine seconds}}{86400}$ | Normalises to 0–1 regardless of day length |
+| `wind_norm` | $\frac{\text{wind km/h}}{30}$ | Divides by a typical strong-wind reference so values sit near 0–1 |
+| `et0_norm` | $\frac{\text{ET}_0 \text{ mm/day}}{10}$ | Reference evapotranspiration; divided by 10 to match other feature scales |
+
+#### DOY encoding
+
+**DOY** (Day of Year) is an integer in 1–365 (or 366) representing which day of
+the year a row belongs to. Day 1 = January 1st, day 91 ≈ April 1st, day 182 ≈
+July 1st.
+
+A raw integer DOY cannot be fed directly to a neural network because it is
+*discontinuous*: day 365 and day 1 are adjacent in the calendar but 364 apart
+numerically. Sinusoidal encoding wraps DOY onto a circle:
+
+$$\text{sin\_doy} = \sin\!\left(\frac{2\pi \cdot \text{DOY}}{365}\right), \quad
+\text{cos\_doy} = \cos\!\left(\frac{2\pi \cdot \text{DOY}}{365}\right)$$
+
+Together, `(sin_doy, cos_doy)` form a point on the unit circle that moves
+smoothly through summer (maximum) and winter (minimum) without any jump between
+December 31 and January 1. The **two columns together** encode one full phase —
+neither alone is sufficient because $\sin$ alone cannot distinguish spring from
+autumn.
+
+### Evaluation metrics
+
+| Metric | Formula | Units | Interpretation |
+|---|---|---|---|
+| **MSE** (Mean Squared Error) | $\frac{1}{n}\sum (y_i - \hat{y}_i)^2$ | °C² | Average squared prediction error. Quality gate threshold: ≤ 50 °C². Lower is better. Sensitive to large outliers. |
+| **RMSE** (Root MSE) | $\sqrt{\text{MSE}}$ | °C | Same as MSE but in the same units as temperature; easier to interpret. RMSE = 7 means the model is off by ≈ 7 °C on average. |
+| **MAE** (Mean Absolute Error) | $\frac{1}{n}\sum |y_i - \hat{y}_i|$ | °C | Average absolute error; less sensitive to outliers than RMSE. |
+| **R²** (Coefficient of Determination) | $1 - \frac{\sum(y_i-\hat{y}_i)^2}{\sum(y_i-\bar{y})^2}$ | — | Fraction of variance explained by the model. 1.0 = perfect, 0 = no better than predicting the mean, negative = worse than the mean. Quality gate threshold: ≥ 0.65. |
+
+#### Why MSE ≠ MAE²
+
+A gap between MSE and MAE (e.g. RMSE = 35 while MAE = 3.7) means a small
+number of rows have very large errors that dominate the squared metric. This was
+the symptom of the -999 fill-value bug in the raw weather CSV: three rows with
+`temperature = -597 °C` inflated RMSE to 35 while leaving MAE near 3.7.
+After filtering those rows, both metrics agree.
+
+---
+
 ## Kubernetes Deployment
 
 In the Kubernetes setup, scripts run inside the Airflow containers that are
