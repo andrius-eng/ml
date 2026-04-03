@@ -23,7 +23,14 @@ spec:
       hostname: ml-stack.local
       allowedRoutes:
         namespaces:
-          from: Same
+          from: All
+    - name: http-tailscale
+      port: 8000
+      protocol: HTTP
+      hostname: "desktop-nnutaj7.tail6964b3.ts.net"
+      allowedRoutes:
+        namespaces:
+          from: All
 ---
 # Frontend — catch-all, lowest specificity.
 apiVersion: gateway.networking.k8s.io/v1
@@ -36,6 +43,7 @@ spec:
     - name: ml-stack-gateway
   hostnames:
     - ml-stack.local
+    - "desktop-nnutaj7.tail6964b3.ts.net"
   rules:
     - matches:
         - path:
@@ -77,6 +85,7 @@ spec:
     - name: ml-stack-gateway
   hostnames:
     - ml-stack.local
+    - "desktop-nnutaj7.tail6964b3.ts.net"
   rules:
     - matches:
         - path:
@@ -216,6 +225,70 @@ spec:
       backendRefs:
         - name: flink-jobmanager
           port: 8081
+---
+# ArgoCD — redirect bare /argocd to canonical path.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: argocd-canonical
+  namespace: ml-stack
+spec:
+  parentRefs:
+    - name: ml-stack-gateway
+  hostnames:
+    - ml-stack.local
+    - "desktop-nnutaj7.tail6964b3.ts.net"
+  rules:
+    - matches:
+        - path:
+            type: Exact
+            value: /argocd
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: /argocd/
+            statusCode: 301
+---
+# ArgoCD UI — no prefix strip; argocd-server uses --rootpath=/argocd.
+# Cross-namespace backendRef allowed by ReferenceGrant in argocd namespace.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: argocd
+  namespace: ml-stack
+spec:
+  parentRefs:
+    - name: ml-stack-gateway
+  hostnames:
+    - ml-stack.local
+    - "desktop-nnutaj7.tail6964b3.ts.net"
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /argocd
+      backendRefs:
+        - name: argocd-server
+          namespace: argocd
+          port: 80
+---
+# ReferenceGrant: allow ml-stack HTTPRoutes to reference argocd-server service.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: argocd-from-ml-stack
+  namespace: argocd
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: ml-stack
+  to:
+    - group: ""
+      kind: Service
+      name: argocd-server
 ---
 # MLflow — redirect bare /mlflow to the slash-suffixed canonical path.
 apiVersion: gateway.networking.k8s.io/v1
