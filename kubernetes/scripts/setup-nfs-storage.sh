@@ -15,7 +15,8 @@ set -euo pipefail
 INFRA_TS_IP="100.95.8.71"          # infra node Tailscale IP (NFS server)
 NFS_EXPORT_DIR="/data/k8s-nfs"
 POD_CIDR="10.42.0.0/16"
-COMPUTE_TS_IP="100.66.184.9"       # worker node Tailscale IP
+COMPUTE_TS_IP="100.66.184.9"       # k3s-worker-worker Tailscale IP
+COMPUTE2_TS_IP="100.127.227.54"    # desktop-0qvhfr9 (Kali) Tailscale IP
 AIRFLOW_UID="50000"                # apache/airflow image runtime user
 AIRFLOW_GID="500"                  # airflow group used in k8s manifests
 
@@ -37,12 +38,10 @@ sudo find "${NFS_EXPORT_DIR}/ml-output" -type d -exec chmod g+s {} +
 
 echo "=== Step 3: Configure /etc/exports ==="
 cat << EXPORTS | sudo tee /etc/exports
-${NFS_EXPORT_DIR}/airflow-data${POD_CIDR}(rw,sync,no_subtree_check,no_root_squash)
-${NFS_EXPORT_DIR}/airflow-data${COMPUTE_TS_IP}(rw,sync,no_subtree_check,no_root_squash)
-${NFS_EXPORT_DIR}/airflow-data${INFRA_TS_IP}(rw,sync,no_subtree_check,no_root_squash)
-${NFS_EXPORT_DIR}/ml-output${POD_CIDR}(rw,sync,no_subtree_check,no_root_squash)
-${NFS_EXPORT_DIR}/ml-output${COMPUTE_TS_IP}(rw,sync,no_subtree_check,no_root_squash)
-${NFS_EXPORT_DIR}/ml-output${INFRA_TS_IP}(rw,sync,no_subtree_check,no_root_squash)
+/data/k8s-nfs   ${POD_CIDR}(rw,sync,no_subtree_check,no_root_squash)
+/data/k8s-nfs   ${INFRA_TS_IP}(rw,sync,no_subtree_check,no_root_squash)
+/data/k8s-nfs   ${COMPUTE_TS_IP}(rw,sync,no_subtree_check,no_root_squash)
+/data/k8s-nfs   ${COMPUTE2_TS_IP}(rw,sync,no_subtree_check,no_root_squash)
 EXPORTS
 
 echo "=== Step 4: Load nfsd module and export ==="

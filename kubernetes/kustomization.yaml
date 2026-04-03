@@ -17,6 +17,7 @@ resources:
   - tailscale-tls.yaml
   - gateway.yaml
   - gatewayclass.yaml
+  - monitoring.yaml
 
 # Image tags — updated to pinned SHA by CI after each successful build.
 # Managed by scripts/pin-images.sh

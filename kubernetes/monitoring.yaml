@@ -1,0 +1,832 @@
+# Observability stack:
+#   node-exporter DaemonSet   ~15 MB/node → system metrics (CPU/memory/disk/net)
+#   Vector DaemonSet          ~30 MB/node → container log collection
+#   kube-state-metrics        ~30 MB       → k8s object metrics
+#   Prometheus                ~100 MB      → time-series store + scraper
+#   Grafana                   ~100 MB      → dashboards
+#
+# All stateful components (Prometheus, Grafana) are pinned to workload-role=infra.
+# DaemonSets tolerate all nodes so they land everywhere.
+# Total budget: ~365 MB across the 3-node cluster.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RBAC – kube-state-metrics
+# ─────────────────────────────────────────────────────────────────────────────
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-state-metrics
+  namespace: ml-stack
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ml-stack-kube-state-metrics
+rules:
+  - apiGroups: [""]
+    resources: [nodes, pods, namespaces, services, replicationcontrollers,
+                persistentvolumes, persistentvolumeclaims, resourcequotas]
+    verbs: [list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [list, watch]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ml-stack-kube-state-metrics
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ml-stack-kube-state-metrics
+subjects:
+  - kind: ServiceAccount
+    name: kube-state-metrics
+    namespace: ml-stack
+
+# ─────────────────────────────────────────────────────────────────────────────
+# kube-state-metrics Deployment
+# ─────────────────────────────────────────────────────────────────────────────
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-state-metrics
+  namespace: ml-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kube-state-metrics
+  template:
+    metadata:
+      labels:
+        app: kube-state-metrics
+    spec:
+      nodeSelector:
+        workload-role: infra
+      serviceAccountName: kube-state-metrics
+      containers:
+        - name: kube-state-metrics
+          image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.14.0
+          args:
+            - --namespaces=ml-stack
+            - --resources=pods,deployments,replicasets,statefulsets,daemonsets,
+                jobs,cronjobs,persistentvolumeclaims,services,namespaces
+          ports:
+            - containerPort: 8080
+              name: metrics
+            - containerPort: 8081
+              name: telemetry
+          resources:
+            requests:
+              cpu: 20m
+              memory: 30Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kube-state-metrics
+  namespace: ml-stack
+spec:
+  selector:
+    app: kube-state-metrics
+  ports:
+    - name: metrics
+      port: 8080
+      targetPort: 8080
+
+# ─────────────────────────────────────────────────────────────────────────────
+# node-exporter DaemonSet – host-level metrics (replaces heavy agents)
+# ─────────────────────────────────────────────────────────────────────────────
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-exporter
+  namespace: ml-stack
+spec:
+  selector:
+    matchLabels:
+      app: node-exporter
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: node-exporter
+    spec:
+      hostNetwork: true
+      hostPID: true
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+        - operator: Exists
+          effect: NoExecute
+      containers:
+        - name: node-exporter
+          image: prom/node-exporter:v1.9.1
+          args:
+            - --path.rootfs=/host
+            - --path.procfs=/host/proc
+            - --path.sysfs=/host/sys
+            # Skip collectors that fail on WSL2 kernels
+            - --no-collector.wifi
+            - --no-collector.hwmon
+            - --no-collector.thermal_zone
+            - --no-collector.powersupplyclass
+            - --no-collector.fibrechannel
+            - --no-collector.infiniband
+            - --no-collector.ipvs
+            - --no-collector.nfs
+            - --no-collector.nfsd
+            # Exclude noisy/irrelevant mount points
+            - --collector.filesystem.mount-points-exclude=^/(dev|proc|run/credentials|run/k3s|var/lib/kubelet/pods)($$|/)
+            - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs)$$
+          ports:
+            - containerPort: 9100
+              hostPort: 9100
+              name: metrics
+          resources:
+            requests:
+              cpu: 20m
+              memory: 20Mi
+            limits:
+              cpu: 100m
+              memory: 48Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+          volumeMounts:
+            - name: host-root
+              mountPath: /host
+              readOnly: true
+              mountPropagation: HostToContainer
+            - name: host-proc
+              mountPath: /host/proc
+              readOnly: true
+            - name: host-sys
+              mountPath: /host/sys
+              readOnly: true
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+        - name: host-proc
+          hostPath:
+            path: /proc
+        - name: host-sys
+          hostPath:
+            path: /sys
+---
+# Headless service so Prometheus can discover all node-exporter pods via endpoints
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-exporter
+  namespace: ml-stack
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9100"
+spec:
+  selector:
+    app: node-exporter
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: 9100
+  clusterIP: None
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Vector DaemonSet – container log collection
+# Decision: Vector over OTEL (Rust binary, ~30 MB vs ~80 MB, no JVM/GC)
+# Ships logs → console sink (kubectl logs on Vector pods shows structured JSON)
+# Future: swap console sink for Loki when storage is available
+# ─────────────────────────────────────────────────────────────────────────────
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vector
+  namespace: ml-stack
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ml-stack-vector
+rules:
+  - apiGroups: [""]
+    resources: [pods, namespaces, nodes]
+    verbs: [list, watch, get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ml-stack-vector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ml-stack-vector
+subjects:
+  - kind: ServiceAccount
+    name: vector
+    namespace: ml-stack
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vector-config
+  namespace: ml-stack
+data:
+  vector.yaml: |
+    data_dir: /var/lib/vector
+
+    sources:
+      kube_logs:
+        type: kubernetes_logs
+        self_node_name: "${NODE_NAME}"
+        # Exclude monitoring pods themselves to avoid log amplification
+        exclude_paths_glob_patterns:
+          - "**/ml-stack_vector-*/**"
+          - "**/ml-stack_node-exporter-*/**"
+          - "**/ml-stack_prometheus-*/**"
+
+    transforms:
+      # Enrich with node name + keep only key fields to reduce log volume
+      enrich:
+        type: remap
+        inputs: [kube_logs]
+        source: |
+          .node = "${NODE_NAME}"
+          # Drop probe/health-check noise
+          if is_string(.message) && match(.message, r'GET /health|GET /ready|GET /-/healthy') {
+            abort
+          }
+
+    sinks:
+      # Console sink: structured JSON visible via 'kubectl logs -n ml-stack ds/vector'
+      # Replace with loki sink when Loki is available
+      out:
+        type: console
+        inputs: [enrich]
+        encoding:
+          codec: json
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: vector
+  namespace: ml-stack
+spec:
+  selector:
+    matchLabels:
+      app: vector
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: vector
+    spec:
+      serviceAccountName: vector
+      tolerations:
+        - operator: Exists
+          effect: NoSchedule
+        - operator: Exists
+          effect: NoExecute
+      containers:
+        - name: vector
+          image: timberio/vector:0.44.0-alpine
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: VECTOR_CONFIG
+              value: /etc/vector/vector.yaml
+            - name: VECTOR_LOG
+              value: warn
+          resources:
+            requests:
+              cpu: 30m
+              memory: 50Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/vector
+            - name: var-log
+              mountPath: /var/log
+              readOnly: true
+            - name: var-lib-vector
+              mountPath: /var/lib/vector
+            - name: run-k3s
+              mountPath: /run/k3s/containerd
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: vector-config
+        - name: var-log
+          hostPath:
+            path: /var/log
+        - name: var-lib-vector
+          hostPath:
+            path: /var/lib/vector
+        - name: run-k3s
+          hostPath:
+            path: /run/k3s/containerd
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Prometheus – scrapes node-exporter + kube-state-metrics + services
+# ─────────────────────────────────────────────────────────────────────────────
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: ml-stack
+---
+# Prometheus needs to list/watch pods in ml-stack to discover node-exporter pods
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus-discovery
+  namespace: ml-stack
+rules:
+  - apiGroups: [""]
+    resources: [pods, endpoints, services]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus-discovery
+  namespace: ml-stack
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: prometheus-discovery
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: ml-stack
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: ml-stack
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: k3s-hostpath
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: ml-stack
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+      external_labels:
+        cluster: ml-stack
+
+    scrape_configs:
+      - job_name: prometheus
+        static_configs:
+          - targets: [localhost:9090]
+
+      # node-exporter: discover by pod label in ml-stack ns
+      # hostNetwork=true means pod IP = node IP → port 9100 is on the node
+      - job_name: node-exporter
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [ml-stack]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: node-exporter
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_host_ip]
+            replacement: "${1}:9100"
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_node_name]
+            target_label: instance
+
+      - job_name: kube-state-metrics
+        static_configs:
+          - targets: [kube-state-metrics:8080]
+
+      # Airflow exposes basic Prometheus metrics on /metrics when the plugin is loaded
+      - job_name: airflow
+        static_configs:
+          - targets: [airflow-webserver:8080]
+        metrics_path: /metrics
+        scrape_interval: 60s
+
+      # MLflow /metrics (basic process metrics via prometheus built-in)
+      - job_name: mlflow
+        static_configs:
+          - targets: [mlflow:5000]
+        metrics_path: /metrics
+        scrape_interval: 60s
+
+      # Flink REST metrics endpoint
+      - job_name: flink
+        static_configs:
+          - targets: [flink-jobmanager:8081]
+        metrics_path: /metrics
+        scrape_interval: 60s
+
+      # Ollama exposes metrics at /metrics
+      - job_name: ollama
+        static_configs:
+          - targets: [ollama:11434]
+        metrics_path: /metrics
+        scrape_interval: 60s
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: ml-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      nodeSelector:
+        workload-role: infra
+      serviceAccountName: prometheus
+      securityContext:
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.2.1
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time=7d
+            - --storage.tsdb.retention.size=4GB
+            - --web.enable-lifecycle
+            - --web.external-url=/prometheus
+            - --web.route-prefix=/
+          ports:
+            - containerPort: 9090
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 400m
+              memory: 300Mi
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9090
+            initialDelaySeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: 9090
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: prometheus-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: ml-stack
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Grafana – dashboards
+# ─────────────────────────────────────────────────────────────────────────────
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  namespace: ml-stack
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: k3s-hostpath
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: ml-stack
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        uid: prometheus
+        url: http://prometheus:9090
+        isDefault: true
+        editable: false
+        jsonData:
+          timeInterval: 30s
+          httpMethod: POST
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-providers
+  namespace: ml-stack
+data:
+  providers.yaml: |
+    apiVersion: 1
+    providers:
+      - name: ml-stack
+        orgId: 1
+        folder: "ML Stack"
+        type: file
+        disableDeletion: true
+        updateIntervalSeconds: 30
+        allowUiUpdates: false
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: ml-stack
+data:
+  ml-stack-overview.json: |
+    {
+      "uid": "ml-stack-overview",
+      "title": "ML Stack Overview",
+      "schemaVersion": 39,
+      "tags": ["ml-stack"],
+      "editable": false,
+      "time": {"from": "now-1h", "to": "now"},
+      "refresh": "30s",
+      "panels": [
+        {
+          "id": 1,
+          "title": "Node CPU Usage",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))",
+            "legendFormat": "{{instance}}"
+          }],
+          "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1,
+            "color": {"mode": "palette-classic"}}}
+        },
+        {
+          "id": 2,
+          "title": "Node Memory Available",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "node_memory_MemAvailable_bytes",
+            "legendFormat": "{{instance}}"
+          }],
+          "fieldConfig": {"defaults": {"unit": "bytes", "min": 0,
+            "color": {"mode": "palette-classic"}}}
+        },
+        {
+          "id": 3,
+          "title": "Pods by Phase (ml-stack)",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "count by (phase) (kube_pod_status_phase{namespace=\"ml-stack\"} == 1)",
+            "legendFormat": "{{phase}}"
+          }],
+          "fieldConfig": {"defaults": {"color": {"mode": "thresholds"},
+            "thresholds": {"steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]}}}
+        },
+        {
+          "id": 4,
+          "title": "Deployments Available",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 8, "x": 8, "y": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "kube_deployment_status_replicas_available{namespace=\"ml-stack\"}",
+            "legendFormat": "{{deployment}}"
+          }],
+          "fieldConfig": {"defaults": {"color": {"mode": "thresholds"},
+            "thresholds": {"steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 0},
+              {"color": "green", "value": 1}
+            ]}}}
+        },
+        {
+          "id": 5,
+          "title": "Failed Jobs (last 24h)",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 8, "x": 16, "y": 8},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "kube_job_status_failed{namespace=\"ml-stack\"}",
+            "legendFormat": "{{job_name}}"
+          }],
+          "fieldConfig": {"defaults": {"color": {"mode": "thresholds"},
+            "thresholds": {"steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]}}}
+        },
+        {
+          "id": 6,
+          "title": "Node Disk Usage",
+          "type": "bargauge",
+          "gridPos": {"h": 6, "w": 12, "x": 0, "y": 12},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "1 - (node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"} / node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"})",
+            "legendFormat": "{{instance}}"
+          }],
+          "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1,
+            "thresholds": {"steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.7},
+              {"color": "red", "value": 0.85}
+            ]}}}
+        },
+        {
+          "id": 7,
+          "title": "Network I/O",
+          "type": "timeseries",
+          "gridPos": {"h": 6, "w": 12, "x": 12, "y": 12},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "expr": "rate(node_network_receive_bytes_total{device!~\"lo|veth.*|cni.*|flannel.*\"}[5m])",
+              "legendFormat": "{{instance}} rx"
+            },
+            {
+              "expr": "rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|cni.*|flannel.*\"}[5m])",
+              "legendFormat": "{{instance}} tx"
+            }
+          ],
+          "fieldConfig": {"defaults": {"unit": "Bps"}}
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: ml-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      nodeSelector:
+        workload-role: infra
+      securityContext:
+        runAsUser: 472
+        runAsGroup: 472
+        fsGroup: 472
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.5.2
+          env:
+            - name: GF_SERVER_ROOT_URL
+              value: "%(protocol)s://%(domain)s/grafana"
+            - name: GF_SERVER_SERVE_FROM_SUB_PATH
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: "Viewer"
+            - name: GF_AUTH_DISABLE_LOGIN_FORM
+              value: "false"
+            - name: GF_SECURITY_ADMIN_USER
+              value: "admin"
+            - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
+              value: "/var/lib/grafana/dashboards/ml-stack-overview.json"
+          ports:
+            - containerPort: 3000
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /grafana/api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /grafana/api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboard-providers
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-data
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboard-providers
+          configMap:
+            name: grafana-dashboard-providers
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: ml-stack
+spec:
+  selector:
+    app: grafana
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000

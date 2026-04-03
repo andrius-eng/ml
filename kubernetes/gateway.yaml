@@ -347,3 +347,39 @@ spec:
       backendRefs:
         - name: mlflow
           port: 5000
+---
+# Grafana — /grafana prefix. Grafana is configured with GF_SERVER_SERVE_FROM_SUB_PATH=true.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana
+  namespace: ml-stack
+spec:
+  parentRefs:
+    - name: ml-stack-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /grafana
+      backendRefs:
+        - name: grafana
+          port: 3000
+---
+# Prometheus — /prometheus prefix. Prometheus served with --web.external-url=/prometheus.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: prometheus
+  namespace: ml-stack
+spec:
+  parentRefs:
+    - name: ml-stack-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /prometheus
+      backendRefs:
+        - name: prometheus
+          port: 9090
