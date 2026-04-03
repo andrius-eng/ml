@@ -488,6 +488,11 @@ Applications for the `ml-stack` workload and the Sealed Secrets controller.
 - Services are exposed via Gateway API. Trusted HTTPS is served on the Tailscale
   MagicDNS hostname `https://desktop-nnutaj7.tail6964b3.ts.net`, while
   `ml-stack.local` remains available as the local plain-HTTP alias.
+- Any host-restricted subpath routes such as `/airflow`, `/flink`,
+  `/flink-history`, and `/mlflow` must list both `ml-stack.local` and the
+  Tailscale hostname in their `HTTPRoute.spec.hostnames`. If they only match
+  `ml-stack.local`, requests on the Tailscale HTTPS host fall through to the
+  catch-all frontend route.
 
 ### Gateway API + TLS setup
 

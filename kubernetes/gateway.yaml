@@ -81,6 +81,7 @@ spec:
     - name: ml-stack-gateway
   hostnames:
     - ml-stack.local
+    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:
@@ -131,6 +132,7 @@ spec:
     - name: ml-stack-gateway
   hostnames:
     - ml-stack.local
+    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:
@@ -151,6 +153,7 @@ spec:
     - name: ml-stack-gateway
   hostnames:
     - ml-stack.local
+    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:
@@ -175,6 +178,7 @@ spec:
     - name: ml-stack-gateway
   hostnames:
     - ml-stack.local
+    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:
@@ -201,6 +205,7 @@ spec:
     - name: ml-stack-gateway
   hostnames:
     - ml-stack.local
+    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:
@@ -225,6 +230,7 @@ spec:
     - name: ml-stack-gateway
   hostnames:
     - ml-stack.local
+    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:
@@ -309,6 +315,7 @@ spec:
     - name: ml-stack-gateway
   hostnames:
     - ml-stack.local
+    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:
@@ -333,6 +340,7 @@ spec:
     - name: ml-stack-gateway
   hostnames:
     - ml-stack.local
+    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:
