@@ -65,4 +65,4 @@ data:
   MLFLOW_TRACKING_URI: "http://mlflow:5000"
   RAG_LLM_PROVIDER: "ollama"
   OLLAMA_BASE_URL: "http://ollama:11434"
-  OLLAMA_MODEL: "llama3.1:8b"
+  OLLAMA_MODEL: "llama3.2:1b"

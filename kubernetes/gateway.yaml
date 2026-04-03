@@ -66,6 +66,7 @@ spec:
           port: 3000
 ---
 # ML API — strip /api prefix; ml-server serves from /.
+# Extended timeout to 120s to accommodate Ollama LLM inference (40-60s warm).
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -81,6 +82,9 @@ spec:
         - path:
             type: PathPrefix
             value: /api
+      timeouts:
+        request: "120s"
+        backendRequest: "120s"
       filters:
         - type: URLRewrite
           urlRewrite:

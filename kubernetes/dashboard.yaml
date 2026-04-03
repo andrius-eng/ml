@@ -174,7 +174,7 @@ metadata:
   name: ollama
   namespace: ml-stack
 spec:
-  replicas: 0
+  replicas: 1
   selector:
     matchLabels:
       app: ollama
@@ -196,8 +196,8 @@ spec:
               cpu: 0.5
               memory: 1Gi
             limits:
-              cpu: 1
-              memory: 2Gi
+              cpu: 2
+              memory: 3Gi
       volumes:
         - name: ollama-data
           persistentVolumeClaim:
