@@ -74,6 +74,8 @@ metadata:
   namespace: ml-stack
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: airflow-webserver
@@ -152,6 +154,8 @@ metadata:
   namespace: ml-stack
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: airflow-scheduler
@@ -236,6 +240,8 @@ metadata:
   namespace: ml-stack
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: airflow-dag-processor

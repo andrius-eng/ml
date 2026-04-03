@@ -458,6 +458,18 @@ kubectl apply -n argocd -f kubernetes/argocd-app.yaml
 The bootstrap app tracks `kubernetes/apps` on `main` and creates child
 Applications for the `ml-stack` workload and the Sealed Secrets controller.
 
+- With ArgoCD auto-sync enabled, treat git as the source of truth: commit and
+  push manifest changes, then let ArgoCD reconcile them. Reserve direct
+  `kubectl apply/patch` for one-time bootstrap or emergency break-glass work.
+- Keep app-of-apps manifests free of empty/default-only source fields such as
+  `kustomize: {}` and `directory.recurse: false`; ArgoCD normalizes them away
+  on the live Application objects, which leaves the parent app permanently
+  `OutOfSync` even after successful syncs.
+- Singleton infra Deployments pinned to the single `workload-role=infra` node,
+  plus Prometheus on its `ReadWriteOnce` TSDB PVC, use `Recreate` so rollouts do
+  not overlap old and new pods. That avoids scheduler deadlock from doubled
+  memory requests and prevents Prometheus from crashing on the TSDB lock file.
+
 ### Key architecture notes
 
 - `beam-worker-pool` runs as a **sidecar** in the `flink-taskmanager` pod,
