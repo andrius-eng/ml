@@ -16,6 +16,8 @@ spec:
     spec:
       nodeSelector:
         workload-role: compute
+      securityContext:
+        fsGroup: 500
       initContainers:
         - name: wait-mlflow
           image: busybox:1.36
@@ -79,6 +81,8 @@ spec:
     spec:
       nodeSelector:
         workload-role: compute
+      securityContext:
+        fsGroup: 500
       imagePullSecrets:
         - name: ghcr-secret
       containers:
@@ -139,6 +143,8 @@ spec:
     spec:
       nodeSelector:
         workload-role: compute
+      securityContext:
+        fsGroup: 500
       imagePullSecrets:
         - name: ghcr-secret
       containers:

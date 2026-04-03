@@ -12,8 +12,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from rag_pipeline import build_demo_payload
-
 
 def _sanitize_json_values(value):
     """Convert NaN/Inf values to JSON-safe values recursively."""
@@ -229,7 +227,11 @@ def main() -> None:
     predictions_csv = out / "climate" / "climate_predictions.csv"
     predictions_df = pd.read_csv(predictions_csv) if predictions_csv.exists() else pd.DataFrame()
     rag_demo_path = out / "rag" / "rag_demo.json"
-    rag_demo = load_json(rag_demo_path) if rag_demo_path.exists() else build_demo_payload(out)
+    if rag_demo_path.exists():
+        rag_demo = load_json(rag_demo_path)
+    else:
+        from rag_pipeline import build_demo_payload  # lazy: avoids slow torch import
+        rag_demo = build_demo_payload(out)
     beam_summary_path = out / "beam" / "beam_summary.json"
     beam_summary = load_json(beam_summary_path) if beam_summary_path.exists() else None
     heat_stress_path = out / "weather" / "heat_stress.json"
