@@ -183,6 +183,8 @@ spec:
       labels:
         app: ollama
     spec:
+      nodeSelector:
+        kubernetes.io/hostname: desktop-0qvhfr9
       containers:
         - name: ollama
           image: ollama/ollama:latest
@@ -193,11 +195,11 @@ spec:
               mountPath: /root/.ollama
           resources:
             requests:
-              cpu: 0.5
-              memory: 1Gi
+              cpu: "1"
+              memory: 2Gi
             limits:
-              cpu: 2
-              memory: 3Gi
+              cpu: "4"
+              memory: 6Gi
       volumes:
         - name: ollama-data
           persistentVolumeClaim:
