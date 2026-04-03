@@ -19,6 +19,13 @@ import pandas as pd
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
+from climate_model_contract import (
+    attach_feature_spec,
+    build_input_tensor_for_date,
+    load_climate_feature_spec,
+    load_local_climate_model,
+)
+
 
 COLLECTION_NAME = "climate_dashboard_docs"
 DEFAULT_QUESTIONS = [
@@ -36,13 +43,17 @@ DEFAULT_LLM_PROVIDER = os.environ.get("RAG_LLM_PROVIDER", "ollama").strip().lowe
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
 MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "")
+ML_OUTPUT_DIR = Path(os.environ.get("ML_OUTPUT_DIR", "python/output"))
 MODEL_REGISTRY_NAME = os.environ.get("MODEL_REGISTRY_NAME", "ClimateTemperatureModel")
 MODEL_ALIAS = os.environ.get("MODEL_ALIAS", "champion")
 RAG_PROMPT_NAME = "rag-system-prompt"
 RAG_PROMPT_ALIAS = "champion"
 
+_FORECAST_MODEL_CACHE: object | None = None
+
 try:
     import mlflow as _mlflow
+    import mlflow.pytorch  # Ensure the PyTorch flavor loader is registered.
     _mlflow_available = True
     # Helper to safely call mlflow.trace decorator
     def _trace_rag_op(name: str):
@@ -726,15 +737,67 @@ def _answer_month_comparison(question: str, output_dir: Path) -> dict | None:
 
 def _make_model_prediction(model: object, target_date: "date", year_ref: int = 1991, year_scale: float = 30.0) -> float:
     """Run inference for a single date. Returns raw model output (°C)."""
-    import math as _math
     import torch as _torch
-    doy = target_date.timetuple().tm_yday
-    sin_doy = _math.sin(2 * _math.pi * doy / 365)
-    cos_doy = _math.cos(2 * _math.pi * doy / 365)
-    year_norm = (target_date.year - year_ref) / year_scale
-    x = _torch.tensor([[sin_doy, cos_doy, year_norm]], dtype=_torch.float32)
+
+    feature_spec = getattr(model, "_climate_feature_spec", None)
+    if feature_spec is None:
+        feature_spec = load_climate_feature_spec(ML_OUTPUT_DIR / "climate")
+        attach_feature_spec(model, feature_spec)
+
+    x = build_input_tensor_for_date(
+        target_date,
+        feature_spec,
+        year_ref=year_ref,
+        year_scale=year_scale,
+    )
     with _torch.no_grad():
         return float(model(x).item())
+
+
+def _load_forecast_model(output_dir: Path) -> object | None:
+    """Load the climate model once and reuse it for deterministic forecast answers."""
+    global _FORECAST_MODEL_CACHE
+
+    feature_spec = load_climate_feature_spec(output_dir / "climate")
+
+    if _FORECAST_MODEL_CACHE is not None:
+        return _FORECAST_MODEL_CACHE
+
+    # When running inside the FastAPI service, reuse the already-configured
+    # model cache instead of maintaining a second loader path.
+    try:
+        import serve as _serve
+
+        shared_model = _serve.get_model()
+        if shared_model is not None:
+            _FORECAST_MODEL_CACHE = attach_feature_spec(shared_model, feature_spec)
+            return _FORECAST_MODEL_CACHE
+    except Exception:
+        pass
+
+    model = None
+    if _mlflow_available and MLFLOW_TRACKING_URI:
+        try:
+            _mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+            model = _mlflow.pytorch.load_model(
+                f'models:/{MODEL_REGISTRY_NAME}@{MODEL_ALIAS}'
+            )
+            model.eval()
+            model = attach_feature_spec(model, feature_spec)
+        except Exception:
+            model = None
+
+    if model is None:
+        model_path = output_dir / 'climate' / 'climate_model.pth'
+        if not model_path.exists():
+            return None
+        try:
+            model = load_local_climate_model(model_path, feature_spec)
+        except Exception:
+            return None
+
+    _FORECAST_MODEL_CACHE = model
+    return _FORECAST_MODEL_CACHE
 
 
 def _compute_year_bias(model: object, output_dir: Path, target_year: int, recent_days: int = 30) -> dict:
@@ -789,14 +852,6 @@ def _answer_forecast_question(question: str, output_dir: Path) -> dict | None:
     if not any(kw in normalized for kw in forecast_keywords):
         return None
 
-    try:
-        import torch as _torch
-        import sys as _sys
-        _sys.path.insert(0, str(Path(__file__).resolve().parent))
-        from model import ClimateModel
-    except Exception:
-        return None
-
     # Determine target date
     import datetime as _dt
     target_date = date.today() + _dt.timedelta(days=1)
@@ -810,26 +865,8 @@ def _answer_forecast_question(question: str, output_dir: Path) -> dict | None:
             except ValueError:
                 pass
 
-    try:
-        model = None
-        if _mlflow_available and MLFLOW_TRACKING_URI:
-            try:
-                _mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-                model = _mlflow.pytorch.load_model(
-                    f'models:/{MODEL_REGISTRY_NAME}@{MODEL_ALIAS}'
-                )
-                model.eval()
-            except Exception:
-                model = None
-
-        if model is None:
-            model_path = output_dir / 'climate' / 'climate_model.pth'
-            if not model_path.exists():
-                return None
-            model = ClimateModel()
-            model.load_state_dict(_torch.load(str(model_path), weights_only=True))
-            model.eval()
-    except Exception:
+    model = _load_forecast_model(output_dir)
+    if model is None:
         return None
 
     # Step 1 — raw climatological baseline
@@ -880,13 +917,18 @@ def _answer_forecast_question(question: str, output_dir: Path) -> dict | None:
         f"Recent {n_recent}d bias: {recent_bias:+.1f}°C | Adjusted: {adjusted}°C"
     )
 
-    # Pass the computed facts to Ollama so the MLflow prompt drives the wording
-    context_doc = [{'title': 'Climate model forecast context', 'source': 'climate_model + ERA5 observations', 'text': facts}]
-    llm_answer = _answer_with_ollama(question, context_doc) if DEFAULT_LLM_PROVIDER == "ollama" else None
-
-    answer = llm_answer or (
-        f"For {label} ({target_date.isoformat()}) in Lithuania: "
-        f"adjusted estimate {adjusted}°C (baseline {raw_pred_r}°C). {facts}"
+    answer = (
+        f"For {label} ({target_date.isoformat()}) in Lithuania, the adjusted temperature estimate is {adjusted}°C. "
+        f"The model's seasonal baseline for that date is {raw_pred_r}°C. "
+        f"This year has been running {abs_ytd:.1f}°C {ytd_sign} than the model baseline year-to-date, "
+        f"and the most recent {n_recent}-day window is {abs_recent:.1f}°C {recent_sign} than expected. "
+        f"That recent bias is applied as a correction to produce the adjusted estimate. "
+        f"This is a climatological trend estimate, not a live synoptic weather forecast."
+        if n_ytd >= 7
+        else f"For {label} ({target_date.isoformat()}) in Lithuania, the current climatological baseline estimate is {raw_pred_r}°C. "
+             f"There are not enough {target_date.year} observations yet to compute a reliable bias correction, "
+             f"so the answer is reported as the raw model baseline rather than an adjusted estimate. "
+             f"This is a climatological trend estimate, not a live synoptic weather forecast."
     )
 
     return {

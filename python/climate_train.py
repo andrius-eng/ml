@@ -1,8 +1,12 @@
 """Train a ClimateModel MLP on real ERA5 Lithuania daily temperature data.
 
-The model learns to predict daily mean temperature (°C) from three features:
-  sin_doy, cos_doy  — sinusoidal day-of-year encoding (annual seasonality)
-  year_norm         — normalised year (long-term warming trend)
+The model learns to predict daily mean temperature (°C) from the ordered feature
+manifest produced by climate_data.py. The core temporal features are always:
+    sin_doy, cos_doy  — sinusoidal day-of-year encoding (annual seasonality)
+    year_norm         — normalised year (long-term warming trend)
+
+When weather-derived columns are present, the same feature contract may also
+include precip_log1p, snow_log1p, sunshine_frac_day, wind_norm, and et0_norm.
 
 Training data is the chronological training split produced by climate_data.py.
 
@@ -18,10 +22,10 @@ MLflow integration
   ``mlflow.set_experiment()`` before every run.
 * Training params and per-epoch MSE are always logged to MLflow when the
   package is importable.
-* Artifact logging (model .pth file) is best-effort: it is wrapped in a
-  try/except because the artifact backend inside the MLflow server may be a
-  local path inaccessible from the Airflow worker container.  The model file
-  is always saved to ``--model-path`` regardless.
+* The PyTorch flavor artifact is logged to the run first, then the pipeline
+    explicitly ensures a registered model version exists for that run.
+* The local ``.pth`` file is still always written to ``--model-path`` even if
+    MLflow model logging or registry operations fail.
 
 Usage:
   python python/climate_train.py --epochs 100 --lr 0.001
@@ -33,6 +37,7 @@ import argparse
 import csv
 import os
 from contextlib import nullcontext
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -41,7 +46,14 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 
-from model import ClimateModel
+from climate_model_contract import instantiate_climate_model, resolve_feature_spec_from_frame
+from mlflow_model_registry import (
+    MODEL_ARTIFACT_PATH,
+    MODEL_REGISTRY_NAME,
+    ensure_model_version_for_run,
+    get_client,
+    set_model_version_tags,
+)
 
 try:
     import mlflow
@@ -65,14 +77,15 @@ def train(
         mlflow.set_experiment('climate-temperature-model')
 
     df = pd.read_csv(train_path)
-    feature_cols = [c for c in df.columns if c != 'y']
+    feature_spec = resolve_feature_spec_from_frame(Path(model_path).parent, df)
+    feature_cols = feature_spec.columns
     X = df[feature_cols].to_numpy(dtype=np.float32)
     y = df['y'].to_numpy(dtype=np.float32).reshape(-1, 1)
 
     X_t = torch.from_numpy(X)
     y_t = torch.from_numpy(y)
 
-    model = ClimateModel(input_dim=len(feature_cols), dropout=0.1)
+    model = instantiate_climate_model(feature_spec, dropout=0.1)
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr * 0.01)
     criterion = nn.MSELoss()
@@ -86,10 +99,16 @@ def train(
                 'lr': lr,
                 'batch_size': batch_size,
                 'features': ','.join(feature_cols),
+                'feature_count': len(feature_cols),
                 'dataset': 'ERA5-Lithuania-country-daily',
                 'train_rows': len(df),
             })
             mlflow.set_tags({'stage': 'training', 'framework': 'pytorch'})
+            try:
+                mlflow.log_dict(feature_spec.columns, 'model_contract/feature_columns.json')
+                mlflow.log_dict(feature_spec.defaults, 'model_contract/feature_defaults.json')
+            except Exception as exc:
+                print(f'WARNING: could not log model contract artifacts to MLflow ({exc})')
             # Write run_id so downstream tasks (evaluate, plot, quality_gate) can resume this run
             run_id_path = os.path.join(os.path.dirname(model_path) or '.', 'mlflow_run_id.txt')
             os.makedirs(os.path.dirname(run_id_path) or '.', exist_ok=True)
@@ -129,16 +148,39 @@ def train(
                     ).cpu().numpy()
                 signature = infer_signature(input_example, example_outputs)
 
-                # Log and register the pytorch model — populates the MLflow Models tab
+                # Log the PyTorch flavor artifact, then create/find the registry version explicitly.
                 mlflow.pytorch.log_model(
                     model,
-                    artifact_path='model',
+                    artifact_path=MODEL_ARTIFACT_PATH,
                     input_example=input_example,
                     signature=signature,
-                    registered_model_name='ClimateTemperatureModel',
                 )
+                client = get_client(tracking_uri)
+                if client is not None and active_run is not None:
+                    version = ensure_model_version_for_run(
+                        client,
+                        active_run.info.run_id,
+                        model_name=MODEL_REGISTRY_NAME,
+                        artifact_path=MODEL_ARTIFACT_PATH,
+                    )
+                    if version is not None:
+                        set_model_version_tags(
+                            client,
+                            MODEL_REGISTRY_NAME,
+                            str(version.version),
+                            {
+                                'run_id': active_run.info.run_id,
+                                'feature_count': str(len(feature_cols)),
+                                'features': ','.join(feature_cols),
+                                'artifact_path': MODEL_ARTIFACT_PATH,
+                            },
+                        )
+                        version_path = os.path.join(os.path.dirname(model_path) or '.', 'mlflow_model_version.txt')
+                        with open(version_path, 'w', encoding='utf-8') as handle:
+                            handle.write(str(version.version))
+                        print(f'Registered {MODEL_REGISTRY_NAME} v{version.version} for run {active_run.info.run_id}')
             except Exception as e:
-                print(f'WARNING: could not log pytorch model to MLflow ({e}); trying log_artifact fallback ...')
+                print(f'WARNING: could not log/register pytorch model in MLflow ({e}); trying log_artifact fallback ...')
                 try:
                     mlflow.log_artifact(model_path)
                 except Exception as e2:

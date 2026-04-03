@@ -42,7 +42,7 @@ spec:
             - --backend-store-uri
             - postgresql+psycopg2://airflow:airflow@postgres:5432/mlflow
             - --default-artifact-root
-            - file:///mlartifacts
+            - mlflow-artifacts:/
             - --serve-artifacts
             - --host
             - "0.0.0.0"

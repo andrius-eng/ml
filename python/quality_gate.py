@@ -7,13 +7,21 @@ import json
 import os
 import sys
 from contextlib import nullcontext
+from pathlib import Path
 
 try:
     import mlflow
-    from mlflow import MlflowClient
 except Exception:
     mlflow = None
-    MlflowClient = None
+
+from mlflow_model_registry import (
+    MODEL_ALIAS,
+    MODEL_REGISTRY_NAME,
+    configure_tracking_uri,
+    get_client,
+    promote_model_alias_for_run,
+    set_model_version_tags,
+)
 
 
 def _resume_run(run_id_path: str):
@@ -22,9 +30,7 @@ def _resume_run(run_id_path: str):
     try:
         with open(run_id_path) as _f:
             run_id = _f.read().strip()
-        tracking_uri = os.environ.get('MLFLOW_TRACKING_URI', '')
-        if tracking_uri:
-            mlflow.set_tracking_uri(tracking_uri)
+        configure_tracking_uri(os.environ.get('MLFLOW_TRACKING_URI', ''))
         return mlflow.start_run(run_id=run_id)
     except Exception:
         return nullcontext()
@@ -35,7 +41,7 @@ def main():
     parser.add_argument(
         '--summary-json',
         type=str,
-        default='python/output/evaluation.json',
+        default='python/output/climate/climate_evaluation.json',
         help='Path to the evaluation summary JSON file',
     )
     parser.add_argument('--max-mse', type=float, default=50.0, help='Maximum acceptable MSE')
@@ -62,24 +68,44 @@ def main():
     run_id_path = os.path.join(os.path.dirname(args.summary_json) or '.', 'mlflow_run_id.txt')
     with _resume_run(run_id_path) as active_run:
         if mlflow is not None and active_run is not None:
-            mlflow.set_tags({'quality_gate': 'passed', 'stage': 'ready'})
+            mlflow.set_tags({
+                'quality_gate': 'passed',
+                'stage': 'ready',
+                'registered_model_name': MODEL_REGISTRY_NAME,
+            })
 
-    # Promote the registered model version to @champion
-    if mlflow is not None and MlflowClient is not None:
+    # Promote the registered model version to @champion, creating it first if needed.
+    if mlflow is not None:
         try:
-            run_id = ''
-            with open(run_id_path) as _f:
-                run_id = _f.read().strip()
-            client = MlflowClient()
-            versions = client.search_model_versions(f"run_id='{run_id}'")
-            if versions:
-                version = versions[0].version
-                client.set_registered_model_alias('ClimateTemperatureModel', 'champion', version)
-                print(f'Promoted ClimateTemperatureModel v{version} to @champion')
-            else:
-                print('WARNING: no registered model version found for this run; @champion not updated')
+            run_id = Path(run_id_path).read_text(encoding='utf-8').strip()
+            client = get_client(os.environ.get('MLFLOW_TRACKING_URI', ''))
+            if client is None:
+                print('WARNING: MLflow client unavailable; model alias not updated')
+                return 0
+
+            version = promote_model_alias_for_run(client, run_id)
+            if version is None:
+                print('WARNING: model version could not be created or promoted')
+                return 0
+
+            set_model_version_tags(
+                client,
+                MODEL_REGISTRY_NAME,
+                str(version.version),
+                {
+                    'quality_gate': 'passed',
+                    'summary_json': os.path.basename(args.summary_json),
+                    'mse': f'{mse:.6f}',
+                    'r2': f'{r2:.6f}',
+                    'promoted_alias': MODEL_ALIAS,
+                },
+            )
+            version_path = os.path.join(os.path.dirname(args.summary_json) or '.', 'mlflow_model_version.txt')
+            with open(version_path, 'w', encoding='utf-8') as handle:
+                handle.write(str(version.version))
+            print(f'Promoted {MODEL_REGISTRY_NAME} v{version.version} to @{MODEL_ALIAS}')
         except Exception as _e:
-            print(f'WARNING: could not set @champion alias: {_e}')
+            print(f'WARNING: could not set @{MODEL_ALIAS} alias: {_e}')
 
     return 0
 

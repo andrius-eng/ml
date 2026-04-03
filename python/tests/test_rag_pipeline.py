@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import rag_pipeline
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from rag_pipeline import (
@@ -111,3 +113,40 @@ def test_build_demo_payload_includes_default_questions(tmp_path):
     payload = build_demo_payload(output_dir)
     assert payload["corpus_size"] >= 4
     assert len(payload["questions"]) == len(DEFAULT_QUESTIONS)
+
+
+def test_answer_question_forecast_bypasses_vector_retrieval_and_ollama(tmp_path, monkeypatch):
+    output_dir = create_pipeline_fixture(tmp_path)
+    weather_dir = output_dir / "weather"
+    (weather_dir / "country_daily_anomalies.csv").write_text(
+        "time,temperature_2m_mean\n"
+        "2026-03-14,4.0\n"
+        "2026-03-15,5.0\n"
+        "2026-03-16,6.0\n"
+    )
+
+    monkeypatch.setattr(rag_pipeline, "_load_forecast_model", lambda _output_dir: object())
+    monkeypatch.setattr(rag_pipeline, "_make_model_prediction", lambda _model, _target_date: 8.4)
+    monkeypatch.setattr(
+        rag_pipeline,
+        "_compute_year_bias",
+        lambda _model, _output_dir, target_year, recent_days=30: {
+            "ytd_bias": -2.0,
+            "recent_bias": -1.5,
+            "n_ytd": 30,
+            "n_recent": 30,
+            "recent_observed_mean": 5.2,
+        },
+    )
+
+    def fail_if_called(*_args, **_kwargs):
+        raise AssertionError("Forecast answers should not call Ollama")
+
+    monkeypatch.setattr(rag_pipeline, "_answer_with_ollama", fail_if_called)
+
+    result = answer_question("What will the temperature be tomorrow?", output_dir)
+
+    assert "adjusted temperature estimate" in result["answer"].lower()
+    assert "climatological trend estimate" in result["answer"].lower()
+    assert result["sources"][0]["source"] == "climate/climate_model.pth"
+    assert result["sources"][1]["source"] == "weather/country_daily_anomalies.csv"

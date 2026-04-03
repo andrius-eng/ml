@@ -34,15 +34,18 @@ uv run python python/<script>.py
   `et0_norm`. Writes `python/output/climate/feature_columns.json` (ordered list)
   and `python/output/climate/feature_defaults.json` (per-feature training means
   for inference fallback).
-- climate_train.py: reads feature columns dynamically from the CSV header;
-  instantiates `ClimateModel(input_dim=len(feature_cols))`; logs `features` param
-  to MLflow as a comma-separated list.
-- climate_evaluate.py: reads feature columns from the test CSV header;
-  instantiates `ClimateModel(input_dim=len(feature_cols))` before loading the
-  state dict — must match the `input_dim` used at training time.
+- climate_train.py: resolves the ordered feature contract from
+  `feature_columns.json` when present and falls back to the CSV header only when
+  the manifest is absent. Logs `features` and `feature_count` to MLflow, writes
+  the feature manifest into the run artifacts, and explicitly ensures a model
+  version exists for the training run.
+- climate_evaluate.py: validates that the held-out test set satisfies the saved
+  feature manifest before loading the checkpoint, then reorders inputs using the
+  same contract.
 - plot.py: training curve plot
 - diagnostics.py: residual and parity plot
-- quality_gate.py: threshold validation for climate model outputs
+- quality_gate.py: threshold validation for climate model outputs plus explicit
+  `@champion` alias promotion by run ID using the shared MLflow registry helper
 
 ### Lithuania weather pipeline
 
@@ -93,7 +96,10 @@ instead of returning zeros for the current year.
 
 ### Services and local orchestration
 
-- serve.py: FastAPI app with predict and rag query endpoints
+- serve.py: FastAPI app with predict and rag query endpoints. It uses the same
+  `feature_columns.json` / `feature_defaults.json` manifest as training so
+  `/predict`, `/forecast`, and forecast-style RAG answers keep the saved model's
+  input dimension and column order.
 - Docker frontend proxies `/api/*` to FastAPI; if you restart `ml-server`, reload or rebuild the frontend only if nginx config changed
 
 ### LLM fine-tuning
@@ -106,9 +112,12 @@ instead of returning zeros for the current year.
 These are not invoked by Airflow. Run manually from the project root.
 
 - scripts/register_mlflow_prompts.py: registers the RAG system prompt in the MLflow Prompt Registry and sets the `@champion` alias. Re-run whenever the prompt template changes.
+- scripts/register_climate_model.py: backfills or repairs `ClimateTemperatureModel`
+  registration and `@champion` promotion for an existing `mlflow_run_id.txt`.
 
 ```bash
 MLFLOW_TRACKING_URI=http://localhost:5000 uv run python python/scripts/register_mlflow_prompts.py
+MLFLOW_TRACKING_URI=http://localhost:5000 uv run python python/scripts/register_climate_model.py
 ```
 
 ## Kubernetes Deployment

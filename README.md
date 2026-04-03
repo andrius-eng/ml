@@ -123,6 +123,7 @@ If your host has 8GB RAM, apply lower resource profiles before bootstrapping the
 2. reduce Flink CPU first, but keep the Beam worker pool above the OOM floor in `kubernetes/flink-beam.yaml` (JM=250m/512Mi, TM=250m/512Mi, Beam request at least 256Mi and limit at least 768Mi).
 3. keep the Airflow API server above its minimum concurrency floor in `kubernetes/airflow.yaml` (use at least 2 `airflow api-server` workers and roughly `200m` CPU / `512Mi` memory request with a `1Gi` limit); reduce scheduler and dag-processor more cautiously.
 4. reduce mlflow resources in `kubernetes/base/mlflow.yaml` (60m/150Mi limit 300m/500Mi).
+5. keep `ml-server` above the Python + torch + retrieval floor if you enable live queries; use at least `384Mi` request and a `1Gi` limit in `kubernetes/dashboard.yaml`. Lower limits can OOM-kill `/rag/query` and `/forecast`.
 
 Re-apply with:
 
@@ -243,8 +244,9 @@ Simplified overlap note:
 - `ClimateModel` now accepts a dynamic `input_dim` (default 3). When the weather
   CSV includes snowfall, sunshine, wind, and ET₀ columns, `climate_data.py`
   engineers up to 5 additional features and writes `feature_columns.json` and
-  `feature_defaults.json` to `python/output/climate/`. Training and evaluation
-  both read from these manifests rather than hardcoding the column list.
+  `feature_defaults.json` to `python/output/climate/`. Training, evaluation,
+  FastAPI inference, and RAG forecast answers now all read from these manifests
+  rather than hardcoding the column list or shrinking the input tensor.
 - `beam_analysis.py` imports `IntervalWindowCoder` directly from
   `apache_beam.coders.coders` — the symbol is not re-exported via
   `apache_beam.coders` in Beam ≥ 2.63 and attempting the short form raises
@@ -573,6 +575,12 @@ Test it:
 curl "http://127.0.0.1:8000/rag/query?q=Is+Lithuania+warmer+than+usual%3F"
 ```
 
+Forecast-style questions such as "What will the temperature be tomorrow?" are answered deterministically from the climate model plus the current-year observed bias correction before any vector retrieval or Ollama wording step runs. This keeps forecast answers fast and useful even when Ollama is unavailable.
+
+If the registered model alias is missing or the local `.pth` checkpoint cannot be loaded, the FastAPI layer now degrades to a recent-observations fallback for `/rag/query` forecast questions and `/forecast*` endpoints instead of returning a generic retrieval answer or crashing with a 500.
+
+The climate model feature contract is defined by `python/output/climate/feature_columns.json` and `python/output/climate/feature_defaults.json`. `climate_train.py`, `climate_evaluate.py`, `serve.py`, and `rag_pipeline.py` all use that manifest so inference keeps the same input dimension and column order as the saved model.
+
 Example response:
 
 ```json
@@ -809,17 +817,21 @@ the rolling 30-day temperature anomaly series. The sign (+1 / -1) and p-value
 give a statistically defensible warming/cooling signal for the RAG narrative.
 Candidate library: `pymannkendall` (pure-Python, no heavy deps).
 
-### 2. Tomorrow-temperature inference via feature_defaults.json
+### 2. Live weather enrichment for tomorrow-temperature inference
 
-`serve.py` currently answers `/predict` with synthetic temporal features only.
-Now that the model accepts up to 8 features and `feature_defaults.json` exists,
-the endpoint can:
+Implemented now:
+- `feature_columns.json` and `feature_defaults.json` define the inference contract.
+- `climate_train.py`, `climate_evaluate.py`, `serve.py`, and `rag_pipeline.py`
+  use the same manifest-driven input order.
+- Missing weather-derived inputs fall back to `feature_defaults.json` instead of
+  collapsing the model back to a 3-feature tensor.
+
+Still open:
 1. Fetch today's weather from Open-Meteo forecast API (lightweight, no 429 risk).
-2. Engineer `precip_log1p`, `snow_log1p`, etc. from the response.
-3. Fall back to `feature_defaults.json` for any missing column.
-4. Run inference with `ClimateModel` loaded from the MLflow model registry.
+2. Engineer `precip_log1p`, `snow_log1p`, etc. from the live response.
+3. Replace defaulted exogenous inputs with those live forecast values.
 
-This turns the predict endpoint from a demo into an actual day-ahead forecast.
+That would turn the current manifest-safe inference path into a stronger day-ahead forecast.
 
 ### 3. Threshold-based alerting from quality gate
 
@@ -834,17 +846,21 @@ The gate already computes the signal — it just needs a delivery mechanism.
 ### 4. MLflow model registry promotion gate
 
 Implemented in the current pipeline:
-- `climate_train.py` registers `ClimateTemperatureModel`.
+- `climate_train.py` logs the PyTorch flavor artifact with signature and then
+  explicitly ensures a `ClimateTemperatureModel` model version exists for the
+  current run via `mlflow_model_registry.py`.
 - `quality_gate.py` promotes the passing run's model version to alias `@champion`
-  via `client.set_registered_model_alias('ClimateTemperatureModel', 'champion', version)`.
+  by run ID, creating the registered model/version first if registry state is missing.
 - `serve.py` and `rag_pipeline.py` both load from
   `models:/ClimateTemperatureModel@champion` with `.pth` fallback.
+- `python/scripts/register_climate_model.py` can backfill or repair model
+  registration for an existing `mlflow_run_id.txt` outside the DAG.
 
 If the MLflow Model Version page for an older version shows no Inputs/Outputs,
 that version was registered without a model signature in model metadata.
 Re-training with the current `climate_train.py` (`infer_signature` +
-`mlflow.pytorch.log_model(..., signature=..., input_example=...)`) creates
-versions with populated IO schema.
+`mlflow.pytorch.log_model(..., signature=..., input_example=...)`) plus the
+explicit version-creation step creates versions with populated IO schema.
 
 ### 5. RAG answer quality gate
 

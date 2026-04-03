@@ -41,9 +41,24 @@ spec:
   nfs:
     server: "100.95.8.71"
     path: "/data/k8s-nfs/dashboard-data"
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-mlflow-artifacts-nfs
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: "100.95.8.71"
+    path: "/data/k8s-nfs/mlflow-artifacts"
 # Storage classes used below:
-# - k3s-hostpath: single-node RWO/RWX (WARNING: RWX is NOT shared across nodes)
+# - k3s-hostpath: single-node RWO only (WARNING: not shared across nodes)
 # - nfs-client: true cross-node RWX (run scripts/setup-nfs-storage.sh first)
+# - "" storageClassName with volumeName: static NFS PV binding (preferred for shared volumes)
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -115,12 +130,12 @@ metadata:
   name: mlflow-artifacts
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteOnce]
-  volumeName: pv-mlflow-artifacts
+  accessModes: [ReadWriteMany]
+  volumeName: pv-mlflow-artifacts-nfs
   resources:
     requests:
       storage: 10Gi
-  storageClassName: k3s-hostpath
+  storageClassName: ""
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

@@ -23,6 +23,13 @@ import sys
 # Make sibling modules importable when running from outside python/
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from climate_model_contract import (
+    build_input_tensor,
+    build_input_tensor_for_date,
+    attach_feature_spec,
+    load_climate_feature_spec,
+    load_local_climate_model,
+)
 from rag_pipeline import answer_question
 
 try:
@@ -86,6 +93,11 @@ class PredictionRequest(BaseModel):
     sin_doy: float
     cos_doy: float
     year_norm: float
+    precip_log1p: float | None = None
+    snow_log1p: float | None = None
+    sunshine_frac_day: float | None = None
+    wind_norm: float | None = None
+    et0_norm: float | None = None
 
 
 class PredictionResponse(BaseModel):
@@ -109,12 +121,22 @@ class ForecastResponse(BaseModel):
 MODEL_PATH = ML_OUTPUT_DIR / 'climate' / 'climate_model.pth'
 _model_cache: ClimateModel | None = None
 _model_version: int = 0
+_feature_spec_cache = None
+
+
+def get_feature_spec():
+    global _feature_spec_cache
+    if _feature_spec_cache is None:
+        _feature_spec_cache = load_climate_feature_spec(MODEL_PATH.parent)
+    return _feature_spec_cache
 
 
 def get_model() -> ClimateModel | None:
     global _model_cache, _model_version
     if _model_cache is not None:
         return _model_cache
+
+    feature_spec = get_feature_spec()
 
     # Try loading @champion from MLflow registry first
     if _mlflow_available and MLFLOW_TRACKING_URI:
@@ -124,7 +146,7 @@ def get_model() -> ClimateModel | None:
                 f'models:/{MODEL_REGISTRY_NAME}@{MODEL_ALIAS}'
             )
             loaded.eval()
-            _model_cache = loaded
+            _model_cache = attach_feature_spec(loaded, feature_spec)
             try:
                 alias_mv = MlflowClient().get_model_version_by_alias(
                     MODEL_REGISTRY_NAME, MODEL_ALIAS
@@ -144,13 +166,16 @@ def get_model() -> ClimateModel | None:
 
     # Fallback: load from .pth file on disk
     if MODEL_PATH.exists():
-        _model_cache = ClimateModel()
-        _model_cache.load_state_dict(torch.load(str(MODEL_PATH), weights_only=True))
-        _model_cache.eval()
-        _model_version = 0
-        if _prometheus_available:
-            MODEL_VERSION_GAUGE.set(0)
-        print('Loaded model from .pth fallback')
+        try:
+            _model_cache = load_local_climate_model(MODEL_PATH, feature_spec)
+            _model_version = 0
+            if _prometheus_available:
+                MODEL_VERSION_GAUGE.set(0)
+            print('Loaded model from .pth fallback')
+        except Exception as exc:
+            _model_cache = None
+            _model_version = 0
+            print(f'WARNING: local model load failed ({exc})')
     return _model_cache
 
 
@@ -169,6 +194,120 @@ class RagQueryResponse(BaseModel):
     answer: str
     interpretation: str = ''
     sources: list[dict]
+
+
+FORECAST_QUERY_KEYWORDS = ('tomorrow', 'next week', 'forecast', 'predict', 'will it be', 'will the temp')
+
+
+def _forecast_question_target(question: str) -> date | None:
+    normalized = question.strip().lower()
+    if not any(keyword in normalized for keyword in FORECAST_QUERY_KEYWORDS):
+        return None
+
+    if 'next week' in normalized:
+        return date.today() + timedelta(days=7)
+
+    date_match = re.search(r'(\d{4})-(\d{2})-(\d{2})', question)
+    if date_match:
+        try:
+            return date.fromisoformat(date_match.group(0))
+        except ValueError:
+            pass
+
+    return date.today() + timedelta(days=1)
+
+
+def _recent_temperature_fallback(window_days: int = 7) -> tuple[float, int] | None:
+    obs_path = ML_OUTPUT_DIR / 'weather' / 'country_daily_anomalies.csv'
+    if not obs_path.exists():
+        return None
+
+    try:
+        import pandas as pd
+        df = pd.read_csv(obs_path, parse_dates=['time'])
+    except Exception:
+        return None
+
+    df = df.dropna(subset=['temperature_2m_mean']).sort_values('time')
+    if df.empty:
+        return None
+
+    recent = df.tail(window_days)
+    return float(recent['temperature_2m_mean'].mean()), len(recent)
+
+
+def _estimate_temperature_for_date(target_date: date) -> dict | None:
+    model = get_model()
+    if model is not None:
+        x = build_input_tensor_for_date(target_date, get_feature_spec())
+        try:
+            with torch.no_grad():
+                temperature_c = float(model(x).item())
+            return {
+                'temperature_c': temperature_c,
+                'mode': 'model',
+                'source': f'models:/{MODEL_REGISTRY_NAME}@{MODEL_ALIAS}' if _model_version != 0 else 'climate/climate_model.pth',
+            }
+        except Exception as exc:
+            print(f'WARNING: model inference failed for {target_date.isoformat()} ({exc})')
+
+    fallback = _recent_temperature_fallback()
+    if fallback is None:
+        return None
+
+    temperature_c, observed_days = fallback
+    return {
+        'temperature_c': temperature_c,
+        'mode': 'recent-observations',
+        'source': 'weather/country_daily_anomalies.csv',
+        'observed_days': observed_days,
+    }
+
+
+def _answer_direct_forecast_query(question: str) -> dict | None:
+    target_date = _forecast_question_target(question)
+    if target_date is None:
+        return None
+
+    estimate = _estimate_temperature_for_date(target_date)
+    if estimate is None:
+        return None
+
+    rounded_temp = round(float(estimate['temperature_c']), 1)
+    label = 'tomorrow' if target_date == date.today() + timedelta(days=1) else target_date.isoformat()
+
+    if estimate['mode'] == 'model':
+        answer = (
+            f"For {label} ({target_date.isoformat()}) in Lithuania, the climate model estimate is {rounded_temp}°C. "
+            f"This is a climatological temperature estimate from the trained model, not a live short-range weather forecast."
+        )
+        interpretation = f'Direct climate model estimate for {target_date.isoformat()}: {rounded_temp}°C.'
+        source_title = 'Climate temperature model forecast'
+    else:
+        observed_days = int(estimate.get('observed_days', 0))
+        answer = (
+            f"For {label} ({target_date.isoformat()}) in Lithuania, the current fallback estimate is {rounded_temp}°C, "
+            f"based on the average of the most recent {observed_days} observed days because the trained model artifact is not currently loadable. "
+            f"Treat this as a short-term heuristic rather than a true model forecast."
+        )
+        interpretation = (
+            f'Recent-observation fallback for {target_date.isoformat()}: {rounded_temp}°C '
+            f'from the latest {observed_days} daily observations.'
+        )
+        source_title = 'Recent daily temperature observations'
+
+    return {
+        'question': question,
+        'answer': answer,
+        'interpretation': interpretation,
+        'sources': [
+            {
+                'title': source_title,
+                'source': str(estimate['source']),
+                'score': 1.0,
+            }
+        ],
+    }
 
 
 def _heuristic_judge(answer: str, sources: list) -> float:
@@ -258,7 +397,7 @@ def rag_query(q: str = '', background_tasks: BackgroundTasks = None):
     q = q.strip()
     if not q:
         raise HTTPException(status_code=400, detail='Query parameter "q" is required')
-    result = answer_question(q, ML_OUTPUT_DIR, top_k=5)
+    result = _answer_direct_forecast_query(q) or answer_question(q, ML_OUTPUT_DIR, top_k=5)
     answer_text = result.get('answer', '')
     sources = result.get('sources', [])
     answered = 'No relevant pipeline artifacts' not in answer_text
@@ -300,7 +439,7 @@ def predict(req: PredictionRequest):
     if model is None:
         raise HTTPException(status_code=503, detail='Model not loaded')
 
-    x = torch.tensor([[req.sin_doy, req.cos_doy, req.year_norm]], dtype=torch.float32)
+    x = build_input_tensor(get_feature_spec(), req.model_dump(exclude_none=True))
     with torch.no_grad():
         temperature_c = float(model(x).item())
 
@@ -338,10 +477,6 @@ def forecast(
 
     Example: GET /forecast?start=2026-07-01&days=14
     """
-    model = get_model()
-    if model is None:
-        raise HTTPException(status_code=503, detail='Model not loaded')
-
     try:
         start_date = date.fromisoformat(start) if start else date.today()
     except ValueError:
@@ -355,10 +490,10 @@ def forecast(
     results: list[ForecastDay] = []
     for i in range(days):
         d = start_date + timedelta(days=i)
-        sin_doy, cos_doy, year_norm = _date_to_features(d)
-        x = torch.tensor([[sin_doy, cos_doy, year_norm]], dtype=torch.float32)
-        with torch.no_grad():
-            temp = float(model(x).item())
+        estimate = _estimate_temperature_for_date(d)
+        if estimate is None:
+            raise HTTPException(status_code=503, detail='Model not loaded')
+        temp = float(estimate['temperature_c'])
         if _prometheus_available:
             PREDICTION_TEMPERATURE.observe(temp)
         results.append(ForecastDay(date=d.isoformat(), temperature_c=round(temp, 2)))
@@ -377,13 +512,10 @@ def forecast_tomorrow():
     Convenience shortcut for GET /forecast?start=<tomorrow>&days=1
     """
     tomorrow = date.today() + timedelta(days=1)
-    model = get_model()
-    if model is None:
+    estimate = _estimate_temperature_for_date(tomorrow)
+    if estimate is None:
         raise HTTPException(status_code=503, detail='Model not loaded')
-    sin_doy, cos_doy, year_norm = _date_to_features(tomorrow)
-    x = torch.tensor([[sin_doy, cos_doy, year_norm]], dtype=torch.float32)
-    with torch.no_grad():
-        temp = float(model(x).item())
+    temp = float(estimate['temperature_c'])
     if _prometheus_available:
         PREDICTION_TEMPERATURE.observe(temp)
         FORECAST_COUNT.inc()

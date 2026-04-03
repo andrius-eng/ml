@@ -7,13 +7,14 @@ import csv
 import json
 import os
 from contextlib import nullcontext
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
 
 from metrics import mean_absolute_error, mean_squared_error, r2_score
-from model import ClimateModel
+from climate_model_contract import instantiate_climate_model, load_climate_feature_spec, resolve_feature_spec_from_frame
 
 try:
     import mlflow
@@ -44,8 +45,16 @@ def evaluate(
     predictions_path: str | None = None,
 ) -> dict:
     df = pd.read_csv(test_path)
-    feature_cols = [c for c in df.columns if c != 'y']
-    model = ClimateModel(input_dim=len(feature_cols))
+    manifest_spec = load_climate_feature_spec(Path(model_path).parent)
+    missing_manifest_columns = [column for column in manifest_spec.columns if column not in df.columns]
+    if manifest_spec.columns and missing_manifest_columns:
+        raise ValueError(
+            f"Test data is missing feature columns required by the saved model contract: {missing_manifest_columns}"
+        )
+
+    feature_spec = resolve_feature_spec_from_frame(Path(model_path).parent, df)
+    feature_cols = feature_spec.columns
+    model = instantiate_climate_model(feature_spec)
     model.load_state_dict(torch.load(model_path, weights_only=True))
     model.eval()
 
