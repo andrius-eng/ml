@@ -147,7 +147,6 @@ spec:
         - name: node-exporter
           image: prom/node-exporter:v1.9.1
           args:
-            - --path.rootfs=/host
             - --path.procfs=/host/proc
             - --path.sysfs=/host/sys
             # Skip collectors that fail on WSL2 kernels
@@ -160,9 +159,9 @@ spec:
             - --no-collector.ipvs
             - --no-collector.nfs
             - --no-collector.nfsd
-            # Exclude noisy/irrelevant mount points
-            - --collector.filesystem.mount-points-exclude=^/(dev|proc|run/credentials|run/k3s|var/lib/kubelet/pods)($$|/)
-            - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs)$$
+            # Skip filesystem collector entirely — WSL2 root mount is not shared/slave propagation
+            - --no-collector.filesystem
+            - --no-collector.diskstats
           ports:
             - containerPort: 9100
               hostPort: 9100
@@ -179,10 +178,6 @@ spec:
             runAsNonRoot: true
             runAsUser: 65534
           volumeMounts:
-            - name: host-root
-              mountPath: /host
-              readOnly: true
-              mountPropagation: HostToContainer
             - name: host-proc
               mountPath: /host/proc
               readOnly: true
@@ -190,9 +185,6 @@ spec:
               mountPath: /host/sys
               readOnly: true
       volumes:
-        - name: host-root
-          hostPath:
-            path: /
         - name: host-proc
           hostPath:
             path: /proc
@@ -273,14 +265,14 @@ data:
           - "**/ml-stack_prometheus-*/**"
 
     transforms:
-      # Enrich with node name + keep only key fields to reduce log volume
+      # Enrich with node name + drop health-check noise to reduce log volume
       enrich:
         type: remap
         inputs: [kube_logs]
         source: |
           .node = "${NODE_NAME}"
-          # Drop probe/health-check noise
-          if is_string(.message) && match(.message, r'GET /health|GET /ready|GET /-/healthy') {
+          msg = string!(.message)
+          if match(msg, r'GET /health|GET /ready|GET /-/healthy') {
             abort
           }
 
