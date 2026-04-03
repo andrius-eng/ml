@@ -5,7 +5,7 @@ namespace: ml-stack
 
 resources:
   - namespace.yaml
-  - secrets.yaml
+  - sealed-secrets.yaml
   - configmaps.yaml
   - pvcs.yaml
   - postgres.yaml
@@ -14,6 +14,7 @@ resources:
   - mlflow.yaml
   - dashboard.yaml
   - services.yaml
+  - tailscale-tls.yaml
   - gateway.yaml
   - gatewayclass.yaml
 

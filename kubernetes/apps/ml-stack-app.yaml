@@ -1,19 +1,20 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: ml-root
+  name: ml-stack
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   project: default
   source:
     repoURL: https://github.com/andrius-eng/ml.git
     targetRevision: main
-    path: kubernetes/apps
-    directory:
-      recurse: false
+    path: kubernetes
+    kustomize: {}
   destination:
     server: https://kubernetes.default.svc
-    namespace: argocd
+    namespace: ml-stack
   syncPolicy:
     automated:
       prune: true

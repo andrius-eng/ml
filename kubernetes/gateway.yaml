@@ -8,7 +8,8 @@
 # Gateway — HTTP entry point.
 # Port 8000 matches Traefik's internal 'web' entrypoint
 # (k3s service maps external :80 → container :8000).
-# Production overlay patches in the HTTPS listener (port 8443).
+# Port 8443 matches Traefik's internal 'websecure' entrypoint
+# (k3s service maps external :443 → container :8443).
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
@@ -28,6 +29,18 @@ spec:
       port: 8000
       protocol: HTTP
       hostname: "desktop-nnutaj7.tail6964b3.ts.net"
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: https-tailscale
+      port: 8443
+      protocol: HTTPS
+      hostname: "desktop-nnutaj7.tail6964b3.ts.net"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: tailscale-tls
       allowedRoutes:
         namespaces:
           from: All

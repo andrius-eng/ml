@@ -1,0 +1,119 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tailscale-tls-renew
+  namespace: ml-stack
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tailscale-tls-renew
+  namespace: ml-stack
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - create
+      - get
+      - patch
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: tailscale-tls-renew
+  namespace: ml-stack
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: tailscale-tls-renew
+subjects:
+  - kind: ServiceAccount
+    name: tailscale-tls-renew
+    namespace: ml-stack
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tailscale-tls-renew-script
+  namespace: ml-stack
+data:
+  renew.sh: |
+    #!/bin/sh
+    set -eu
+
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends ca-certificates curl util-linux
+    curl -fsSL -o /usr/local/bin/kubectl "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+    chmod +x /usr/local/bin/kubectl
+
+    domain="${TS_DOMAIN:-desktop-nnutaj7.tail6964b3.ts.net}"
+    host_cert="/tmp/tailscale-ml-stack.crt"
+    host_key="/tmp/tailscale-ml-stack.key"
+    cert_file="$(mktemp)"
+    key_file="$(mktemp)"
+    trap 'rm -f "$cert_file" "$key_file"' EXIT
+
+    nsenter -t 1 -m -u -i -n -- /usr/bin/tailscale cert --cert-file "$host_cert" --key-file "$host_key" "$domain"
+    nsenter -t 1 -m -- /bin/cat "$host_cert" > "$cert_file"
+    nsenter -t 1 -m -- /bin/cat "$host_key" > "$key_file"
+
+    /usr/local/bin/kubectl create secret tls tailscale-tls \
+      --namespace ml-stack \
+      --cert "$cert_file" \
+      --key "$key_file" \
+      --dry-run=client -o yaml | /usr/local/bin/kubectl apply -f -
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: tailscale-tls-renew
+  namespace: ml-stack
+spec:
+  schedule: "0 3 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          serviceAccountName: tailscale-tls-renew
+          nodeSelector:
+            kubernetes.io/hostname: desktop-nnutaj7
+          tolerations:
+            - operator: Exists
+          hostPID: true
+          hostNetwork: true
+          restartPolicy: OnFailure
+          containers:
+            - name: renew
+              image: debian:bookworm-slim
+              command:
+                - /bin/sh
+                - /scripts/renew.sh
+              env:
+                - name: TS_DOMAIN
+                  value: desktop-nnutaj7.tail6964b3.ts.net
+              securityContext:
+                privileged: true
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 250m
+                  memory: 256Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: tailscale-tls-renew-script
+                defaultMode: 0755
