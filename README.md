@@ -23,48 +23,8 @@ PyTorch training, Qdrant-backed retrieval, and a live dashboard.
 | Retrieval | Qdrant local store + lightweight TF-IDF |
 | Frontend | Vite/nginx, vanilla JS, Chart.js |
 | Live updates | Node 20 WebSocket server + periodic export |
-| Deployment | Docker Compose · Kubernetes (Kustomize) · ArgoCD · MicroShift |
+| Deployment | Docker Compose · Kubernetes (Kustomize) · ArgoCD · k3s (3-node) |
 | CI | GitHub Actions (build + stack-smoke) |
-
-## MicroShift local Kubernetes (edge)
-
-This project supports local edge-style Kubernetes with MicroShift. Use the helper in `openshift-at-home/install-okd.sh`.
-
-1. Ensure Docker is running.
-
-```bash
-cd /home/andrius/Development/openshift-at-home
-sudo bash install-okd.sh microshift
-```
-
-2. Confirm the cluster is healthy:
-
-```bash
-kubectl --insecure-skip-tls-verify get nodes
-kubectl --insecure-skip-tls-verify get pods -A
-```
-
-3. Apply the ml stack overlay:
-
-```bash
-kubectl apply -k /home/andrius/Development/ml/kubernetes/overlays/minikube
-```
-
-4. Track readiness:
-
-```bash
-kubectl get pods -n ml-stack -w
-kubectl get pvc -n ml-stack
-```
-
-5. (Optional) use MicroShift explicit kubeconfig:
-
-```bash
-export KUBECONFIG=/tmp/microshift-config
-kubectl get nodes
-```
-
-> Note: if you run k3s/kind/minikube concurrently, stop those clusters first to avoid 6443 port conflict.
 
 ## Architecture
 
@@ -115,26 +75,18 @@ graph TB
     ML --> FE
 ```
 
-## 8GB Local Kubernetes Tuning
+## Memory-Constrained Kubernetes
 
-If your host has 8GB RAM, apply lower resource profiles before bootstrapping the full stack:
+The cluster runs on WSL2; total available RAM is 6 GB shared across all nodes.
+Ollama is **disabled by default** (`replicas: 0` in `kubernetes/ml/dashboard.yaml`) — it needs 2–6 GB alone.
 
-1. set `ollama` replica count to `0` in `kubernetes/base/dashboard.yaml` (it is heavy).
-2. reduce Flink CPU first, but keep the Beam worker pool above the OOM floor in `kubernetes/flink-beam.yaml` (JM=250m/512Mi, TM=250m/512Mi, Beam request at least 256Mi and limit at least 768Mi).
-3. keep the Airflow API server above its minimum concurrency floor in `kubernetes/airflow.yaml` (use at least 2 `airflow api-server` workers and roughly `200m` CPU / `512Mi` memory request with a `1Gi` limit); reduce scheduler and dag-processor more cautiously.
-4. reduce mlflow resources in `kubernetes/base/mlflow.yaml` (60m/150Mi limit 300m/500Mi).
-5. keep `ml-server` above the Python + torch + retrieval floor if you enable live queries; use at least `384Mi` request and a `1Gi` limit in `kubernetes/dashboard.yaml`. Lower limits can OOM-kill `/rag/query` and `/forecast`.
+If pods are OOM-killed or stuck `Pending`:
 
-Re-apply with:
-
-```bash
-kubectl apply -f kubernetes/base/pvcs.yaml
-kubectl apply -f kubernetes/base/airflow.yaml
-kubectl apply -f kubernetes/base/mlflow.yaml
-kubectl apply -f kubernetes/base/dashboard.yaml
-kubectl apply -f kubernetes/base/flink-beam.yaml
-kubectl get pods -n ml-stack -w
-```
+1. Keep ollama at `replicas: 0` unless you have a node with ≥ 4 GB free.
+2. Scale down Flink TaskManager first if you need headroom — Beam jobs can be restarted.
+3. Airflow scheduler and dag-processor can drop to `200m` CPU / `384Mi` memory request without affecting DAG scheduling.
+4. MLflow is safe at `60m` CPU / `256Mi` memory request — `kubernetes/ml/mlflow.yaml`.
+5. `ml-server` needs at least `384Mi` request and a `1Gi` limit to avoid OOM on `/rag/query` and `/forecast`.
 
 For debugging:
 
@@ -210,11 +162,29 @@ There are four Airflow DAGs. Each one is an automated sequence of steps
 fetches ingredients, cooks them, checks the result, and saves it to a shelf
 so the dashboard can use it.
 
+### MLflow experiment map
+
+| Airflow DAG | MLflow experiment | Key run names |
+|---|---|---|
+| `lithuania_weather_anomaly` | `lithuania_weather_analysis` | task child runs |
+| `lithuania_weather_anomaly` | `weather-analysis` | `weather-dag`, `weather-quality-gate` |
+| `vilnius_march_anomaly` | `vilnius-temperature-analysis` | `vilnius-analyze`, `vilnius-quality-gate` |
+| `era5_temperature_forecast_retrain` | `climate-temperature-model` | `train-climate-model`, `rag-eval` |
+| `llama_lora_finetune` | *(none — no MLflow logging)* | — |
+
 ---
 
 ### `lithuania_weather_anomaly` — "Is it weirder than normal outside?"
 
 **Schedule:** daily · **Runs automatically**
+
+**MLflow:** two experiments are written per execution:
+
+| What you see in MLflow | Experiment | Run names |
+|---|---|---|
+| DAG-level parent run and task child runs (create_mlflow_run, fetch_weather_data, analyze_weather_data, …) | `lithuania_weather_analysis` | task name per child |
+| Weather analysis metrics (z-scores, anomalies, snowfall, sunshine, wind, ET₀) | `weather-analysis` | `weather-dag` |
+| Quality-gate result (passed/failed, extreme-month counts) | `weather-analysis` | `weather-quality-gate` |
 
 This is the main weather pipeline. Every day it:
 
@@ -247,6 +217,14 @@ MLflow so it appears in the dashboard KPI cards.
 
 **Schedule:** daily · **Runs automatically**
 
+**MLflow:** experiment `vilnius-temperature-analysis`
+
+| Run name | What it captures |
+|---|---|
+| DAG parent + task children | create_mlflow_run, ensure_artifact, analyze_vilnius_month, … |
+| `vilnius-analyze` | mean temp, anomaly, z-score, baseline stats for the chosen month |
+| `vilnius-quality-gate` | pass/fail, years with data, latest year plausibility |
+
 A focused deep-dive on one calendar month at a time (default: March, but the
 Airflow UI lets you pick any month via the `month` param):
 
@@ -269,6 +247,16 @@ produce `raw_daily_weather.csv`.
 ### `era5_temperature_forecast_retrain` — "Train an AI to predict temperature"
 
 **Schedule:** weekly · **Runs automatically**
+
+**MLflow:** experiment `climate-temperature-model`
+
+| Run name | What it captures |
+|---|---|
+| `train-climate-model` | learning rate per epoch, final train MSE, test R²/RMSE/MAE/residual mean+std, hyperparams (epochs, batch size, lr, feature list, train rows) |
+| `rag-eval` | RAG retrieval quality after context refresh |
+
+The best run is promoted to the `@champion` alias in MLflow and is the
+model the dashboard and `/predict` API use.
 
 This DAG trains a small neural network (a PyTorch MLP with batch-norm, skip
 connections, and dropout) to predict daily mean temperature from calendar
@@ -300,6 +288,9 @@ ERA5 CSV as training data).
 ### `llama_lora_finetune` — "Teach a mini LLM about our pipeline outputs"
 
 **Schedule:** manual only · **Triggered by hand**
+
+**MLflow:** no experiment is logged by this DAG — it runs training scripts
+directly and writes artifacts to `python/output/llm/`.
 
 A one-off experimental DAG that fine-tunes a small language model on the text
 artifacts produced by the other three DAGs:
@@ -364,7 +355,6 @@ llama_lora_finetune         ← run manually after the above have produced outpu
   `apache_beam.coders.coders` — the symbol is not re-exported via
   `apache_beam.coders` in Beam ≥ 2.63 and attempting the short form raises
   `AttributeError` at pipeline submission time.
-pipeline artifacts.
 
 ## Quick Start
 
@@ -489,55 +479,46 @@ The dashboard at http://localhost:5173 updates automatically via WebSocket.
 
 ## Kubernetes Deployment
 
-The `kubernetes/` folder contains Kustomize base manifests plus overlays for
-minikube (laptop) and production, with optional ArgoCD GitOps support.
+The `kubernetes/` folder is organised into purpose groups, each managed as a
+separate ArgoCD Application (app-of-apps rooted at `kubernetes/apps/`).
 
 ```
 kubernetes/
-├── base/                    # shared manifests for all services
-├── overlays/
-│   ├── minikube/            # standard storageClass, scaled-down resources
-│   └── production/          # nfs-client RWX storageClass placeholder
-├── argocd/
-│   ├── application.yaml             # production — selfHeal=true, prune=true
-│   └── application-minikube.yaml    # dev/minikube
-└── deploy-minikube.sh       # convenience script
+├── apps/                    # ArgoCD Application definitions (app-of-apps)
+│   ├── ml-infra-app.yaml
+│   ├── ml-serving-app.yaml
+│   ├── ml-monitoring-app.yaml
+│   ├── ml-networking-app.yaml
+│   ├── ml-data-app.yaml
+│   └── sealed-secrets-app.yaml
+├── infra/                   # postgres, PVCs, configmaps, namespace
+├── ml/                      # airflow, mlflow, ml-server, ws-server, frontend, flink, ollama
+├── monitoring/              # prometheus, grafana, node-exporter, vector, kube-state-metrics
+├── networking/              # Gateway API routes, services, Tailscale TLS
+├── sealed-secrets/          # sealed-secrets controller + HelmChartConfig node placement
+├── argocd/                  # ArgoCD node-placement patches
+└── argocd-app.yaml          # bootstrap: apply this once to seed all child apps
 ```
 
-MLflow in Kubernetes:
-- `kubernetes/mlflow.yaml` runs the MLflow tracking server and serves proxied
-  artifacts from the PVC-backed `/mlartifacts` volume.
-- `kubernetes/pvcs.yaml` includes `mlflow-data` and `mlflow-artifacts` PVCs for
-  persistent backend DB and artifact files.
-- `kubernetes/configmaps.yaml` sets `MLFLOW_TRACKING_URI=http://mlflow:5000` for
-  Airflow and `ml-server`.
-- `kubernetes/monitoring.yaml` provisions Grafana with an operations dashboard
-  focused on deployment readiness, pod phase/waiting reasons, restarts, jobs,
-  and PVC state.
+Key files:
+- `kubernetes/ml/mlflow.yaml` — MLflow tracking server with PVC-backed artifact store.
+- `kubernetes/infra/pvcs.yaml` — all PVCs (`airflow-data`, `mlflow-artifacts`, `postgres-data`, etc.).
+- `kubernetes/infra/configmaps.yaml` — sets `MLFLOW_TRACKING_URI=http://mlflow:5000` for Airflow and `ml-server`.
+- `kubernetes/monitoring/monitoring.yaml` — Grafana with ML Stack Overview dashboard.
 
-### Minikube — standalone (kubectl apply)
+### Production — k3s three-node cluster
 
-```bash
-bash kubernetes/deploy-minikube.sh
-# then add to /etc/hosts: $(minikube ip)  ml-stack.local
-```
+Three WSL2/Linux nodes connected via Tailscale:
 
-### Minikube — via ArgoCD
+| Node | Role | Labels |
+|------|------|--------|
+| `desktop-nnutaj7` | control-plane + infra workloads | `workload-role=infra` |
+| `desktop-0qvhfr9` | compute workloads | `workload-role=compute`, `high-memory=true` |
+| `k3s-worker-worker` | compute workloads | `workload-role=compute`, `high-memory=true` |
 
-```bash
-bash kubernetes/deploy-minikube.sh --argocd
-```
-
-### Production — standalone (k3s two-node)
-
-The production overlay targets a two-node k3s cluster connected via Tailscale:
-
-| Node | Role | Tailscale IP | Label |
-|------|------|-------------|-------|
-| `desktop-nnutaj7` (WSL) | control-plane + infra workloads | `100.95.8.71` | `workload-role=infra` |
-| `k3s-worker-worker` (Mac) | compute workloads | `100.66.184.9` | `workload-role=compute` |
-
-Compute pods (ollama, flink-taskmanager, beam-job-server) are scheduled on the Mac worker; infra pods (airflow, mlflow, postgres, flink-jobmanager) stay on WSL.
+Infra pods (ArgoCD, postgres, prometheus, grafana, traefik, sealed-secrets, mlflow) are
+pinned to `desktop-nnutaj7` via `nodeSelector: workload-role: infra`.
+Compute pods (airflow, flink, beam, ml-server, ollama) run on the compute nodes.
 
 All custom images are pulled from GHCR (`ghcr.io/andrius-eng/ml-*`). A `ghcr-secret` imagePullSecret must exist in `ml-stack`:
 
@@ -552,19 +533,21 @@ cp kubernetes/secrets.example.yaml kubernetes/secrets.yaml
 # edit kubernetes/secrets.yaml and replace all placeholder values before sealing
 /tmp/kubeseal --controller-namespace kube-system \
   --controller-name sealed-secrets-controller \
-  --format yaml < kubernetes/secrets.yaml > kubernetes/sealed-secrets.yaml
+  --format yaml < kubernetes/secrets.yaml > kubernetes/infra/sealed-secrets.yaml
 ```
 
 Apply:
 
 ```bash
+kubectl apply -n argocd -f kubernetes/argocd-app.yaml   # seed ArgoCD app-of-apps
+# ArgoCD will sync all child apps; or apply manually:
 kubectl apply -k kubernetes
 ```
 
 Trusted Tailscale HTTPS:
 
-- `kubernetes/tailscale-tls.yaml` contains a CronJob that renews the Tailscale TLS cert and updates the `tailscale-tls` secret in `ml-stack`.
-- Run it once after `kubectl apply -k kubernetes` to bootstrap the first secret:
+- `kubernetes/networking/tailscale-tls.yaml` contains a CronJob that renews the Tailscale TLS cert and updates the `tailscale-tls` secret in `ml-stack`.
+- Run it once after applying to bootstrap the first secret:
 
 ```bash
 kubectl create job --from=cronjob/tailscale-tls-renew tailscale-tls-bootstrap -n ml-stack
@@ -576,8 +559,9 @@ kubectl create job --from=cronjob/tailscale-tls-renew tailscale-tls-bootstrap -n
 kubectl apply -n argocd -f kubernetes/argocd-app.yaml
 ```
 
-The bootstrap app tracks `kubernetes/apps` on `main` and creates child
-Applications for the `ml-stack` workload and the Sealed Secrets controller.
+This creates the `ml-root` app-of-apps which tracks `kubernetes/apps/` on `main`
+and creates child Applications for each group (`ml-infra`, `ml-serving`,
+`ml-monitoring`, `ml-networking`, `sealed-secrets`).
 
 - With ArgoCD auto-sync enabled, treat git as the source of truth: commit and
   push manifest changes, then let ArgoCD reconcile them. Reserve direct
@@ -740,10 +724,15 @@ artifacts were available."
 
 ### Local Llama for RAG (Optional)
 
-The full docker stack now includes an `ollama` service and `ml-server` is
-configured to use it for answer synthesis by default.
+The full docker stack includes an `ollama` service. In Kubernetes, ollama is
+**disabled by default** (`replicas: 0` in `kubernetes/ml/dashboard.yaml`) to
+conserve memory. RAG answers remain functional without it — forecast and
+retrieval paths are deterministic and do not require an LLM.
 
-Start or refresh the relevant services:
+To enable ollama in Kubernetes, set `replicas: 1` in `kubernetes/ml/dashboard.yaml`
+(requires a node with ≥ 4 GB free memory).
+
+For Docker Compose, start or refresh the relevant services:
 
 ```bash
 docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build ml-server frontend ollama
@@ -912,12 +901,14 @@ ml/
     ml-pipeline/Dockerfile
     ws-server/Dockerfile
   kubernetes/
-    base/
-    overlays/
-      minikube/
-      production/
+    apps/
+    infra/
+    ml/
+    monitoring/
+    networking/
+    sealed-secrets/
     argocd/
-    deploy-minikube.sh
+    argocd-app.yaml
   docker-compose.full.yml
   docker-stack.yml
   pyproject.toml

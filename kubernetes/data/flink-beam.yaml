@@ -15,7 +15,11 @@ spec:
         app: flink-jobmanager
     spec:
       nodeSelector:
-        workload-role: compute
+        workload-role: infra
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
       containers:
         - name: jobmanager
           image: flink:1.20.1-scala_2.12-java11
@@ -123,7 +127,11 @@ spec:
         app: flink-history-server
     spec:
       nodeSelector:
-        workload-role: compute
+        workload-role: infra
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
       containers:
         - name: history-server
           image: flink:1.20.1-scala_2.12-java11
@@ -166,8 +174,19 @@ spec:
       labels:
         app: beam-job-server
     spec:
-      nodeSelector:
-        workload-role: compute
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 80
+              preference:
+                matchExpressions:
+                  - key: workload-role
+                    operator: In
+                    values: ["compute"]
       containers:
         - name: job-server
           image: apache/beam_flink1.20_job_server:2.71.0

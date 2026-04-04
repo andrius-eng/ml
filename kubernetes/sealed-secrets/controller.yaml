@@ -59,6 +59,12 @@ spec:
           name: tmp
       imagePullSecrets: []
       initContainers: []
+      nodeSelector:
+        workload-role: infra
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
       securityContext:
         fsGroup: 65534
         runAsNonRoot: true

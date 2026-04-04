@@ -71,7 +71,11 @@ spec:
         app: kube-state-metrics
     spec:
       nodeSelector:
-        workload-role: compute
+        workload-role: infra
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
       serviceAccountName: kube-state-metrics
       containers:
         - name: kube-state-metrics

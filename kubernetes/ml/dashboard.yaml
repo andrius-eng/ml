@@ -14,8 +14,19 @@ spec:
       labels:
         app: ml-server
     spec:
-      nodeSelector:
-        workload-role: compute
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 80
+              preference:
+                matchExpressions:
+                  - key: workload-role
+                    operator: In
+                    values: ["compute"]
       securityContext:
         fsGroup: 500
       imagePullSecrets:
@@ -81,8 +92,19 @@ spec:
       labels:
         app: ws-server
     spec:
-      nodeSelector:
-        workload-role: compute
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 80
+              preference:
+                matchExpressions:
+                  - key: workload-role
+                    operator: In
+                    values: ["compute"]
       securityContext:
         fsGroup: 500
       imagePullSecrets:
@@ -143,8 +165,19 @@ spec:
       labels:
         app: frontend
     spec:
-      nodeSelector:
-        workload-role: compute
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 80
+              preference:
+                matchExpressions:
+                  - key: workload-role
+                    operator: In
+                    values: ["compute"]
       securityContext:
         fsGroup: 500
       imagePullSecrets:
@@ -176,7 +209,7 @@ metadata:
   name: ollama
   namespace: ml-stack
 spec:
-  replicas: 1
+  replicas: 0
   selector:
     matchLabels:
       app: ollama

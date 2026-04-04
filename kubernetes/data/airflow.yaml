@@ -84,8 +84,26 @@ spec:
       labels:
         app: airflow-webserver
     spec:
-      nodeSelector:
-        workload-role: compute
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 80
+              preference:
+                matchExpressions:
+                  - key: workload-role
+                    operator: In
+                    values: ["compute"]
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: airflow-webserver
       securityContext:
         runAsUser: 50000
         runAsGroup: 500
@@ -155,6 +173,13 @@ spec:
     spec:
       nodeSelector:
         workload-role: compute
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: airflow-scheduler
       securityContext:
         runAsUser: 50000
         runAsGroup: 500
@@ -228,8 +253,19 @@ spec:
       labels:
         app: airflow-dag-processor
     spec:
-      nodeSelector:
-        workload-role: compute
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 80
+              preference:
+                matchExpressions:
+                  - key: workload-role
+                    operator: In
+                    values: ["compute"]
       securityContext:
         runAsUser: 50000
         runAsGroup: 500
