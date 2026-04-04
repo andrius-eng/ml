@@ -96,17 +96,6 @@ spec:
         - name: wait-postgres
           image: postgres:16-alpine
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
-        - name: fix-permissions
-          image: alpine:3.18
-          securityContext:
-            runAsUser: 0
-            runAsGroup: 0
-          command: ["sh", "-c", "mkdir -p /opt/airflow/logs /opt/airflow/logs/dag_processor /opt/airflow/logs/scheduler && chown -R 50000:500 /opt/airflow || true; chmod -R ug+rwx /opt/airflow || true"]
-          volumeMounts:
-            - name: airflow-data
-              mountPath: /opt/airflow
-            - name: ml-output
-              mountPath: /opt/airflow/project/python/output
       containers:
         - name: webserver
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
@@ -176,17 +165,6 @@ spec:
         - name: wait-postgres
           image: postgres:16-alpine
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
-        - name: fix-permissions
-          image: alpine:3.18
-          securityContext:
-            runAsUser: 0
-            runAsGroup: 0
-          command: ["sh", "-c", "mkdir -p /opt/airflow/logs /opt/airflow/logs/dag_processor /opt/airflow/logs/scheduler && chown -R 50000:500 /opt/airflow || true; chmod -R ug+rwx /opt/airflow || true"]
-          volumeMounts:
-            - name: airflow-data
-              mountPath: /opt/airflow
-            - name: ml-output
-              mountPath: /opt/airflow/project/python/output
         - name: sync-dags
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
           imagePullPolicy: IfNotPresent
@@ -262,17 +240,6 @@ spec:
         - name: wait-postgres
           image: postgres:16-alpine
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
-        - name: fix-permissions
-          image: alpine:3.18
-          securityContext:
-            runAsUser: 0
-            runAsGroup: 0
-          command: ["sh", "-c", "mkdir -p /opt/airflow/logs /opt/airflow/logs/dag_processor /opt/airflow/logs/scheduler && chown -R 50000:500 /opt/airflow || true; chmod -R ug+rwx /opt/airflow || true"]
-          volumeMounts:
-            - name: airflow-data
-              mountPath: /opt/airflow
-            - name: ml-output
-              mountPath: /opt/airflow/project/python/output
         - name: sync-dags
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
           imagePullPolicy: IfNotPresent
