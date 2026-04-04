@@ -68,7 +68,7 @@ jobs:
       - name: Initialize Airflow DB
         run: |
           docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml -f docker-compose.ci.yml up -d postgres redis
-          docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml -f docker-compose.ci.yml run --rm airflow-init
+          docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml -f docker-compose.ci.yml run -T --rm airflow-init
 
       - name: Start full stack
         run: |
