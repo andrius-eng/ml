@@ -6,7 +6,7 @@ import argparse
 import calendar
 import json
 import os
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import numpy as np
@@ -187,6 +187,40 @@ def _load_vilnius_month_payload(output_dir: Path, month: int) -> tuple[dict, pd.
     )
 
 
+def _query_model_history() -> list[dict]:
+    """Return training run history from MLflow, ordered oldest-first."""
+    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+    try:
+        import mlflow as _mlflow
+        _mlflow.set_tracking_uri(tracking_uri)
+        _client = _mlflow.tracking.MlflowClient()
+        _exp = _client.get_experiment_by_name("climate-temperature-model")
+        if _exp is None:
+            return []
+        _runs = _client.search_runs(
+            [_exp.experiment_id],
+            filter_string='tags.`mlflow.runName` = "train-climate-model"',
+            order_by=["start_time ASC"],
+            max_results=200,
+        )
+        history = []
+        for _r in _runs:
+            _m = _r.data.metrics
+            if "test_r2" not in _m or "test_rmse" not in _m:
+                continue
+            history.append({
+                "run_id": _r.info.run_id[:8],
+                "date": datetime.fromtimestamp(_r.info.start_time / 1000).date().isoformat(),
+                "r2": round(float(_m["test_r2"]), 4),
+                "rmse": round(float(_m["test_rmse"]), 4),
+                "mae": round(float(_m.get("test_mae", 0)), 4),
+            })
+        return history
+    except Exception as _e:
+        print(f"[export] WARNING: could not load model history from {tracking_uri}: {_e}")
+        return []
+
+
 def _sample_predictions(df: pd.DataFrame, max_points: int = 200) -> list[dict]:
     """Downsample predictions for frontend chart rendering."""
     if df.empty:
@@ -288,6 +322,7 @@ def main() -> None:
             "rmse": round(ml_eval["rmse"], 4),
             "mae": round(ml_eval["mae"], 4),
             "predictions": _sample_predictions(predictions_df),
+            "history": _query_model_history(),
         },
         "rag_demo": rag_demo,
         "beam_regional": beam_summary,

@@ -12,6 +12,7 @@ let cityTempChartInstance = null;
 let cityPrecipChartInstance = null;
 let mlParityChartInstance = null;
 let mlResidualChartInstance = null;
+let mlHistoryChartInstance = null;
 
 function formatSource(source) {
   return source.source || source.title;
@@ -720,6 +721,100 @@ function renderMLCharts(d) {
   );
 }
 
+function renderModelHistory(d) {
+  const section = document.getElementById("ml-history-section");
+  const history = d.ml_model && d.ml_model.history;
+  if (!history || history.length === 0) {
+    if (section) section.style.display = "none";
+    return;
+  }
+  if (section) section.style.display = "";
+
+  const labels = history.map((r) => r.date);
+  const r2Data = history.map((r) => r.r2);
+  const rmseData = history.map((r) => r.rmse);
+
+  if (mlHistoryChartInstance) mlHistoryChartInstance.destroy();
+  mlHistoryChartInstance = new Chart(document.getElementById("mlHistoryChart"), {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "R² (test)",
+          data: r2Data,
+          borderColor: "rgba(99,202,183,0.9)",
+          backgroundColor: "rgba(99,202,183,0.15)",
+          tension: 0.3,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          yAxisID: "yR2",
+          fill: false,
+        },
+        {
+          label: "RMSE (test, °C)",
+          data: rmseData,
+          borderColor: "rgba(255,160,80,0.9)",
+          backgroundColor: "rgba(255,160,80,0.15)",
+          tension: 0.3,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          yAxisID: "yRmse",
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        title: {
+          display: true,
+          text: "Model Performance Across Training Runs (MLflow)",
+          color: "#f7f7f7",
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const r = history[ctx.dataIndex];
+              if (ctx.datasetIndex === 0)
+                return `R²: ${r.r2.toFixed(4)}  (run ${r.run_id})`;
+              return `RMSE: ${r.rmse.toFixed(4)} °C  MAE: ${r.mae.toFixed(4)} °C`;
+            },
+          },
+        },
+        legend: {
+          labels: { color: "rgba(255,255,255,0.75)" },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: "rgba(255,255,255,0.6)", maxRotation: 45 },
+          grid: { color: "rgba(255,255,255,0.06)" },
+        },
+        yR2: {
+          type: "linear",
+          position: "left",
+          min: Math.min(-0.5, Math.min(...r2Data) - 0.05),
+          max: 1.0,
+          title: { display: true, text: "R²", color: "rgba(99,202,183,0.8)" },
+          ticks: { color: "rgba(99,202,183,0.8)" },
+          grid: { color: "rgba(255,255,255,0.06)" },
+        },
+        yRmse: {
+          type: "linear",
+          position: "right",
+          min: 0,
+          title: { display: true, text: "RMSE (°C)", color: "rgba(255,160,80,0.8)" },
+          ticks: { color: "rgba(255,160,80,0.8)" },
+          grid: { drawOnChartArea: false },
+        },
+      },
+    },
+  });
+}
+
 function renderRagDemo(d) {
   const meta = document.getElementById("rag-meta");
   const grid = document.getElementById("rag-grid");
@@ -893,6 +988,7 @@ function connectWebSocket() {
       renderBeamHeatmap(data);
       renderMLMetrics(data);
       renderMLCharts(data);
+      renderModelHistory(data);
       renderRagDemo(data);
       renderPipeline();
 
@@ -1031,6 +1127,7 @@ async function init() {
   renderBeamHeatmap(data);
   renderMLMetrics(data);
   renderMLCharts(data);
+  renderModelHistory(data);
   renderRagDemo(data);
   renderPipeline();
 

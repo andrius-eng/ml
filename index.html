@@ -127,6 +127,19 @@
         </div>
       </section>
 
+      <!-- ML model training history -->
+      <section class="card" id="ml-history-section">
+        <h2>ML Model — Training History</h2>
+        <p class="section-desc">
+          R² and RMSE across all training runs tracked in MLflow.
+          Each point is one experiment run; the highlighted region shows the
+          architectural fix that lifted R² from &lt;0.2 to &gt;0.91.
+        </p>
+        <div class="chart-wrap">
+          <canvas id="mlHistoryChart"></canvas>
+        </div>
+      </section>
+
       <section class="card" id="rag-section">
         <h2>Vector RAG Briefings</h2>
         <p class="section-desc">
