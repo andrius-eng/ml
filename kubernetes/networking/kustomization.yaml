@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ml-stack
+
+resources:
+  - services.yaml
+  - tailscale-tls.yaml
+  - gateway.yaml
+  - gatewayclass.yaml

@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ml-stack
+
+resources:
+  - namespace.yaml
+  - sealed-secrets.yaml
+  - configmaps.yaml
+  - pvcs.yaml
+  - postgres.yaml
+  - rollout-guard.yaml
+
+images:
+  - name: ghcr.io/andrius-eng/ml-airflow-custom
+    newTag: dca32217d2af219b9a130d341d284561cef9063c
+  - name: ghcr.io/andrius-eng/ml-ml-pipeline
+    newTag: dca32217d2af219b9a130d341d284561cef9063c
+  - name: ghcr.io/andrius-eng/ml-frontend
+    newTag: dca32217d2af219b9a130d341d284561cef9063c
+  - name: ghcr.io/andrius-eng/ml-ws-server
+    newTag: dca32217d2af219b9a130d341d284561cef9063c
