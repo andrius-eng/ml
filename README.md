@@ -469,6 +469,12 @@ Applications for the `ml-stack` workload and the Sealed Secrets controller.
   plus Prometheus on its `ReadWriteOnce` TSDB PVC, use `Recreate` so rollouts do
   not overlap old and new pods. That avoids scheduler deadlock from doubled
   memory requests and prevents Prometheus from crashing on the TSDB lock file.
+- ArgoCD also runs tiny `PreSync` image-prepull DaemonSets on the `infra` and
+  `compute` node pools before syncing repo-owned GHCR workloads. They fail the
+  sync before singleton Deployments roll if any target node cannot pull the new
+  image cleanly. The runtime Pods for those immutable SHA-pinned images use
+  `IfNotPresent` so they reuse the warmed node cache instead of triggering a
+  second pull during the actual rollout.
 
 ### Key architecture notes
 

@@ -28,7 +28,7 @@ spec:
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
         - name: db-upgrade
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           command: ["airflow", "db", "migrate"]
           envFrom:
             - configMapRef:
@@ -43,7 +43,7 @@ spec:
       containers:
         - name: airflow-init
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           command:
             - /bin/bash
             - -c
@@ -110,7 +110,7 @@ spec:
       containers:
         - name: webserver
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           command: ["airflow", "api-server", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]
           ports:
             - containerPort: 8080
@@ -189,7 +189,7 @@ spec:
               mountPath: /opt/airflow/project/python/output
         - name: sync-dags
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           # Copy baked-in DAGs from image into the PVC (image dags hidden by PVC mount at /opt/airflow)
           command: ["sh", "-c", "mkdir -p /mnt/airflow/dags && cp -rn /opt/airflow/dags/. /mnt/airflow/dags/ 2>/dev/null || true"]
           volumeMounts:
@@ -198,7 +198,7 @@ spec:
       containers:
         - name: scheduler
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           command: ["airflow", "scheduler"]
           envFrom:
             - configMapRef:
@@ -275,7 +275,7 @@ spec:
               mountPath: /opt/airflow/project/python/output
         - name: sync-dags
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "mkdir -p /mnt/airflow/dags && cp -rn /opt/airflow/dags/. /mnt/airflow/dags/ 2>/dev/null || true"]
           volumeMounts:
             - name: airflow-data
@@ -283,7 +283,7 @@ spec:
       containers:
         - name: dag-processor
           image: ghcr.io/andrius-eng/ml-airflow-custom:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           command: ["airflow", "dag-processor"]
           envFrom:
             - configMapRef:

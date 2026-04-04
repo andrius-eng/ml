@@ -7,6 +7,7 @@ resources:
   - namespace.yaml
   - sealed-secrets.yaml
   - configmaps.yaml
+  - rollout-guard.yaml
   - pvcs.yaml
   - postgres.yaml
   - airflow.yaml
