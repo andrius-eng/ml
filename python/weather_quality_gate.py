@@ -113,7 +113,11 @@ def _log_quality_gate_to_mlflow(passed: bool, temp_z: float, precip_z: float,
         import mlflow
         mlflow.set_tracking_uri(tracking_uri)
         mlflow.set_experiment("weather-analysis")
-        with mlflow.start_run(run_name="weather-quality-gate", tags={"type": "quality_gate", "dag": "lithuania_weather"}):
+        _parent_run_id = os.environ.get("MLFLOW_PARENT_RUN_ID", "")
+        _run_tags = {"type": "quality_gate", "dag": "lithuania_weather"}
+        if _parent_run_id:
+            _run_tags["mlflow.parentRunId"] = _parent_run_id
+        with mlflow.start_run(run_name="weather-quality-gate", tags=_run_tags):
             mlflow.log_metrics({
                 "passed":                   float(passed),
                 "days_observed":            float(days),

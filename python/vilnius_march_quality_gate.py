@@ -90,9 +90,13 @@ def _log_quality_gate_to_mlflow(passed: bool, month_name: str, years_included: i
         month_slug = month_name.lower()
         mlflow.set_tracking_uri(tracking_uri)
         mlflow.set_experiment("vilnius-temperature-analysis")
+        _parent_run_id = os.environ.get("MLFLOW_PARENT_RUN_ID", "")
+        _run_tags = {"type": "quality_gate", "dag": "vilnius_march_temperature", "month": month_slug}
+        if _parent_run_id:
+            _run_tags["mlflow.parentRunId"] = _parent_run_id
         with mlflow.start_run(
             run_name=f"vilnius-{month_slug}-quality-gate",
-            tags={"type": "quality_gate", "dag": "vilnius_march_temperature", "month": month_slug},
+            tags=_run_tags,
         ):
             mlflow.log_metrics({
                 "passed":          float(passed),

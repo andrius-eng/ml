@@ -261,7 +261,11 @@ def _log_weather_to_mlflow(
         # +1 = warming (recent 7d warmer than season), -1 = cooling, 0 = neutral
         trend_direction = 1.0 if temp_7d > temp_dev + 0.5 else (-1.0 if temp_7d < temp_dev - 0.5 else 0.0)
 
-        with mlflow.start_run(run_name="weather-dag", tags={"type": "weather_analysis", "dag": "lithuania_weather"}):
+        _parent_run_id = os.environ.get("MLFLOW_PARENT_RUN_ID", "")
+        _run_tags = {"type": "weather_analysis", "dag": "lithuania_weather"}
+        if _parent_run_id:
+            _run_tags["mlflow.parentRunId"] = _parent_run_id
+        with mlflow.start_run(run_name="weather-dag", tags=_run_tags):
             _metrics = {
                 "temp_deviation_vs_baseline":   temp_dev,
                 "temp_z_score":                 float(temp.get("z_score_vs_baseline", 0.0)),

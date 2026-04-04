@@ -67,6 +67,9 @@ def _log_to_mlflow(summary: dict, annual) -> None:
         }
         if years_included < 5:
             run_tags["data_quality_warning"] = f"only {years_included} year(s) — archive API may be rate-limited"
+        _parent_run_id = os.environ.get("MLFLOW_PARENT_RUN_ID", "")
+        if _parent_run_id:
+            run_tags["mlflow.parentRunId"] = _parent_run_id
         with mlflow.start_run(run_name=f"vilnius-{month_name}-analyze", tags=run_tags):
             latest_row = annual[annual["year"] == annual["year"].max()].iloc[0]
             def _safe(v):

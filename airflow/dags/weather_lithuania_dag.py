@@ -16,17 +16,83 @@ from airflow.utils.trigger_rule import TriggerRule
 import logging
 
 MLFLOW_TRACKING_URI = os.environ.get('MLFLOW_TRACKING_URI', 'http://mlflow:5000')
+MLFLOW_EXPERIMENT = 'lithuania_weather_analysis'
 FLINK_OVERVIEW_URL = os.environ.get('FLINK_OVERVIEW_URL', 'http://flink-jobmanager:8081/v1/overview')
 FLINK_READY_REQUEST_TIMEOUT = int(os.environ.get('FLINK_READY_REQUEST_TIMEOUT_SECONDS', '5'))
 FLINK_READY_POKE_INTERVAL = int(os.environ.get('FLINK_READY_POKE_INTERVAL_SECONDS', '10'))
 FLINK_READY_TIMEOUT = int(os.environ.get('FLINK_READY_TIMEOUT_SECONDS', '1800'))
 
 
-def _set_mlflow_experiment(experiment_name: str):
-    global mlflow  # lazy import to avoid slow DAG parse
+# ── MLflow helpers ────────────────────────────────────────────────────────────
+
+def _mlflow_create_dag_run(**context):
+    """Create the parent MLflow run for this DAG execution and push run_id to XCom."""
     import mlflow
+    import socket
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-    mlflow.set_experiment(experiment_name)
+    mlflow.set_experiment(MLFLOW_EXPERIMENT)
+    with mlflow.start_run(
+        run_name=f"weather-pipeline-{context['ds']}",
+        tags={
+            'dag_id': 'lithuania_weather_anomaly',
+            'dag_run_id': context.get('run_id', ''),
+            'execution_date': context['ds'],
+            'hostname': socket.gethostname(),
+            'type': 'dag_run',
+        },
+    ) as run:
+        mlflow.log_param('execution_date', context['ds'])
+        mlflow.log_param('analysis_year', str(context['ds'])[:4])
+    context['task_instance'].xcom_push(key='mlflow_parent_run_id', value=run.info.run_id)
+
+
+def _mlflow_child_run(run_name: str, parent_run_id: str, output_paths: tuple, fn, extra_tags: dict | None = None, **context):
+    """Execute fn inside a child MLflow run linked to parent_run_id, then log output artifacts."""
+    import mlflow
+    import socket
+    import time
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    mlflow.set_experiment(MLFLOW_EXPERIMENT)
+    tags = {
+        'mlflow.parentRunId': parent_run_id,
+        'dag_id': 'lithuania_weather_anomaly',
+        'execution_date': context.get('ds', ''),
+        'hostname': socket.gethostname(),
+        'task_id': run_name,
+        **(extra_tags or {}),
+    }
+    start = time.time()
+    with mlflow.start_run(run_name=run_name, tags=tags):
+        mlflow.log_param('task_id', run_name)
+        try:
+            result = fn(**context)
+            mlflow.log_metric('duration_s', time.time() - start)
+            mlflow.log_metric('success', 1.0)
+            for p in output_paths:
+                _log_artifact(p)
+            return result
+        except Exception as exc:
+            mlflow.log_metric('success', 0.0)
+            mlflow.log_metric('duration_s', time.time() - start)
+            mlflow.set_tag('error', str(exc)[:250])
+            raise
+
+
+def _log_artifact(path) -> None:
+    """Log a single file or glob a directory for PNG/JSON/CSV artifacts."""
+    import mlflow
+    p = Path(str(path))
+    if p.is_dir():
+        for f in sorted(p.rglob('*'))[:30]:
+            if f.is_file() and f.suffix in ('.png', '.json', '.csv', '.md'):
+                mlflow.log_artifact(str(f), artifact_path=p.name)
+    elif p.exists():
+        import mlflow
+        mlflow.log_artifact(str(p))
+        try:
+            mlflow.log_metric(p.stem.replace('-', '_') + '_size_kb', p.stat().st_size / 1024)
+        except Exception:
+            pass
 
 
 DEFAULT_ARGS = {
@@ -37,6 +103,10 @@ DEFAULT_ARGS = {
     "retries": 1,
     "retry_delay": timedelta(minutes=5),
 }
+
+
+def _pull_parent_run_id(context) -> str:
+    return context['task_instance'].xcom_pull(task_ids='create_mlflow_run', key='mlflow_parent_run_id') or ''
 
 
 def check_flink_ready(**context):
@@ -90,7 +160,7 @@ def verify_beam_started_on_flink(**context):
     )
 
 
-def run_script(script_path: Path, args: list, logger, timeout: int = 300):
+def run_script(script_path: Path, args: list, logger, timeout: int = 300, extra_env: dict | None = None):
     """Run a Python script, streaming stdout/stderr to the task log in real time."""
     if not script_path.exists():
         raise FileNotFoundError(f"Script not found: {script_path}")
@@ -99,7 +169,8 @@ def run_script(script_path: Path, args: list, logger, timeout: int = 300):
     logger.info(f"Running: {' '.join(cmd)}")
 
     import select
-    import io
+
+    env = {**os.environ, **(extra_env or {})}
 
     proc = subprocess.Popen(
         cmd,
@@ -107,6 +178,7 @@ def run_script(script_path: Path, args: list, logger, timeout: int = 300):
         stderr=subprocess.PIPE,
         text=True,
         bufsize=1,
+        env=env,
     )
 
     stderr_lines = []
@@ -156,153 +228,173 @@ def resolve_analysis_end(context: dict, analysis_end: str | None = None):
     return datetime.now().strftime('%Y-%m-%d')
 
 def fetch_weather_data(**context):
-    _set_mlflow_experiment('lithuania_weather_analysis')
-    with mlflow.start_run(run_name='fetch_weather_data'):
-        mlflow.log_param('task', 'fetch_weather_data')
-        analysis_end = resolve_analysis_end(context, None)
-        mlflow.log_param('analysis_end', analysis_end)
-        """Fetch weather data with caching (reuse if less than 60 minutes old)."""
+    """Fetch weather data with caching (reuse if less than 60 minutes old)."""
+    import mlflow
+    parent_run_id = _pull_parent_run_id(context)
+
+    def _do(**ctx):
         logger = logging.getLogger(__name__)
+        execution_date = ctx.get("ds", datetime.now().strftime("%Y-%m-%d"))
+        min_years_required = 30
+        force_full_fetch = False
 
-        # Get execution date from Airflow context
-        execution_date = context.get("ds", datetime.now().strftime("%Y-%m-%d"))
-    min_years_required = 30
-    force_full_fetch = False
+        if RAW_WEATHER_PATH.exists():
+            age_seconds = (datetime.now() - datetime.fromtimestamp(RAW_WEATHER_PATH.stat().st_mtime)).total_seconds()
+            years_present = 0
+            try:
+                import csv
+                years: set[int] = set()
+                with RAW_WEATHER_PATH.open("r", encoding="utf-8", newline="") as fh:
+                    reader = csv.DictReader(fh)
+                    for row in reader:
+                        t = row.get("time", "")
+                        if len(t) >= 4 and t[:4].isdigit():
+                            years.add(int(t[:4]))
+                years_present = len(years)
+            except Exception as exc:
+                logger.warning(f"Could not inspect cached weather coverage: {exc}")
 
-    # Check cache
-    if RAW_WEATHER_PATH.exists():
-        age_seconds = (datetime.now() - datetime.fromtimestamp(RAW_WEATHER_PATH.stat().st_mtime)).total_seconds()       
-        years_present = 0
-        try:
+            if years_present < min_years_required:
+                force_full_fetch = True
+                mlflow.set_tag('cache_action', 'force_full_fetch')
+                mlflow.log_param('cache_years_found', years_present)
+                logger.warning(
+                    "Cached weather data only spans %s years (< %s); forcing full historical backfill",
+                    years_present, min_years_required,
+                )
+            elif age_seconds < 3600:
+                mlflow.set_tag('cache_action', 'hit')
+                mlflow.log_metric('cache_age_minutes', round(age_seconds / 60, 1))
+                mlflow.log_metric('cache_years', years_present)
+                logger.info("✓ Using cached raw weather data (age: %.0f minutes, %s years)", age_seconds / 60, years_present)
+                return
+
+        mlflow.set_tag('cache_action', 'miss_or_refresh')
+        logger.info("Fetching fresh weather data...")
+        fetch_args = [
+            "--start-date", "1991-01-01",
+            "--end-date", execution_date,
+            "--output", str(RAW_WEATHER_PATH),
+            "--min-years-required", str(min_years_required),
+        ]
+        if force_full_fetch:
+            fetch_args.extend(["--force-full-fetch", "--cache-minutes", "0"])
+
+        run_script(
+            WEATHER_FETCH_SCRIPT,
+            fetch_args,
+            logger,
+            timeout=1800,
+            extra_env={'MLFLOW_TRACKING_URI': MLFLOW_TRACKING_URI, 'MLFLOW_PARENT_RUN_ID': parent_run_id},
+        )
+
+        if RAW_WEATHER_PATH.exists():
             import csv
+            with RAW_WEATHER_PATH.open('r') as f:
+                row_count = sum(1 for _ in csv.reader(f)) - 1
+            mlflow.log_metric('raw_row_count', row_count)
 
-            years: set[int] = set()
-            with RAW_WEATHER_PATH.open("r", encoding="utf-8", newline="") as fh:
-                reader = csv.DictReader(fh)
-                for row in reader:
-                    t = row.get("time", "")
-                    if len(t) >= 4 and t[:4].isdigit():
-                        years.add(int(t[:4]))
-            years_present = len(years)
-        except Exception as exc:
-            logger.warning(f"Could not inspect cached weather coverage: {exc}")
+    _mlflow_child_run('fetch-weather-data', parent_run_id, (RAW_WEATHER_PATH,), _do, **context)
 
-        if years_present < min_years_required:
-            force_full_fetch = True
-            logger.warning(
-                "Cached weather data only spans %s years (< %s); forcing full historical backfill",
-                years_present,
-                min_years_required,
-            )
-        elif age_seconds < 3600:  # Less than 60 minutes
-            logger.info(
-                "✓ Using cached raw weather data (age: %.0f minutes, %s years)",
-                age_seconds / 60,
-                years_present,
-            )
-            return
-
-    logger.info("Fetching fresh weather data...")
-    fetch_args = [
-        "--start-date", "1991-01-01",
-        "--end-date", execution_date,
-        "--output", str(RAW_WEATHER_PATH),
-        "--min-years-required", str(min_years_required),
-    ]
-    if force_full_fetch:
-        fetch_args.extend(["--force-full-fetch", "--cache-minutes", "0"])
-
-    run_script(
-        WEATHER_FETCH_SCRIPT,
-        fetch_args,
-        logger,
-        timeout=1800,
-    )
 
 def analyze_weather_data(analysis_end=None, **context):
-    _set_mlflow_experiment('lithuania_weather_analysis')
-    with mlflow.start_run(run_name='analyze_weather_data'):
-        mlflow.log_param('task', 'analyze_weather_data')
-        analysis_end = resolve_analysis_end(context, analysis_end if 'analysis_end' in globals() else None)
-        mlflow.log_param('analysis_end', analysis_end)
-        """Analyze weather patterns and generate summaries."""
+    """Analyze weather patterns and generate summaries."""
+    parent_run_id = _pull_parent_run_id(context)
+    resolved_end = resolve_analysis_end(context, analysis_end)
+
+    def _do(**ctx):
         logger = logging.getLogger(__name__)
         run_script(
-        WEATHER_ANALYZE_SCRIPT,
-        [
-            "--raw-input", str(RAW_WEATHER_PATH),
-            "--country-daily-output", str(COUNTRY_DAILY_PATH),
-            "--annual-output", str(ANNUAL_SUMMARY_PATH),
-            "--city-annual-output", str(CITY_ANNUAL_SUMMARY_PATH),
-            "--summary-output", str(WEATHER_SUMMARY_PATH),
-            "--city-summary-output", str(CITY_WEATHER_SUMMARY_PATH),
-            "--report-output", str(WEATHER_REPORT_PATH),
-            "--country-daily-anomalies-output", str(COUNTRY_DAILY_ANOMALY_PATH),
-            "--city-daily-anomalies-output", str(CITY_DAILY_ANOMALY_PATH),
-            "--country-monthly-output", str(COUNTRY_MONTHLY_PATH),
-            "--city-monthly-output", str(CITY_MONTHLY_PATH),
-            "--city-rankings-output", str(CITY_RANKINGS_PATH),
-            "--heat-stress-output", str(HEAT_STRESS_PATH),
-            "--current-end", analysis_end,
-        ],
-        logger,
+            WEATHER_ANALYZE_SCRIPT,
+            [
+                "--raw-input", str(RAW_WEATHER_PATH),
+                "--country-daily-output", str(COUNTRY_DAILY_PATH),
+                "--annual-output", str(ANNUAL_SUMMARY_PATH),
+                "--city-annual-output", str(CITY_ANNUAL_SUMMARY_PATH),
+                "--summary-output", str(WEATHER_SUMMARY_PATH),
+                "--city-summary-output", str(CITY_WEATHER_SUMMARY_PATH),
+                "--report-output", str(WEATHER_REPORT_PATH),
+                "--country-daily-anomalies-output", str(COUNTRY_DAILY_ANOMALY_PATH),
+                "--city-daily-anomalies-output", str(CITY_DAILY_ANOMALY_PATH),
+                "--country-monthly-output", str(COUNTRY_MONTHLY_PATH),
+                "--city-monthly-output", str(CITY_MONTHLY_PATH),
+                "--city-rankings-output", str(CITY_RANKINGS_PATH),
+                "--heat-stress-output", str(HEAT_STRESS_PATH),
+                "--current-end", resolved_end,
+            ],
+            logger,
+            extra_env={'MLFLOW_TRACKING_URI': MLFLOW_TRACKING_URI, 'MLFLOW_PARENT_RUN_ID': parent_run_id},
+        )
+
+    _mlflow_child_run(
+        'analyze-weather-data', parent_run_id,
+        (ANNUAL_SUMMARY_PATH, WEATHER_SUMMARY_PATH, WEATHER_REPORT_PATH, CITY_RANKINGS_PATH, HEAT_STRESS_PATH),
+        _do,
+        extra_tags={'analysis_end': resolved_end},
+        **context,
     )
 
 
 def plot_weather_data(analysis_end=None, **context):
-    _set_mlflow_experiment('lithuania_weather_analysis')
-    with mlflow.start_run(run_name='plot_weather_data'):
-        mlflow.log_param('task', 'plot_weather_data')
-        analysis_end = resolve_analysis_end(context, analysis_end if 'analysis_end' in globals() else None)
-        mlflow.log_param('analysis_end', analysis_end)
-        """Generate weather visualization plots."""
+    """Generate weather visualization plots."""
+    parent_run_id = _pull_parent_run_id(context)
+    resolved_end = resolve_analysis_end(context, analysis_end)
+
+    def _do(**ctx):
         logger = logging.getLogger(__name__)
         run_script(
-        WEATHER_PLOT_SCRIPT,
-        [
-            "--annual-input", str(ANNUAL_SUMMARY_PATH),
-            "--summary-input", str(WEATHER_SUMMARY_PATH),
-            "--city-summary-input", str(CITY_WEATHER_SUMMARY_PATH),
-            "--country-daily-input", str(COUNTRY_DAILY_ANOMALY_PATH),
-            "--country-monthly-input", str(COUNTRY_MONTHLY_PATH),
-            "--city-daily-input", str(CITY_DAILY_ANOMALY_PATH),
-            "--city-monthly-input", str(CITY_MONTHLY_PATH),
-            "--city-plots-dir", str(CITY_PLOTS_DIR),
-            "--output", str(WEATHER_PLOT_PATH),
-        ],
-        logger,
+            WEATHER_PLOT_SCRIPT,
+            [
+                "--annual-input", str(ANNUAL_SUMMARY_PATH),
+                "--summary-input", str(WEATHER_SUMMARY_PATH),
+                "--city-summary-input", str(CITY_WEATHER_SUMMARY_PATH),
+                "--country-daily-input", str(COUNTRY_DAILY_ANOMALY_PATH),
+                "--country-monthly-input", str(COUNTRY_MONTHLY_PATH),
+                "--city-daily-input", str(CITY_DAILY_ANOMALY_PATH),
+                "--city-monthly-input", str(CITY_MONTHLY_PATH),
+                "--city-plots-dir", str(CITY_PLOTS_DIR),
+                "--output", str(WEATHER_PLOT_PATH),
+            ],
+            logger,
+            extra_env={'MLFLOW_TRACKING_URI': MLFLOW_TRACKING_URI, 'MLFLOW_PARENT_RUN_ID': parent_run_id},
+        )
+
+    _mlflow_child_run(
+        'plot-weather-data', parent_run_id,
+        (WEATHER_PLOT_PATH, CITY_PLOTS_DIR),
+        _do,
+        **context,
     )
 
 
 def validate_weather_summary(analysis_end=None, **context):
-    _set_mlflow_experiment('lithuania_weather_analysis')
-    with mlflow.start_run(run_name='validate_weather_summary'):
-        mlflow.log_param('task', 'validate_weather_summary')
-        analysis_end = resolve_analysis_end(context, analysis_end if 'analysis_end' in globals() else None)
-        mlflow.log_param('analysis_end', analysis_end)
-        """Validate weather summary meets quality gates."""
+    """Validate weather summary meets quality gates."""
+    parent_run_id = _pull_parent_run_id(context)
+
+    def _do(**ctx):
         logger = logging.getLogger(__name__)
         run_script(
-        WEATHER_QUALITY_GATE_SCRIPT,
-        [
-            "--summary-input", str(WEATHER_SUMMARY_PATH),
-            "--country-monthly-input", str(COUNTRY_MONTHLY_PATH),
-            "--min-days", "60",
-            "--min-month-days", "5",
-            "--max-monthly-temp-abs-z", "3.5",
-            "--max-monthly-precip-abs-z", "3.5",
-        ],
-        logger,
-    )
+            WEATHER_QUALITY_GATE_SCRIPT,
+            [
+                "--summary-input", str(WEATHER_SUMMARY_PATH),
+                "--country-monthly-input", str(COUNTRY_MONTHLY_PATH),
+                "--min-days", "60",
+                "--min-month-days", "5",
+                "--max-monthly-temp-abs-z", "3.5",
+                "--max-monthly-precip-abs-z", "3.5",
+            ],
+            logger,
+            extra_env={'MLFLOW_TRACKING_URI': MLFLOW_TRACKING_URI, 'MLFLOW_PARENT_RUN_ID': parent_run_id},
+        )
+
+    _mlflow_child_run('validate-weather-summary', parent_run_id, (), _do, **context)
 
 
 def refresh_rag_context_data(analysis_end=None, **context):
-    _set_mlflow_experiment('lithuania_weather_analysis')
-    with mlflow.start_run(run_name='refresh_rag_context_data'):
-        mlflow.log_param('task', 'refresh_rag_context_data')
-        analysis_end = resolve_analysis_end(context, analysis_end if 'analysis_end' in globals() else None)
-        mlflow.log_param('analysis_end', analysis_end)
-        """Refresh RAG pipeline context with latest analysis."""
+    """Refresh RAG pipeline context with latest analysis."""
+    parent_run_id = _pull_parent_run_id(context)
+
+    def _do(**ctx):
         logger = logging.getLogger(__name__)
         run_script(
             RAG_PIPELINE_SCRIPT,
@@ -311,7 +403,10 @@ def refresh_rag_context_data(analysis_end=None, **context):
                 "--demo-output", str(RAG_DEMO_PATH),
             ],
             logger,
+            extra_env={'MLFLOW_TRACKING_URI': MLFLOW_TRACKING_URI, 'MLFLOW_PARENT_RUN_ID': parent_run_id},
         )
+
+    _mlflow_child_run('refresh-rag-context', parent_run_id, (RAG_DEMO_PATH,), _do, **context)
 
 
 def _stream_subprocess(cmd: list, logger, timeout: int, label: str) -> int:
@@ -362,65 +457,80 @@ def _stream_subprocess(cmd: list, logger, timeout: int, label: str) -> int:
 
 
 def run_beam_analysis_with_fallback(analysis_end=None, **context):
-    analysis_end = resolve_analysis_end(context, analysis_end if 'analysis_end' in globals() else None)
     """Run Beam pipeline via PortableRunner -> beam-job-server -> Flink cluster.
 
     Falls back to DirectRunner if the Flink/Beam stack is unavailable.
-    PortableRunner is required (not FlinkRunner) because the Airflow scheduler
-    container has no Java runtime to start a local job server.
-    stdout/stderr from the Beam script are streamed line-by-line so every
-    progress print is visible in the Airflow task log in real time.
     """
-    logger = logging.getLogger(__name__)
+    parent_run_id = _pull_parent_run_id(context)
+    analysis_end = resolve_analysis_end(context, analysis_end)
 
-    # Submit through the dedicated Beam job server -> Flink cluster
-    try:
-        logger.info("Attempting Beam pipeline with PortableRunner -> Flink...")
-        cmd = [
-            sys.executable, str(BEAM_ANALYSIS_SCRIPT),
-            "--input", str(RAW_WEATHER_PATH),
-            "--output-dir", str(BEAM_OUTPUT_DIR),
-            "--end-date", analysis_end,
-            "--no-fetch-missing-cities",          # avoid external API calls inside Flink
-            "--runner", "PortableRunner",         # uses existing beam-job-server; no Java needed
-            "--job_endpoint", "beam-job-server:8099",
-            "--artifact_endpoint", "beam-job-server:8098",
-            "--environment_type", "EXTERNAL",
-            "--environment_config", "localhost:50000",  # worker-pool shares flink-taskmanager network namespace
-            "--parallelism", "1",
-        ]
-        rc = _stream_subprocess(cmd, logger, timeout=2700, label="PortableRunner")
-        if rc != 0:
-            raise subprocess.CalledProcessError(rc, cmd)
-        _push_beam_execution_metadata(context, runner="PortableRunner", started_on_flink=True)
-        logger.info("✅ Beam pipeline completed successfully on Flink via PortableRunner")
-        return
-    except subprocess.TimeoutExpired:
-        logger.warning("PortableRunner/Flink timed out after 45 min — falling back to DirectRunner")
-    except subprocess.CalledProcessError as e:
-        logger.warning(f"PortableRunner/Flink failed (exit {e.returncode}) — falling back to DirectRunner")
+    def _do(**ctx):
+        logger = logging.getLogger(__name__)
+        import mlflow
 
-    # Fallback to DirectRunner (no Flink dependency)
-    logger.warning("⚠️ Falling back to DirectRunner - results will not use Flink")
-    try:
-        cmd = [
-            sys.executable, str(BEAM_ANALYSIS_SCRIPT),
-            "--input", str(RAW_WEATHER_PATH),
-            "--output-dir", str(BEAM_OUTPUT_DIR),
-            "--end-date", analysis_end,
-            "--no-fetch-missing-cities",
-            "--runner", "DirectRunner",
-        ]
-        rc = _stream_subprocess(cmd, logger, timeout=2700, label="DirectRunner")
-        if rc != 0:
-            raise subprocess.CalledProcessError(rc, cmd)
-        _push_beam_execution_metadata(context, runner="DirectRunner", started_on_flink=False)
-        logger.warning("⚠️ Beam pipeline completed with DirectRunner (fallback - Flink unavailable)")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"DirectRunner also failed (exit {e.returncode})")
-        raise RuntimeError("Both PortableRunner/Flink and DirectRunner failed for Beam pipeline")
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("DirectRunner timed out after 45 min")
+        # Attempt PortableRunner → Flink
+        try:
+            logger.info("Attempting Beam pipeline with PortableRunner -> Flink...")
+            mlflow.set_tag('beam_runner_attempted', 'PortableRunner')
+            cmd = [
+                sys.executable, str(BEAM_ANALYSIS_SCRIPT),
+                "--input", str(RAW_WEATHER_PATH),
+                "--output-dir", str(BEAM_OUTPUT_DIR),
+                "--end-date", analysis_end,
+                "--no-fetch-missing-cities",
+                "--runner", "PortableRunner",
+                "--job_endpoint", "beam-job-server:8099",
+                "--artifact_endpoint", "beam-job-server:8098",
+                "--environment_type", "EXTERNAL",
+                "--environment_config", "localhost:50000",
+                "--parallelism", "1",
+            ]
+            rc = _stream_subprocess(cmd, logger, timeout=2700, label="PortableRunner")
+            if rc != 0:
+                raise subprocess.CalledProcessError(rc, cmd)
+            _push_beam_execution_metadata(ctx, runner="PortableRunner", started_on_flink=True)
+            mlflow.log_param('beam_runner_used', 'PortableRunner')
+            mlflow.set_tag('beam_flink', 'true')
+            logger.info("✅ Beam pipeline completed successfully on Flink via PortableRunner")
+            return
+        except subprocess.TimeoutExpired:
+            logger.warning("PortableRunner/Flink timed out after 45 min — falling back to DirectRunner")
+            mlflow.set_tag('beam_flink_fallback_reason', 'timeout')
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"PortableRunner/Flink failed (exit {e.returncode}) — falling back to DirectRunner")
+            mlflow.set_tag('beam_flink_fallback_reason', f'exit_{e.returncode}')
+
+        # Fallback to DirectRunner
+        mlflow.log_param('beam_runner_used', 'DirectRunner')
+        mlflow.set_tag('beam_flink', 'false')
+        logger.warning("⚠️ Falling back to DirectRunner - results will not use Flink")
+        try:
+            cmd = [
+                sys.executable, str(BEAM_ANALYSIS_SCRIPT),
+                "--input", str(RAW_WEATHER_PATH),
+                "--output-dir", str(BEAM_OUTPUT_DIR),
+                "--end-date", analysis_end,
+                "--no-fetch-missing-cities",
+                "--runner", "DirectRunner",
+            ]
+            rc = _stream_subprocess(cmd, logger, timeout=2700, label="DirectRunner")
+            if rc != 0:
+                raise subprocess.CalledProcessError(rc, cmd)
+            _push_beam_execution_metadata(ctx, runner="DirectRunner", started_on_flink=False)
+            logger.warning("⚠️ Beam pipeline completed with DirectRunner (fallback - Flink unavailable)")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"DirectRunner also failed (exit {e.returncode})")
+            raise RuntimeError("Both PortableRunner/Flink and DirectRunner failed for Beam pipeline")
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("DirectRunner timed out after 45 min")
+
+    _mlflow_child_run(
+        'beam-regional-analysis', parent_run_id,
+        (BEAM_OUTPUT_DIR,),
+        _do,
+        extra_tags={'analysis_end': analysis_end},
+        **context,
+    )
 
 
 DAG_DIR = Path(__file__).resolve().parent
@@ -473,6 +583,11 @@ with DAG(
     catchup=False,
     tags=["weather", "analytics", "lithuania", "era5", "beam", "flink"],
 ) as dag:
+    create_mlflow_run = PythonOperator(
+        task_id="create_mlflow_run",
+        python_callable=_mlflow_create_dag_run,
+    )
+
     fetch_weather = PythonOperator(
         task_id="fetch_weather_data",
         python_callable=fetch_weather_data,
@@ -518,16 +633,23 @@ with DAG(
         python_callable=verify_beam_started_on_flink,
     )
 
+    def _fetch_eurostat_hdd_task(**ctx):
+        parent_run_id = _pull_parent_run_id(ctx)
+        def _do(**_ctx):
+            run_script(
+                EUROSTAT_FETCH_SCRIPT,
+                ["--output", str(HDD_PATH)],
+                logging.getLogger(__name__),
+                extra_env={'MLFLOW_TRACKING_URI': MLFLOW_TRACKING_URI, 'MLFLOW_PARENT_RUN_ID': parent_run_id},
+            )
+        _mlflow_child_run('fetch-eurostat-hdd', parent_run_id, (HDD_PATH,), _do, **ctx)
+
     fetch_eurostat_hdd = PythonOperator(
         task_id="fetch_eurostat_hdd",
-        python_callable=lambda **ctx: run_script(
-            EUROSTAT_FETCH_SCRIPT,
-            ["--output", str(HDD_PATH)],
-            logging.getLogger(__name__),
-        ),
+        python_callable=_fetch_eurostat_hdd_task,
     )
 
-    fetch_weather >> analyze_weather >> [plot_weather, quality_gate, wait_for_flink]
-    fetch_eurostat_hdd >> beam_regional_analysis >> verify_beam_on_flink >> refresh_rag_context
+    create_mlflow_run >> fetch_weather >> analyze_weather >> [plot_weather, quality_gate, wait_for_flink]
+    create_mlflow_run >> fetch_eurostat_hdd >> beam_regional_analysis >> verify_beam_on_flink >> refresh_rag_context
     wait_for_flink >> beam_regional_analysis
     [plot_weather, quality_gate, verify_beam_on_flink] >> refresh_rag_context

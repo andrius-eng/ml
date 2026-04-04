@@ -8,19 +8,16 @@ from __future__ import annotations
 
 import calendar
 import os
+import sys
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from airflow import DAG
-from airflow.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator
 
 MLFLOW_TRACKING_URI = os.environ.get('MLFLOW_TRACKING_URI', 'http://mlflow:5000')
-
-def _set_mlflow_experiment(experiment_name: str):
-    import mlflow  # lazy import to avoid slow DAG parse
-    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-    mlflow.set_experiment(experiment_name)
-
+MLFLOW_EXPERIMENT = 'vilnius-temperature-analysis'
 
 DEFAULT_ARGS = {
     "owner": "airflow",
@@ -48,20 +45,224 @@ QUALITY_GATE_SCRIPT = PROJECT_ROOT / "python" / "vilnius_march_quality_gate.py"
 RAG_PIPELINE_SCRIPT = PROJECT_ROOT / "python" / "rag_pipeline.py"
 
 OUTPUT_DIR = PROJECT_ROOT / "python" / "output" / f"vilnius_{MONTH_SLUG}"
-# Reuse the canonical weather ingest artifact to avoid duplicate API fetches.
 RAW_PATH = PROJECT_ROOT / "python" / "output" / "weather" / "raw_daily_weather.csv"
 ANNUAL_PATH = OUTPUT_DIR / f"{MONTH_SLUG}_temperature_anomalies.csv"
 SUMMARY_PATH = OUTPUT_DIR / "summary.json"
 REPORT_PATH = OUTPUT_DIR / "report.md"
 PLOT_PATH = OUTPUT_DIR / f"{MONTH_SLUG}_temperature_anomalies.png"
 RAG_DEMO_PATH = PROJECT_ROOT / "python" / "output" / "rag" / "rag_demo.json"
-EXECUTION_DATE = "{{ ds }}"
 
 
-def project_python_command(*args: str) -> str:
-    quoted_args = " ".join(f'"{arg}"' for arg in args)
-    return f'"{PYTHON_BIN}" {quoted_args}'
+# ── MLflow helpers ────────────────────────────────────────────────────────────
 
+def _pull_parent_run_id(context) -> str:
+    return context['task_instance'].xcom_pull(task_ids='create_mlflow_run', key='mlflow_parent_run_id') or ''
+
+
+def _mlflow_create_dag_run(**context):
+    import mlflow, socket
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    mlflow.set_experiment(MLFLOW_EXPERIMENT)
+    with mlflow.start_run(
+        run_name=f"vilnius-{MONTH_SLUG}-pipeline-{context['ds']}",
+        tags={
+            'dag_id': f'vilnius_{MONTH_SLUG}_anomaly',
+            'dag_run_id': context.get('run_id', ''),
+            'execution_date': context['ds'],
+            'hostname': socket.gethostname(),
+            'month': MONTH_SLUG,
+            'type': 'dag_run',
+        },
+    ) as run:
+        mlflow.log_param('execution_date', context['ds'])
+        mlflow.log_param('month', MONTH_SLUG)
+        mlflow.log_param('month_num', MONTH)
+    context['task_instance'].xcom_push(key='mlflow_parent_run_id', value=run.info.run_id)
+
+
+def _mlflow_child_run(run_name, parent_run_id, output_paths, fn, extra_tags=None, **context):
+    import mlflow, socket, time
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    mlflow.set_experiment(MLFLOW_EXPERIMENT)
+    tags = {
+        'mlflow.parentRunId': parent_run_id,
+        'dag_id': f'vilnius_{MONTH_SLUG}_anomaly',
+        'execution_date': context.get('ds', ''),
+        'hostname': socket.gethostname(),
+        'task_id': run_name,
+        'month': MONTH_SLUG,
+        **(extra_tags or {}),
+    }
+    start = time.time()
+    with mlflow.start_run(run_name=run_name, tags=tags):
+        mlflow.log_param('task_id', run_name)
+        try:
+            result = fn(**context)
+            mlflow.log_metric('duration_s', time.time() - start)
+            mlflow.log_metric('success', 1.0)
+            for p in output_paths:
+                _log_artifact(p)
+            return result
+        except Exception as exc:
+            mlflow.log_metric('success', 0.0)
+            mlflow.log_metric('duration_s', time.time() - start)
+            mlflow.set_tag('error', str(exc)[:250])
+            raise
+
+
+def _log_artifact(path) -> None:
+    import mlflow
+    p = Path(str(path))
+    if p.exists():
+        mlflow.log_artifact(str(p))
+        try:
+            if p.is_file():
+                mlflow.log_metric(p.stem.replace('-', '_') + '_size_kb', p.stat().st_size / 1024)
+        except Exception:
+            pass
+
+
+def _run_script(script_path, args, logger, timeout=600, extra_env=None):
+    import threading
+    env = {**os.environ, **(extra_env or {})}
+    cmd = [sys.executable, '-u', str(script_path)] + [str(a) for a in args]
+    logger.info(f"Running: {' '.join(cmd)}")
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, env=env)
+
+    def _drain(stream, log_fn):
+        for line in stream:
+            log_fn(line.rstrip())
+        stream.close()
+
+    import threading
+    t_o = threading.Thread(target=_drain, args=(proc.stdout, logger.info), daemon=True)
+    t_e = threading.Thread(target=_drain, args=(proc.stderr, logger.warning), daemon=True)
+    t_o.start(); t_e.start()
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill(); t_o.join(5); t_e.join(5); raise
+    t_o.join(); t_e.join()
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd)
+
+
+# ── Task callables ────────────────────────────────────────────────────────────
+
+def ensure_weather_artifact(**context):
+    if not RAW_PATH.exists():
+        raise FileNotFoundError(
+            f"{RAW_PATH} not found. Run DAG lithuania_weather_anomaly first."
+        )
+
+
+def analyze_vilnius_month(**context):
+    import logging
+    parent_run_id = _pull_parent_run_id(context)
+
+    def _do(**ctx):
+        _run_script(
+            ANALYZE_SCRIPT,
+            [
+                "--month", str(MONTH),
+                "--raw-input", str(RAW_PATH),
+                "--annual-output", str(ANNUAL_PATH),
+                "--summary-output", str(SUMMARY_PATH),
+                "--report-output", str(REPORT_PATH),
+                "--window-years", "30",
+                "--require-flink",
+            ],
+            logging.getLogger(__name__),
+            timeout=900,
+            extra_env={
+                'ML_PROJECT_ROOT': str(PROJECT_ROOT),
+                'MLFLOW_TRACKING_URI': MLFLOW_TRACKING_URI,
+                'MLFLOW_PARENT_RUN_ID': parent_run_id,
+            },
+        )
+
+    _mlflow_child_run(
+        f'analyze-vilnius-{MONTH_SLUG}', parent_run_id,
+        (ANNUAL_PATH, SUMMARY_PATH, REPORT_PATH),
+        _do, **context,
+    )
+
+
+def plot_vilnius_month(**context):
+    import logging
+    parent_run_id = _pull_parent_run_id(context)
+
+    def _do(**ctx):
+        _run_script(
+            PLOT_SCRIPT,
+            [
+                "--annual-input", str(ANNUAL_PATH),
+                "--summary-input", str(SUMMARY_PATH),
+                "--output", str(PLOT_PATH),
+            ],
+            logging.getLogger(__name__),
+            extra_env={
+                'ML_PROJECT_ROOT': str(PROJECT_ROOT),
+                'MLFLOW_TRACKING_URI': MLFLOW_TRACKING_URI,
+                'MLFLOW_PARENT_RUN_ID': parent_run_id,
+            },
+        )
+
+    _mlflow_child_run(
+        f'plot-vilnius-{MONTH_SLUG}', parent_run_id,
+        (PLOT_PATH,),
+        _do, **context,
+    )
+
+
+def validate_vilnius_month(**context):
+    import logging
+    parent_run_id = _pull_parent_run_id(context)
+
+    def _do(**ctx):
+        _run_script(
+            QUALITY_GATE_SCRIPT,
+            [
+                "--annual-input", str(ANNUAL_PATH),
+                "--summary-input", str(SUMMARY_PATH),
+                "--expected-years", "30",
+                "--min-days", "10",
+                "--max-abs-z", "4.0",
+            ],
+            logging.getLogger(__name__),
+            extra_env={
+                'ML_PROJECT_ROOT': str(PROJECT_ROOT),
+                'MLFLOW_TRACKING_URI': MLFLOW_TRACKING_URI,
+                'MLFLOW_PARENT_RUN_ID': parent_run_id,
+            },
+        )
+
+    _mlflow_child_run(f'validate-vilnius-{MONTH_SLUG}', parent_run_id, (), _do, **context)
+
+
+def refresh_rag_context(**context):
+    import logging
+    parent_run_id = _pull_parent_run_id(context)
+
+    def _do(**ctx):
+        _run_script(
+            RAG_PIPELINE_SCRIPT,
+            [
+                "--output-dir", str(PROJECT_ROOT / "python" / "output"),
+                "--demo-output", str(RAG_DEMO_PATH),
+            ],
+            logging.getLogger(__name__),
+            extra_env={
+                'ML_PROJECT_ROOT': str(PROJECT_ROOT),
+                'MLFLOW_TRACKING_URI': MLFLOW_TRACKING_URI,
+                'MLFLOW_PARENT_RUN_ID': parent_run_id,
+            },
+        )
+
+    _mlflow_child_run('refresh-rag-context', parent_run_id, (RAG_DEMO_PATH,), _do, **context)
+
+
+# ── DAG definition ────────────────────────────────────────────────────────────
 
 with DAG(
     dag_id=f"vilnius_{MONTH_SLUG}_anomaly",
@@ -72,65 +273,35 @@ with DAG(
     catchup=False,
     tags=["weather", "vilnius", "temperature", "anomaly", MONTH_SLUG],
 ) as dag:
-    ensure_weather_artifact = BashOperator(
+    create_mlflow_run = PythonOperator(
+        task_id="create_mlflow_run",
+        python_callable=_mlflow_create_dag_run,
+    )
+
+    ensure_artifact = PythonOperator(
         task_id="ensure_weather_artifact",
-        cwd=str(PROJECT_ROOT),
-        bash_command=(
-            "set -euo pipefail\n"
-            f'test -f "{RAW_PATH}" || '
-            f'{{ echo "ERROR: {RAW_PATH} not found. Run DAG lithuania_weather_anomaly first."; exit 1; }}\n'
-        ),
-        env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
-        append_env=True,
+        python_callable=ensure_weather_artifact,
     )
 
-    analyze_vilnius_month = BashOperator(
+    analyze = PythonOperator(
         task_id=f"analyze_vilnius_{MONTH_SLUG}_anomalies",
-        cwd=str(PROJECT_ROOT),
-        bash_command=(
-            "set -euo pipefail\n"
-            f'test -f "{ANALYZE_SCRIPT}"\n'
-            f'{project_python_command(str(ANALYZE_SCRIPT), "--month", str(MONTH), "--raw-input", str(RAW_PATH), "--annual-output", str(ANNUAL_PATH), "--summary-output", str(SUMMARY_PATH), "--report-output", str(REPORT_PATH), "--window-years", "30", "--require-flink")}'
-        ),
-        env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
-        append_env=True,
+        python_callable=analyze_vilnius_month,
     )
 
-    plot_vilnius_month = BashOperator(
+    plot = PythonOperator(
         task_id=f"plot_vilnius_{MONTH_SLUG}_anomalies",
-        cwd=str(PROJECT_ROOT),
-        bash_command=(
-            "set -euo pipefail\n"
-            f'test -f "{PLOT_SCRIPT}"\n'
-            f'{project_python_command(str(PLOT_SCRIPT), "--annual-input", str(ANNUAL_PATH), "--summary-input", str(SUMMARY_PATH), "--output", str(PLOT_PATH))}'
-        ),
-        env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
-        append_env=True,
+        python_callable=plot_vilnius_month,
     )
 
-    quality_gate = BashOperator(
+    quality_gate = PythonOperator(
         task_id=f"validate_vilnius_{MONTH_SLUG}_output",
-        cwd=str(PROJECT_ROOT),
-        bash_command=(
-            "set -euo pipefail\n"
-            f'test -f "{QUALITY_GATE_SCRIPT}"\n'
-            f'{project_python_command(str(QUALITY_GATE_SCRIPT), "--annual-input", str(ANNUAL_PATH), "--summary-input", str(SUMMARY_PATH), "--expected-years", "30", "--min-days", "10", "--max-abs-z", "4.0")}'
-        ),
-        env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
-        append_env=True,
+        python_callable=validate_vilnius_month,
     )
 
-    refresh_rag_context = BashOperator(
+    rag = PythonOperator(
         task_id="refresh_rag_context",
-        cwd=str(PROJECT_ROOT),
-        bash_command=(
-            "set -euo pipefail\n"
-            f'test -f "{RAG_PIPELINE_SCRIPT}"\n'
-            f'{project_python_command(str(RAG_PIPELINE_SCRIPT), "--output-dir", str(PROJECT_ROOT / "python" / "output"), "--demo-output", str(RAG_DEMO_PATH))}'
-        ),
-        env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
-        append_env=True,
+        python_callable=refresh_rag_context,
     )
 
-    ensure_weather_artifact >> analyze_vilnius_month >> [plot_vilnius_month, quality_gate]
-    [plot_vilnius_month, quality_gate] >> refresh_rag_context
+    create_mlflow_run >> ensure_artifact >> analyze >> [plot, quality_gate]
+    [plot, quality_gate] >> rag
