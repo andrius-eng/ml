@@ -185,8 +185,19 @@ spec:
       labels:
         app: ollama
     spec:
-      nodeSelector:
-        high-memory: "true"
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: high-memory
+                    operator: In
+                    values: ["true"]
       containers:
         - name: ollama
           image: ollama/ollama:latest
@@ -208,8 +219,8 @@ spec:
               mountPath: /root/.ollama
           resources:
             requests:
-              cpu: "1"
-              memory: 2Gi
+              cpu: "500m"
+              memory: 512Mi
             limits:
               cpu: "4"
               memory: 6Gi
