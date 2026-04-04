@@ -148,7 +148,7 @@ packaging==26.0
     # via
     #   matplotlib
     #   mlflow-skinny
-pandas==2.3.3
+pandas==3.0.2
     # via ml-training-demo
 pillow==12.1.1
     # via matplotlib
