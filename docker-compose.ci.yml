@@ -11,6 +11,11 @@
 # image causes "no space left on device". A lightweight stub satisfies the
 # depends_on ordering for ml-server; the RAG smoke check accepts HTTP 500.
 
+networks:
+  default:
+    name: ml-stack
+    external: false
+
 services:
   ollama:
     image: alpine:3.19
