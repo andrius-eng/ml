@@ -208,17 +208,106 @@ def _query_model_history() -> list[dict]:
             _m = _r.data.metrics
             if "test_r2" not in _m or "test_rmse" not in _m:
                 continue
-            history.append({
+            entry = {
                 "run_id": _r.info.run_id[:8],
                 "date": datetime.fromtimestamp(_r.info.start_time / 1000).date().isoformat(),
                 "r2": round(float(_m["test_r2"]), 4),
                 "rmse": round(float(_m["test_rmse"]), 4),
                 "mae": round(float(_m.get("test_mae", 0)), 4),
-            })
+            }
+            if "test_residual_mean" in _m:
+                entry["residual_mean"] = round(float(_m["test_residual_mean"]), 4)
+            if "test_residual_std" in _m:
+                entry["residual_std"] = round(float(_m["test_residual_std"]), 4)
+            history.append(entry)
         return history
     except Exception as _e:
         print(f"[export] WARNING: could not load model history from {tracking_uri}: {_e}")
         return []
+
+
+def _query_weather_mlflow_extras() -> dict:
+    """Query MLflow for weather metrics not captured in ytd_summary.json."""
+    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+    result: dict = {}
+    try:
+        import mlflow as _mlflow
+        _mlflow.set_tracking_uri(tracking_uri)
+        _client = _mlflow.tracking.MlflowClient()
+        _exp = _client.get_experiment_by_name("weather-analysis")
+        if _exp is None:
+            return result
+        dag_runs = _client.search_runs(
+            [_exp.experiment_id],
+            filter_string='tags.`mlflow.runName` = "weather-dag"',
+            order_by=["start_time DESC"],
+            max_results=1,
+        )
+        if dag_runs:
+            _m = dag_runs[0].data.metrics
+            result["sunshine_h"] = round(float(_m.get("ytd_total_sunshine_h", 0)), 1)
+            result["snowfall_cm"] = round(float(_m.get("ytd_total_snowfall_cm", 0)), 1)
+            result["snowfall_deviation_cm"] = round(float(_m.get("snowfall_deviation_vs_baseline_cm", 0)), 1)
+            result["wind_kmh"] = round(float(_m.get("ytd_mean_wind_kmh", 0)), 1)
+            result["et0_mm"] = round(float(_m.get("ytd_total_et0_mm", 0)), 1)
+            result["trend_direction"] = int(_m.get("trend_direction", 0))
+        qg_runs = _client.search_runs(
+            [_exp.experiment_id],
+            filter_string='tags.`mlflow.runName` = "weather-quality-gate"',
+            order_by=["start_time DESC"],
+            max_results=1,
+        )
+        if qg_runs:
+            _m = qg_runs[0].data.metrics
+            result["quality_gate"] = {
+                "passed": bool(_m.get("passed", 0)),
+                "n_extreme_temp_months": int(_m.get("n_extreme_temp_months", 0)),
+                "n_extreme_precip_months": int(_m.get("n_extreme_precip_months", 0)),
+                "n_weak_months": int(_m.get("n_weak_months", 0)),
+            }
+    except Exception as _e:
+        print(f"[export] WARNING: could not load weather MLflow extras from {tracking_uri}: {_e}")
+    return result
+
+
+def _query_ml_model_extras() -> dict:
+    """Query MLflow for latest model residual metrics and training params."""
+    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "http://mlflow:5000")
+    result: dict = {}
+    try:
+        import mlflow as _mlflow
+        _mlflow.set_tracking_uri(tracking_uri)
+        _client = _mlflow.tracking.MlflowClient()
+        _exp = _client.get_experiment_by_name("climate-temperature-model")
+        if _exp is None:
+            return result
+        runs = _client.search_runs(
+            [_exp.experiment_id],
+            filter_string='tags.`mlflow.runName` = "train-climate-model"',
+            order_by=["start_time DESC"],
+            max_results=1,
+        )
+        if not runs:
+            return result
+        _r = runs[0]
+        _m = _r.data.metrics
+        _p = _r.data.params
+        if "test_residual_mean" in _m:
+            result["residual_mean"] = round(float(_m["test_residual_mean"]), 4)
+        if "test_residual_std" in _m:
+            result["residual_std"] = round(float(_m["test_residual_std"]), 4)
+        if _p:
+            result["params"] = {
+                "epochs": int(_p.get("epochs", 0)),
+                "batch_size": int(_p.get("batch_size", 0)),
+                "train_rows": int(_p.get("train_rows", 0)),
+                "feature_count": int(_p.get("feature_count", 0)),
+                "features": _p.get("features", ""),
+                "lr": float(_p.get("lr", 0)),
+            }
+    except Exception as _e:
+        print(f"[export] WARNING: could not load ML model extras from {tracking_uri}: {_e}")
+    return result
 
 
 def _sample_predictions(df: pd.DataFrame, max_points: int = 200) -> list[dict]:
@@ -323,7 +412,9 @@ def main() -> None:
             "mae": round(ml_eval["mae"], 4),
             "predictions": _sample_predictions(predictions_df),
             "history": _query_model_history(),
+            **_query_ml_model_extras(),
         },
+        "weather_mlflow": _query_weather_mlflow_extras(),
         "rag_demo": rag_demo,
         "beam_regional": beam_summary,
         "heat_stress": heat_stress,

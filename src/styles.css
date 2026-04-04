@@ -535,3 +535,30 @@ body.ws-connected #generated-badge::after {
     background-color 0.3s ease,
     color 0.3s ease;
 }
+
+/* ── ML training config strip ──────────────────────────────── */
+.ml-config-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+  margin-top: 0.75rem;
+  padding: 0.6rem 1rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.ml-config-label {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  margin-right: 0.25rem;
+}
+
+.ml-config-features {
+  color: rgba(255, 255, 255, 0.35);
+  font-family: monospace;
+  font-size: 0.72rem;
+}

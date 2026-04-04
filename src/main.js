@@ -95,6 +95,48 @@ function renderClimateStress(d) {
       '<p style="opacity:.5">Heat stress data not yet available.</p>';
   }
 
+  // Weather MLflow extras — sunshine, snowfall, wind, ET0, quality gate
+  const wm = d.weather_mlflow;
+  if (wm && Object.keys(wm).length > 0) {
+    const wmItems = [];
+    if (wm.sunshine_h != null)
+      wmItems.push({
+        label: "YTD Sunshine",
+        value: wm.sunshine_h.toFixed(1) + " h",
+        sub: wm.trend_direction === 1 ? "warming trend" : wm.trend_direction === -1 ? "cooling trend" : "",
+      });
+    if (wm.snowfall_cm != null)
+      wmItems.push({
+        label: "YTD Snowfall",
+        value: wm.snowfall_cm.toFixed(1) + " cm",
+        sub: wm.snowfall_deviation_cm != null
+          ? `${sign(wm.snowfall_deviation_cm)}${wm.snowfall_deviation_cm.toFixed(1)} cm vs baseline`
+          : "",
+      });
+    if (wm.wind_kmh != null)
+      wmItems.push({
+        label: "Mean Wind Speed",
+        value: wm.wind_kmh.toFixed(1) + " km/h",
+        sub: "YTD average",
+      });
+    if (wm.et0_mm != null)
+      wmItems.push({
+        label: "Reference ET₀",
+        value: wm.et0_mm.toFixed(1) + " mm",
+        sub: "YTD evapotranspiration",
+      });
+    if (wm.quality_gate != null) {
+      const qg = wm.quality_gate;
+      wmItems.push({
+        label: "Weather QA",
+        value: qg.passed ? "PASS" : "FAIL",
+        sub: `${qg.n_extreme_temp_months} extreme-temp · ${qg.n_extreme_precip_months} extreme-precip · ${qg.n_weak_months} weak months`,
+        highlight: !qg.passed,
+      });
+    }
+    wmItems.forEach((item) => kpiRow.appendChild(kpiCard(item)));
+  }
+
   // HDD KPI cards — ytd and heating season (Eurostat, may lag current year)
   if (hdd && hdd.ytd && hdd.ytd.months > 0) {
     const lagNote =
@@ -560,7 +602,7 @@ function renderMLMetrics(d) {
   row.innerHTML = "";
   const ml = d.ml_model;
 
-  [
+  const items = [
     {
       label: "R² (test set)",
       value: ml.r2.toFixed(4),
@@ -577,7 +619,42 @@ function renderMLMetrics(d) {
       value: ml.mae.toFixed(2) + " °C",
       sub: "Mean absolute error",
     },
-  ].forEach((item) => row.appendChild(kpiCard(item)));
+  ];
+
+  if (ml.residual_mean != null)
+    items.push({
+      label: "Residual Bias",
+      value: (ml.residual_mean >= 0 ? "+" : "") + ml.residual_mean.toFixed(3) + " °C",
+      sub: "Mean of (actual − predicted)",
+      highlight: Math.abs(ml.residual_mean) > 0.5,
+    });
+
+  if (ml.residual_std != null)
+    items.push({
+      label: "Residual Std",
+      value: ml.residual_std.toFixed(3) + " °C",
+      sub: "Spread of residuals",
+    });
+
+  items.forEach((item) => row.appendChild(kpiCard(item)));
+
+  // Training config strip
+  if (ml.params) {
+    const p = ml.params;
+    const configRow = document.getElementById("ml-kpi-row");
+    const configEl = document.createElement("div");
+    configEl.className = "ml-config-strip";
+    const featList = p.features ? p.features.split(",").join(" · ") : "";
+    configEl.innerHTML =
+      `<span class="ml-config-label">Training config</span>` +
+      `<span>epochs&thinsp;${p.epochs}</span>` +
+      `<span>batch&thinsp;${p.batch_size}</span>` +
+      `<span>lr&thinsp;${p.lr}</span>` +
+      `<span>${p.train_rows.toLocaleString()} train rows</span>` +
+      `<span>${p.feature_count} features</span>` +
+      (featList ? `<span class="ml-config-features">${featList}</span>` : "");
+    configRow.parentElement.appendChild(configEl);
+  }
 }
 
 function renderMLCharts(d) {
@@ -778,9 +855,12 @@ function renderModelHistory(d) {
           callbacks: {
             label: (ctx) => {
               const r = history[ctx.dataIndex];
-              if (ctx.datasetIndex === 0)
-                return `R²: ${r.r2.toFixed(4)}  (run ${r.run_id})`;
-              return `RMSE: ${r.rmse.toFixed(4)} °C  MAE: ${r.mae.toFixed(4)} °C`;
+              if (ctx.datasetIndex === 0) {
+                const bias = r.residual_mean != null ? `  bias ${(r.residual_mean >= 0 ? "+" : "") + r.residual_mean.toFixed(3)}` : "";
+                return `R²: ${r.r2.toFixed(4)}  (run ${r.run_id})${bias}`;
+              }
+              const spread = r.residual_std != null ? `  σ ${r.residual_std.toFixed(3)}` : "";
+              return `RMSE: ${r.rmse.toFixed(4)} °C  MAE: ${r.mae.toFixed(4)} °C${spread}`;
             },
           },
         },
