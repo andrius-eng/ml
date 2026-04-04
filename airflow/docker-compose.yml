@@ -1,24 +1,27 @@
-# Apache Airflow 2.10 — LocalExecutor + PostgreSQL
+# Apache Airflow 3.x — LocalExecutor + PostgreSQL
 # Usage:
 #   docker compose up -d          # start all services
 #   docker compose down -v        # tear down + remove volumes
 #
 # First-time setup:
-#   docker compose up airflow-init   # creates the admin user, then exits
-#   docker compose up -d             # start webserver + scheduler
+#   docker compose run --rm airflow-init   # migrates the DB, then exits
+#   docker compose up -d                 # start api-server + scheduler
 
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.10.3
+  image: apache/airflow:3.1.8
   environment: &airflow-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:${POSTGRES_PASSWORD:-airflow}@postgres:5432/airflow
     AIRFLOW__CORE__FERNET_KEY: ""
+    AIRFLOW__CORE__INTERNAL_API_SECRET_KEY: ${AIRFLOW_INTERNAL_API_SECRET_KEY:-dev-internal-secret-change-in-production}
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "admin:Admin"
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-webserver:8080/execution/
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+    AIRFLOW__SCHEDULER__STANDALONE_DAG_PROCESSOR: "True"
     AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
     AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_WEBSERVER_SECRET_KEY:-dev-secret-change-in-production}
     AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: "300"
-    AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth"
     PYTHONWARNINGS: "ignore::SyntaxWarning"
     # Pass through the Python binary and project root used in BashOperator commands
     ML_PROJECT_ROOT: /opt/airflow/project
@@ -57,22 +60,15 @@ services:
       - -c
       - |
         airflow db migrate
-        airflow users create \
-          --username admin \
-          --password ${AIRFLOW_ADMIN_PASSWORD:-admin} \
-          --firstname Airflow \
-          --lastname Admin \
-          --role Admin \
-          --email admin@example.com
     restart: "no"
 
   airflow-webserver:
     <<: *airflow-common
-    command: webserver
+    command: ["api-server", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]
     ports:
       - "8080:8080"
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --max-time 10 http://127.0.0.1:8080/health || curl --fail --max-time 10 http://127.0.0.1:8080/"]
+      test: ["CMD-SHELL", "curl --fail --max-time 10 http://127.0.0.1:8080/api/v2/monitor/health"]
       interval: 30s
       timeout: 30s
       retries: 10

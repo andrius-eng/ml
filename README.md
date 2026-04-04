@@ -314,7 +314,7 @@ MLflow persistence note:
 First-time setup:
 
 ```bash
-docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up airflow-init
+docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml run --rm airflow-init
 docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml up -d --build
 ```
 
@@ -353,6 +353,10 @@ If you only need to sync the Airflow schema without re-running user creation:
 ```bash
 docker compose --project-directory . -f airflow/docker-compose.yml -f docker-compose.full.yml run --rm --entrypoint /bin/bash airflow-init -lc "airflow db migrate"
 ```
+
+Compose note:
+- The local stack uses the Airflow 3 `api-server` command, and the health endpoint is `http://localhost:8080/api/v2/monitor/health`.
+- `airflow-init` now only runs `airflow db migrate`; login uses SimpleAuthManager with the auto-generated password file inside the webserver container, matching the Kubernetes setup.
 
 To use prebuilt GHCR images (no local image build), pull and run:
 

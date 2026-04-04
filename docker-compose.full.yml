@@ -21,7 +21,6 @@ services:
         mkdir -p /opt/airflow/project/mlruns
         chmod -R 777 /opt/airflow/project/mlruns
         airflow db migrate
-        airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true
     environment:
       BEAM_RUNNER: PortableRunner
       BEAM_PIPELINE_ARGS: --flink_master=flink-jobmanager:8081 --parallelism=1 --environment_type=EXTERNAL --environment_config=localhost:50000 --no-fetch-missing-cities
@@ -33,7 +32,6 @@ services:
       AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres:5432/airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
-      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
     volumes: &id001
     - airflow-data:/opt/airflow
     - ./airflow/dags:/opt/airflow/dags
@@ -42,7 +40,7 @@ services:
     - ..:/opt/airflow/project
   airflow-webserver:
     image: ${AIRFLOW_IMAGE:-ghcr.io/${GHCR_OWNER:-andrius-eng}/ml-airflow-custom:latest}
-    command: webserver
+    command: ["api-server", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]
     ports:
     - 8080:8080
     environment:
@@ -56,7 +54,6 @@ services:
       AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres:5432/airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
-      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
     depends_on:
     - airflow-init
     volumes: *id001
@@ -83,7 +80,6 @@ services:
       AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres:5432/airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
-      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
     volumes: *id001
     restart: unless-stopped
     networks:
@@ -274,7 +270,6 @@ services:
       AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres:5432/airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
-      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
     volumes:
     - airflow-data:/opt/airflow
     - ./airflow/dags:/opt/airflow/dags
