@@ -14,7 +14,7 @@ spec:
   template:
     spec:
       nodeSelector:
-        workload-role: infra
+        workload-role: compute
       securityContext:
         runAsUser: 50000
         runAsGroup: 500
@@ -85,7 +85,7 @@ spec:
         app: airflow-webserver
     spec:
       nodeSelector:
-        workload-role: infra
+        workload-role: compute
       securityContext:
         runAsUser: 50000
         runAsGroup: 500
@@ -165,7 +165,7 @@ spec:
         app: airflow-scheduler
     spec:
       nodeSelector:
-        workload-role: infra
+        workload-role: compute
       securityContext:
         runAsUser: 50000
         runAsGroup: 500
@@ -251,7 +251,7 @@ spec:
         app: airflow-dag-processor
     spec:
       nodeSelector:
-        workload-role: infra
+        workload-role: compute
       securityContext:
         runAsUser: 50000
         runAsGroup: 500
