@@ -205,17 +205,130 @@ flowchart LR
 
 ## DAGs
 
-Current DAG IDs:
+There are four Airflow DAGs. Each one is an automated sequence of steps
+(called tasks) that Airflow runs in order. Think of each DAG as a recipe: it
+fetches ingredients, cooks them, checks the result, and saves it to a shelf
+so the dashboard can use it.
 
-- era5_temperature_forecast_retrain
-- lithuania_weather_anomaly
-- vilnius_march_anomaly
-- llama_lora_finetune (manual)
+---
 
-Simplified overlap note:
+### `lithuania_weather_anomaly` — "Is it weirder than normal outside?"
 
-- `vilnius_march_anomaly` now reuses `python/output/weather/raw_daily_weather.csv` produced by `lithuania_weather_anomaly` instead of running a second API fetch.
-- Run `lithuania_weather_anomaly` first when starting from an empty workspace.
+**Schedule:** daily · **Runs automatically**
+
+This is the main weather pipeline. Every day it:
+
+1. **Fetches** 30+ years of ERA5 daily weather for Lithuania (temperature,
+   precipitation, snowfall, sunshine, wind, evapotranspiration) from the
+   Open-Meteo archive API. Only the days since the last fetch are downloaded;
+   old historical data is never overwritten.
+2. **Fetches heating degree days (HDD)** from Eurostat (`nrg_chdd_m`) — a
+   measure of how much you need to heat your home each month.
+3. **Analyses** the year-to-date data: computes z-scores and anomalies for
+   each city (Vilnius, Kaunas, Klaipėda, Šiauliai, Panevėžys) against the
+   1991–2020 baseline.
+4. **Runs an Apache Beam pipeline** on Flink to aggregate city-level monthly
+   anomalies in parallel (this is the distributed-computing part).
+5. **Plots** bar charts and heatmaps.
+6. **Quality-gates** the result — if the data looks thin or anomalous counts
+   are unusually high, it flags the run in MLflow.
+7. **Updates the RAG index** so the "Ask the Pipeline" chat box has fresh
+   facts to retrieve.
+
+**Outputs:** `python/output/weather/` — CSVs, JSONs, PNGs, and a Markdown
+summary. Every metric (z-scores, snowfall, sunshine, wind, ET₀) is logged to
+MLflow so it appears in the dashboard KPI cards.
+
+**Depends on:** nothing — run this first on a fresh workspace.
+
+---
+
+### `vilnius_march_anomaly` — "How weird is *this specific month* in Vilnius?"
+
+**Schedule:** daily · **Runs automatically**
+
+A focused deep-dive on one calendar month at a time (default: March, but the
+Airflow UI lets you pick any month via the `month` param):
+
+1. **Checks** that the raw weather CSV from `lithuania_weather_anomaly` is
+   already on disk (it waits if not). No second API call needed.
+2. **Analyses** just Vilnius, just the chosen month, across 30 years — builds
+   a year-by-year table of mean temperature, anomaly, and z-score.
+3. **Plots** the classic red/blue bar chart shown at the top of the dashboard.
+4. **Quality-gates** that enough years have data and the latest year's value
+   is plausible.
+5. **Updates the RAG index** with the month's anomaly narrative.
+
+**Outputs:** `python/output/vilnius_<month>/` — anomaly CSV, summary JSON, PNG.
+
+**Depends on:** `lithuania_weather_anomaly` must have run at least once to
+produce `raw_daily_weather.csv`.
+
+---
+
+### `era5_temperature_forecast_retrain` — "Train an AI to predict temperature"
+
+**Schedule:** weekly · **Runs automatically**
+
+This DAG trains a small neural network (a PyTorch MLP with batch-norm, skip
+connections, and dropout) to predict daily mean temperature from calendar
+features + weather variables:
+
+1. **Prepares data** — reads the ERA5 CSV, engineers features
+   (sin/cos of day-of-year, year normalised, log-precipitation, sunshine
+   fraction, wind, ET₀), writes train/test splits.
+2. **Trains** the model for 50 epochs, logging loss curve to MLflow every
+   epoch.
+3. **Plots** the training MSE curve.
+4. **Evaluates** on the held-out test set (2023+) — computes R², RMSE, MAE,
+   residual mean and std.
+5. **Plots diagnostics** — predicted vs actual (parity chart) and residual
+   histogram.
+6. **Quality-gates** — if R² ≥ 0.65 the model is promoted to the `@champion`
+   MLflow alias; if not, the run is flagged and the old champion is kept.
+7. **Updates the RAG index** so forecast answers use the new model.
+
+**Outputs:** `python/output/climate/` — `.pth` model, evaluation JSON,
+predictions CSV, plots. All metrics and hyperparameters land in MLflow and
+appear on the dashboard's ML section.
+
+**Depends on:** `lithuania_weather_anomaly` must have run first (uses the same
+ERA5 CSV as training data).
+
+---
+
+### `llama_lora_finetune` — "Teach a mini LLM about our pipeline outputs"
+
+**Schedule:** manual only · **Triggered by hand**
+
+A one-off experimental DAG that fine-tunes a small language model on the text
+artifacts produced by the other three DAGs:
+
+1. **Builds an SFT (supervised fine-tuning) dataset** from existing Markdown
+   summaries, anomaly reports, and quality-gate outputs in `python/output/`.
+   These become question–answer pairs the model learns from.
+2. **Fine-tunes** `distilgpt2` (or a model set via `LLAMA_BASE_MODEL` env var)
+   using LoRA — a technique that trains only a tiny fraction of the model's
+   weights, so it runs on a laptop CPU.
+
+**Outputs:** `python/output/llm/` — LoRA adapter weights.
+
+**Note:** This DAG is not part of the daily pipeline. It is meant to be run
+manually once you have a few weeks of pipeline output accumulated, to
+experiment with domain-specific text generation.
+
+---
+
+### Dependency order
+
+```
+lithuania_weather_anomaly   ← run first (produces raw weather CSV)
+        │
+        ├──▶ vilnius_march_anomaly        (reads raw CSV)
+        └──▶ era5_temperature_forecast_retrain  (reads raw CSV)
+
+llama_lora_finetune         ← run manually after the above have produced output
+```
 
 ## Recent Dashboard Notes
 
