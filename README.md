@@ -392,11 +392,15 @@ kubernetes/
 ```
 
 MLflow in Kubernetes:
-- `kubernetes/base/mlflow.yaml` runs the MLflow server.
-- `kubernetes/base/pvcs.yaml` includes `mlflow-data` and `mlflow-artifacts`
-  PVCs for persistent backend DB and artifact files.
-- `kubernetes/base/configmaps.yaml` sets `MLFLOW_TRACKING_URI=http://mlflow:5000`
-  for Airflow and `ml-server`.
+- `kubernetes/mlflow.yaml` runs the MLflow tracking server and serves proxied
+  artifacts from the PVC-backed `/mlartifacts` volume.
+- `kubernetes/pvcs.yaml` includes `mlflow-data` and `mlflow-artifacts` PVCs for
+  persistent backend DB and artifact files.
+- `kubernetes/configmaps.yaml` sets `MLFLOW_TRACKING_URI=http://mlflow:5000` for
+  Airflow and `ml-server`.
+- `kubernetes/monitoring.yaml` provisions Grafana with an operations dashboard
+  focused on deployment readiness, pod phase/waiting reasons, restarts, jobs,
+  and PVC state.
 
 ### Minikube — standalone (kubectl apply)
 

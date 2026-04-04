@@ -726,6 +726,211 @@ data:
         }
       ]
     }
+  ml-stack-operations.json: |
+    {
+      "uid": "ml-stack-operations",
+      "title": "ML Stack Operations",
+      "schemaVersion": 39,
+      "tags": ["ml-stack", "operations"],
+      "editable": false,
+      "time": {"from": "now-6h", "to": "now"},
+      "refresh": "30s",
+      "panels": [
+        {
+          "id": 101,
+          "title": "Deployments Available",
+          "type": "bargauge",
+          "gridPos": {"h": 6, "w": 12, "x": 0, "y": 0},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "kube_deployment_status_replicas_available{namespace=\"ml-stack\"}",
+            "legendFormat": "{{deployment}}"
+          }],
+          "fieldConfig": {"defaults": {
+            "min": 0,
+            "max": 1,
+            "thresholds": {"steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 0},
+              {"color": "green", "value": 1}
+            ]}
+          }}
+        },
+        {
+          "id": 102,
+          "title": "Stateful Workloads Ready",
+          "type": "bargauge",
+          "gridPos": {"h": 6, "w": 6, "x": 12, "y": 0},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "kube_statefulset_status_replicas_ready{namespace=\"ml-stack\"}",
+            "legendFormat": "{{statefulset}}"
+          }],
+          "fieldConfig": {"defaults": {
+            "min": 0,
+            "thresholds": {"steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]}
+          }}
+        },
+        {
+          "id": 103,
+          "title": "Pods by Phase",
+          "type": "stat",
+          "gridPos": {"h": 6, "w": 6, "x": 18, "y": 0},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "count by (phase) (kube_pod_status_phase{namespace=\"ml-stack\"} == 1)",
+            "legendFormat": "{{phase}}"
+          }],
+          "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}}}
+        },
+        {
+          "id": 104,
+          "title": "Jobs Succeeded",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 4, "x": 0, "y": 6},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "sum(kube_job_status_succeeded{namespace=\"ml-stack\"} > 0)",
+            "legendFormat": "succeeded"
+          }],
+          "fieldConfig": {"defaults": {"color": {"mode": "thresholds"},
+            "thresholds": {"steps": [
+              {"color": "yellow", "value": null},
+              {"color": "green", "value": 1}
+            ]}}}
+        },
+        {
+          "id": 105,
+          "title": "Jobs Failed",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 4, "x": 4, "y": 6},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "sum(kube_job_status_failed{namespace=\"ml-stack\"} > 0)",
+            "legendFormat": "failed"
+          }],
+          "fieldConfig": {"defaults": {"color": {"mode": "thresholds"},
+            "thresholds": {"steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]}}}
+        },
+        {
+          "id": 106,
+          "title": "Persistent Claims Bound",
+          "type": "bargauge",
+          "gridPos": {"h": 4, "w": 8, "x": 8, "y": 6},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "kube_persistentvolumeclaim_status_phase{namespace=\"ml-stack\",phase=\"Bound\"} == 1",
+            "legendFormat": "{{persistentvolumeclaim}}"
+          }],
+          "fieldConfig": {"defaults": {
+            "min": 0,
+            "max": 1,
+            "thresholds": {"steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]}
+          }}
+        },
+        {
+          "id": 107,
+          "title": "Running Pods by Node",
+          "type": "bargauge",
+          "gridPos": {"h": 4, "w": 8, "x": 16, "y": 6},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "count by (node) (kube_pod_info{namespace=\"ml-stack\"})",
+            "legendFormat": "{{node}}"
+          }],
+          "fieldConfig": {"defaults": {"min": 0}}
+        },
+        {
+          "id": 108,
+          "title": "Pods Waiting by Reason",
+          "type": "bargauge",
+          "gridPos": {"h": 6, "w": 8, "x": 0, "y": 10},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "sum by (reason) (kube_pod_container_status_waiting_reason{namespace=\"ml-stack\"} > 0)",
+            "legendFormat": "{{reason}}"
+          }],
+          "fieldConfig": {"defaults": {"min": 0}}
+        },
+        {
+          "id": 109,
+          "title": "Pending or Failed Pods",
+          "type": "bargauge",
+          "gridPos": {"h": 6, "w": 8, "x": 8, "y": 10},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "sum by (pod, phase) (kube_pod_status_phase{namespace=\"ml-stack\",phase=~\"Pending|Failed|Unknown\"} == 1)",
+            "legendFormat": "{{pod}} {{phase}}"
+          }],
+          "fieldConfig": {"defaults": {"min": 0}}
+        },
+        {
+          "id": 110,
+          "title": "Container Restarts",
+          "type": "bargauge",
+          "gridPos": {"h": 6, "w": 8, "x": 16, "y": 10},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "topk(10, kube_pod_container_status_restarts_total{namespace=\"ml-stack\"})",
+            "legendFormat": "{{pod}}/{{container}}"
+          }],
+          "fieldConfig": {"defaults": {"min": 0}}
+        },
+        {
+          "id": 111,
+          "title": "Node CPU Usage",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))",
+            "legendFormat": "{{instance}}"
+          }],
+          "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1,
+            "color": {"mode": "palette-classic"}}}
+        },
+        {
+          "id": 112,
+          "title": "Node Memory Available",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{
+            "expr": "node_memory_MemAvailable_bytes",
+            "legendFormat": "{{instance}}"
+          }],
+          "fieldConfig": {"defaults": {"unit": "bytes", "min": 0,
+            "color": {"mode": "palette-classic"}}}
+        },
+        {
+          "id": 113,
+          "title": "Network I/O",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {
+              "expr": "rate(node_network_receive_bytes_total{device!~\"lo|veth.*|cni.*|flannel.*\"}[5m])",
+              "legendFormat": "{{instance}} rx"
+            },
+            {
+              "expr": "rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|cni.*|flannel.*\"}[5m])",
+              "legendFormat": "{{instance}} tx"
+            }
+          ],
+          "fieldConfig": {"defaults": {"unit": "Bps"}}
+        }
+      ]
+    }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -765,7 +970,7 @@ spec:
             - name: GF_SECURITY_ADMIN_USER
               value: "admin"
             - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
-              value: "/var/lib/grafana/dashboards/ml-stack-overview.json"
+              value: "/var/lib/grafana/dashboards/ml-stack-operations.json"
           ports:
             - containerPort: 3000
           resources:
