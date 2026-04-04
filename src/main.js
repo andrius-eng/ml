@@ -356,10 +356,41 @@ function renderKPIs(d) {
   items.forEach((item) => row.appendChild(kpiCard(item)));
 }
 
-function renderMarchChart(d) {
-  const m = d.vilnius_month_anomaly;
-  const currentYear = m.latest_year.year;
+function renderMarchChart(d, monthSlug) {
+  // Resolve which month's data to render
+  const months = d.vilnius_months;
+  let m;
+  if (months && Object.keys(months).length > 0) {
+    const select = document.getElementById("month-select");
+    if (select.options.length === 0) {
+      Object.entries(months).forEach(([slug, mdata]) => {
+        const opt = document.createElement("option");
+        opt.value = slug;
+        opt.textContent = mdata.month_name;
+        select.appendChild(opt);
+      });
+      select.style.display = "";
+      select.addEventListener("change", () => renderMarchChart(data, select.value));
+    }
+    const defaultSlug = d.vilnius_month_anomaly
+      ? d.vilnius_month_anomaly.month_name.toLowerCase()
+      : Object.keys(months)[0];
+    const slug = monthSlug || select.value || defaultSlug;
+    if (select.value !== slug) select.value = slug;
+    m = months[slug];
+  } else {
+    m = d.vilnius_month_anomaly;
+  }
 
+  if (!m) return;
+
+  const currentYear = m.latest_year.year;
+  const monthName = m.month_name || "March";
+
+  const monthLabelEl = document.getElementById("month-label");
+  const monthLabelDescEl = document.getElementById("month-label-desc");
+  if (monthLabelEl) monthLabelEl.textContent = monthName;
+  if (monthLabelDescEl) monthLabelDescEl.textContent = monthName;
   document.getElementById("cutoff-day").textContent = m.window.cutoff_day;
 
   const labels = m.annual.map((r) => r.year);
@@ -384,7 +415,7 @@ function renderMarchChart(d) {
       labels,
       datasets: [
         {
-          label: `${m.month_name} anomaly (°C)`,
+          label: `${monthName} anomaly (°C)`,
           data: values,
           backgroundColor: bgColors,
           borderColor: borderColors,

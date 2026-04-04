@@ -238,6 +238,33 @@ def _recent_temperature_fallback(window_days: int = 7) -> tuple[float, int] | No
     return float(recent['temperature_2m_mean'].mean()), len(recent)
 
 
+def _estimate_daily_range_for_date(target_date: date) -> dict | None:
+    """Return typical low/high for target_date using historical raw daily min/max data."""
+    raw_path = ML_OUTPUT_DIR / 'weather' / 'raw_daily_weather.csv'
+    if not raw_path.exists():
+        return None
+    try:
+        import pandas as pd
+        df = pd.read_csv(raw_path, parse_dates=['time'])
+    except Exception:
+        return None
+    if not {'temperature_2m_min', 'temperature_2m_max'}.issubset(df.columns):
+        return None
+    df = df.dropna(subset=['temperature_2m_min', 'temperature_2m_max'])
+    if df.empty:
+        return None
+    target_doy = target_date.timetuple().tm_yday
+    df['doy'] = df['time'].dt.dayofyear
+    df['doy_dist'] = df['doy'].apply(lambda d: min(abs(d - target_doy), 365 - abs(d - target_doy)))
+    window = df[df['doy_dist'] <= 7]
+    if window.empty:
+        return None
+    return {
+        'typical_low': round(float(window['temperature_2m_min'].mean()), 1),
+        'typical_high': round(float(window['temperature_2m_max'].mean()), 1),
+    }
+
+
 def _estimate_temperature_for_date(target_date: date) -> dict | None:
     model = get_model()
     if model is not None:
@@ -278,23 +305,35 @@ def _answer_direct_forecast_query(question: str) -> dict | None:
     rounded_temp = round(float(estimate['temperature_c']), 1)
     label = 'tomorrow' if target_date == date.today() + timedelta(days=1) else target_date.isoformat()
 
+    daily_range = _estimate_daily_range_for_date(target_date)
+    range_text = (
+        f" Typical daily range for this time of year: {daily_range['typical_low']}°C (low) to {daily_range['typical_high']}°C (high)."
+        if daily_range else ""
+    )
+
     if estimate['mode'] == 'model':
         answer = (
-            f"For {label} ({target_date.isoformat()}) in Lithuania, the climate model estimate is {rounded_temp}°C. "
+            f"For {label} ({target_date.isoformat()}) in Lithuania, the climate model estimate is {rounded_temp}°C."
+            f"{range_text} "
             f"This is a climatological temperature estimate from the trained model, not a live short-range weather forecast."
         )
-        interpretation = f'Direct climate model estimate for {target_date.isoformat()}: {rounded_temp}°C.'
+        interpretation = (
+            f"Direct climate model estimate for {target_date.isoformat()}: {rounded_temp}°C."
+            + (f" Typical range: {daily_range['typical_low']}–{daily_range['typical_high']}°C." if daily_range else "")
+        )
         source_title = 'Climate temperature model forecast'
     else:
         observed_days = int(estimate.get('observed_days', 0))
         answer = (
             f"For {label} ({target_date.isoformat()}) in Lithuania, the current fallback estimate is {rounded_temp}°C, "
-            f"based on the average of the most recent {observed_days} observed days because the trained model artifact is not currently loadable. "
+            f"based on the average of the most recent {observed_days} observed days because the trained model artifact is not currently loadable."
+            f"{range_text} "
             f"Treat this as a short-term heuristic rather than a true model forecast."
         )
         interpretation = (
-            f'Recent-observation fallback for {target_date.isoformat()}: {rounded_temp}°C '
-            f'from the latest {observed_days} daily observations.'
+            f"Recent-observation fallback for {target_date.isoformat()}: {rounded_temp}°C "
+            f"from the latest {observed_days} daily observations."
+            + (f" Typical range: {daily_range['typical_low']}–{daily_range['typical_high']}°C." if daily_range else "")
         )
         source_title = 'Recent daily temperature observations'
 

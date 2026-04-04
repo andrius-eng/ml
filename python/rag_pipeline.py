@@ -991,6 +991,32 @@ def _answer_forecast_question(question: str, output_dir: Path) -> dict | None:
         )
         adjusted = raw_pred_r
 
+    # Step 4 — typical daily range from historical raw min/max
+    raw_path = output_dir / 'weather' / 'raw_daily_weather.csv'
+    typical_low: float | None = None
+    typical_high: float | None = None
+    if raw_path.exists():
+        try:
+            raw_df = pd.read_csv(raw_path, parse_dates=['time'])
+            if {'temperature_2m_min', 'temperature_2m_max'}.issubset(raw_df.columns):
+                raw_df = raw_df.dropna(subset=['temperature_2m_min', 'temperature_2m_max'])
+                target_doy = target_date.timetuple().tm_yday
+                raw_df['doy'] = raw_df['time'].dt.dayofyear
+                raw_df['doy_dist'] = raw_df['doy'].apply(
+                    lambda d: min(abs(d - target_doy), 365 - abs(d - target_doy))
+                )
+                window_df = raw_df[raw_df['doy_dist'] <= 7]
+                if not window_df.empty:
+                    typical_low = round(float(window_df['temperature_2m_min'].mean()), 1)
+                    typical_high = round(float(window_df['temperature_2m_max'].mean()), 1)
+        except Exception:
+            pass
+
+    range_text = (
+        f" Typical daily range for this time of year: {typical_low}°C (low) to {typical_high}°C (high)."
+        if typical_low is not None else ""
+    )
+
     sources = [
         {'title': 'ClimateModel (PyTorch MLP)', 'source': 'climate/climate_model.pth', 'score': 1.0},
         {'title': f'{target_date.year} daily observations', 'source': 'weather/country_daily_anomalies.csv', 'score': 1.0},
@@ -998,17 +1024,20 @@ def _answer_forecast_question(question: str, output_dir: Path) -> dict | None:
     interpretation = (
         f"Baseline: {raw_pred_r}°C | YTD bias: {ytd_bias:+.1f}°C | "
         f"Recent {n_recent}d bias: {recent_bias:+.1f}°C | Adjusted: {adjusted}°C"
+        + (f" | Range: {typical_low}–{typical_high}°C" if typical_low is not None else "")
     )
 
     answer = (
-        f"For {label} ({target_date.isoformat()}) in Lithuania, the adjusted temperature estimate is {adjusted}°C. "
+        f"For {label} ({target_date.isoformat()}) in Lithuania, the adjusted temperature estimate is {adjusted}°C."
+        f"{range_text} "
         f"The model's seasonal baseline for that date is {raw_pred_r}°C. "
         f"This year has been running {abs_ytd:.1f}°C {ytd_sign} than the model baseline year-to-date, "
         f"and the most recent {n_recent}-day window is {abs_recent:.1f}°C {recent_sign} than expected. "
         f"That recent bias is applied as a correction to produce the adjusted estimate. "
         f"This is a climatological trend estimate, not a live synoptic weather forecast."
         if n_ytd >= 7
-        else f"For {label} ({target_date.isoformat()}) in Lithuania, the current climatological baseline estimate is {raw_pred_r}°C. "
+        else f"For {label} ({target_date.isoformat()}) in Lithuania, the current climatological baseline estimate is {raw_pred_r}°C."
+             f"{range_text} "
              f"There are not enough {target_date.year} observations yet to compute a reliable bias correction, "
              f"so the answer is reported as the raw model baseline rather than an adjusted estimate. "
              f"This is a climatological trend estimate, not a live synoptic weather forecast."

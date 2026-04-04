@@ -31,18 +31,20 @@
       <!-- KPI strip -->
       <div class="kpi-row" id="kpi-row"></div>
 
-      <!-- Vilnius March 30-year anomaly chart -->
+      <!-- Vilnius monthly anomaly chart -->
       <section class="card" id="march-section">
-        <div class="section-header">
+        <div class="section-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
           <div>
-            <h2>Vilnius — March Temperature Anomaly (30 years)</h2>
+            <h2>Vilnius — <span id="month-label">March</span> Temperature Anomaly (30 years)</h2>
             <p class="section-desc">
-              Daily mean temperature vs. 30-year baseline, March
+              Daily mean temperature vs. 30-year baseline,
+              <span id="month-label-desc">March</span>
               1–<span id="cutoff-day">16</span> each year.
               Red&nbsp;= warmer than baseline · Blue&nbsp;= cooler ·
               <strong>Outlined bar</strong>&nbsp;= current year.
             </p>
           </div>
+          <select id="month-select" class="beam-select" aria-label="Select month" style="display:none;flex-shrink:0;margin-top:0.25rem"></select>
         </div>
         <div class="chart-wrap">
           <canvas id="marchChart"></canvas>

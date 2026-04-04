@@ -190,6 +190,17 @@ spec:
       containers:
         - name: ollama
           image: ollama/ollama:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              ollama serve &
+              SERVER_PID=$!
+              echo "Waiting for ollama server to be ready..."
+              until ollama list > /dev/null 2>&1; do sleep 2; done
+              echo "Pulling llama3.2:1b..."
+              ollama pull llama3.2:1b
+              echo "Model ready."
+              wait $SERVER_PID
           ports:
             - containerPort: 11434
           volumeMounts:

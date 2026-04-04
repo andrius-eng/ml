@@ -295,6 +295,38 @@ def main() -> None:
         "heating_degree_days": hdd,
     }
 
+    # Collect all available Vilnius monthly anomaly datasets for the month picker
+    vilnius_months: dict = {}
+    month_name_to_num = {name.lower(): i for i, name in enumerate(calendar.month_name) if name}
+    for month_dir in sorted(out.glob("vilnius_*/")):
+        slug = month_dir.name.replace("vilnius_", "")
+        m_num = month_name_to_num.get(slug)
+        if m_num is None:
+            continue
+        try:
+            m_summary, m_annual = _load_vilnius_month_payload(out, m_num)
+            m_sorted = m_annual.sort_values("year")
+            m_latest = m_sorted.iloc[-1]
+            vilnius_months[slug] = {
+                "month_name": calendar.month_name[m_num],
+                "window": m_summary["window"],
+                "baseline": {
+                    "mean_temp_c": round(m_summary["baseline"]["mean_temp_c"], 3),
+                    "std_temp_c": round(m_summary["baseline"]["std_temp_c"], 3),
+                },
+                "latest_year": {
+                    "year": int(m_latest["year"]),
+                    "mean_temp_c": round(float(m_latest["mean_temp_c"]), 2),
+                    "anomaly_c": round(float(m_latest["anomaly_c"]), 2),
+                    "zscore": round(float(m_latest["zscore"]), 2),
+                },
+                "annual": m_annual[["year", "mean_temp_c", "anomaly_c", "zscore"]].round(3).to_dict(orient="records"),
+            }
+        except Exception as _e:
+            print(f"WARNING: could not load vilnius_{slug}: {_e}")
+    if vilnius_months:
+        dashboard["vilnius_months"] = vilnius_months
+
     dest = Path(args.frontend_data)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dashboard = _sanitize_json_values(dashboard)
