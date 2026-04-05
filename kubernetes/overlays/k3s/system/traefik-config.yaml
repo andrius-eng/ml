@@ -1,8 +1,11 @@
-# Enable Traefik Gateway API provider.
-# k3s's built-in Helm controller picks this up from kube-system
-# and reconciles the Traefik deployment with the new values.
-# Using the helm value (not additionalArguments) so the chart also
-# templates the gateway.networking.k8s.io RBAC rules into the ClusterRole.
+# Traefik Helm configuration — single canonical HelmChartConfig.
+# k3s's built-in Helm controller picks this up from kube-system and reconciles
+# the Traefik deployment with the new values.
+#
+# providers.kubernetesGateway.enabled: true — use the Helm value (not
+#   additionalArguments) so the chart templates the gateway.networking.k8s.io
+#   RBAC rules into the ClusterRole automatically.
+# nodeSelector / tolerations — pin Traefik to the infra node.
 apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
 metadata:
@@ -13,3 +16,9 @@ spec:
     providers:
       kubernetesGateway:
         enabled: true
+    nodeSelector:
+      workload-role: infra
+    tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule

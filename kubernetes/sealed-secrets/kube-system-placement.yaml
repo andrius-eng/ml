@@ -4,7 +4,9 @@
 # k3s server restarts and upgrades without manual kubectl intervention.
 #
 # Components covered:
-#   traefik        – ingress proxy; must not land on a flaky compute node
+#   traefik        – managed by kubernetes/overlays/k3s/system/traefik-config.yaml
+#                   (ml-system ArgoCD app); nodeSelector and Gateway provider
+#                   are both configured there to avoid resource ownership conflicts.
 #   metrics-server – cluster-level metrics API; lives next to the API server
 #
 # coredns and local-path-provisioner are k3s built-in add-ons (not Helm);
@@ -15,20 +17,6 @@
 #   kubectl patch deployment local-path-provisioner -n kube-system \
 #     --type=json -p='[{"op":"add","path":"/spec/template/spec/nodeSelector",
 #     "value":{"workload-role":"infra"}}]'
----
-apiVersion: helm.cattle.io/v1
-kind: HelmChartConfig
-metadata:
-  name: traefik
-  namespace: kube-system
-spec:
-  valuesContent: |-
-    nodeSelector:
-      workload-role: infra
-    tolerations:
-      - key: node-role.kubernetes.io/control-plane
-        operator: Exists
-        effect: NoSchedule
 ---
 apiVersion: helm.cattle.io/v1
 kind: HelmChartConfig
