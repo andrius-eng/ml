@@ -371,7 +371,7 @@ function renderKPIs(d) {
 
   const items = [
     {
-      label: `Vilnius ${m.month_name} ${m.latest_year.year} anomaly`,
+      label: `${m.city || "Vilnius"} ${m.month_name} ${m.latest_year.year} anomaly`,
       value:
         sign(m.latest_year.anomaly_c) +
         m.latest_year.anomaly_c.toFixed(1) +
@@ -380,7 +380,7 @@ function renderKPIs(d) {
       highlight: true,
     },
     {
-      label: `30-yr ${m.month_name} baseline`,
+      label: `${m.window?.years_included ?? 30}-yr ${m.month_name} baseline (${m.city || "Vilnius"})`,
       value:
         sign(m.baseline.mean_temp_c) +
         m.baseline.mean_temp_c.toFixed(2) +
@@ -405,44 +405,98 @@ function renderKPIs(d) {
   items.forEach((item) => row.appendChild(kpiCard(item)));
 }
 
-function renderMarchChart(d, monthSlug) {
-  // Resolve which month's data to render
-  const months = d.vilnius_months;
+function renderMarchChart(d, citySlug, monthSlug) {
+  const citySelect = document.getElementById("city-select");
+  const monthSelect = document.getElementById("month-select");
   let m;
-  if (months && Object.keys(months).length > 0) {
-    const select = document.getElementById("month-select");
-    if (select.options.length === 0) {
-      Object.entries(months).forEach(([slug, mdata]) => {
+
+  if (d.city_months && Object.keys(d.city_months).length > 0) {
+    // Multi-city path
+    if (citySelect.options.length === 0) {
+      Object.keys(d.city_months).forEach((slug) => {
+        const opt = document.createElement("option");
+        opt.value = slug;
+        opt.textContent = slug.charAt(0).toUpperCase() + slug.slice(1);
+        citySelect.appendChild(opt);
+      });
+      if (Object.keys(d.city_months).length > 1) citySelect.style.display = "";
+      citySelect.addEventListener("change", () =>
+        renderMarchChart(data, citySelect.value, monthSelect.value),
+      );
+    }
+    const defaultCity = Object.keys(d.city_months)[0];
+    const city = citySlug || citySelect.value || defaultCity;
+    if (citySelect.value !== city) citySelect.value = city;
+    const cityData = d.city_months[city] || {};
+    if (monthSelect.options.length === 0) {
+      Object.entries(cityData).forEach(([slug, mdata]) => {
         const opt = document.createElement("option");
         opt.value = slug;
         opt.textContent = mdata.month_name;
-        select.appendChild(opt);
+        monthSelect.appendChild(opt);
       });
-      select.style.display = "";
-      select.addEventListener("change", () =>
-        renderMarchChart(data, select.value),
+      if (Object.keys(cityData).length > 1) monthSelect.style.display = "";
+      monthSelect.addEventListener("change", () =>
+        renderMarchChart(data, citySelect.value, monthSelect.value),
       );
     }
-    const defaultSlug = d.vilnius_month_anomaly
-      ? d.vilnius_month_anomaly.month_name.toLowerCase()
-      : Object.keys(months)[0];
-    const slug = monthSlug || select.value || defaultSlug;
-    if (select.value !== slug) select.value = slug;
-    m = months[slug];
+    const defaultMonth = Object.keys(cityData)[0];
+    const month = monthSlug || monthSelect.value || defaultMonth;
+    if (monthSelect.value !== month) monthSelect.value = month;
+    m = cityData[month];
   } else {
-    m = d.vilnius_month_anomaly;
+    // Vilnius-only path (vilnius_months or vilnius_month_anomaly)
+    const months = d.vilnius_months;
+    if (months && Object.keys(months).length > 0) {
+      if (monthSelect.options.length === 0) {
+        Object.entries(months).forEach(([slug, mdata]) => {
+          const opt = document.createElement("option");
+          opt.value = slug;
+          opt.textContent = mdata.month_name;
+          monthSelect.appendChild(opt);
+        });
+        if (Object.keys(months).length > 1) monthSelect.style.display = "";
+        monthSelect.addEventListener("change", () =>
+          renderMarchChart(data, null, monthSelect.value),
+        );
+      }
+      const defaultSlug = d.vilnius_month_anomaly
+        ? d.vilnius_month_anomaly.month_name.toLowerCase()
+        : Object.keys(months)[0];
+      const slug = monthSlug || monthSelect.value || defaultSlug;
+      if (monthSelect.value !== slug) monthSelect.value = slug;
+      m = months[slug];
+    } else {
+      m = d.vilnius_month_anomaly;
+    }
   }
 
   if (!m) return;
 
-  const currentYear = m.latest_year.year;
-  const monthName = m.month_name || "March";
+  const cityName = m.city || "Vilnius";
+  const monthName = m.month_name;
+  const yearsCount = m.window?.years_included ?? m.annual?.length ?? 30;
 
+  const cityLabelEl = document.getElementById("city-label");
+  if (cityLabelEl) cityLabelEl.textContent = cityName;
+  const yearsLabelEl = document.getElementById("years-label");
+  if (yearsLabelEl) yearsLabelEl.textContent = yearsCount;
+  const yearsLabelDescEl = document.getElementById("years-label-desc");
+  if (yearsLabelDescEl) yearsLabelDescEl.textContent = yearsCount;
   const monthLabelEl = document.getElementById("month-label");
   const monthLabelDescEl = document.getElementById("month-label-desc");
   if (monthLabelEl) monthLabelEl.textContent = monthName;
   if (monthLabelDescEl) monthLabelDescEl.textContent = monthName;
   document.getElementById("cutoff-day").textContent = m.window.cutoff_day;
+
+  const chipMonthCity = document.getElementById("rag-chip-month-city");
+  if (chipMonthCity)
+    chipMonthCity.textContent = `How unusual is this ${monthName} in ${cityName}?`;
+  const chipWarmest = document.getElementById("rag-chip-warmest");
+  if (chipWarmest)
+    chipWarmest.textContent = `What was the warmest ${monthName} on record in ${cityName}?`;
+
+  const currentYear = m.latest_year.year;
 
   const labels = m.annual.map((r) => r.year);
   const values = m.annual.map((r) => r.anomaly_c);
@@ -997,8 +1051,8 @@ function renderPipeline() {
       tags: ["ERA5", "Anomaly detection", "Apache Beam", "Vega/Matplotlib"],
     },
     {
-      name: `vilnius_${d.vilnius_month_anomaly ? d.vilnius_month_anomaly.month_name.toLowerCase() : "march"}_anomaly`,
-      desc: `Historical 30-year deep-dive: extracts every ${d.vilnius_month_anomaly ? d.vilnius_month_anomaly.month_name : "March"} 1–N slice, computes year-by-year temperature anomaly and z-score, generates a longitudinal trend chart.`,
+      name: `${(d.vilnius_month_anomaly?.city || "vilnius").toLowerCase()}_${(d.vilnius_month_anomaly?.month_name || Object.values(d.vilnius_months || {})[0]?.month_name || "").toLowerCase()}_anomaly`,
+      desc: `Historical ${d.vilnius_month_anomaly?.window?.years_included ?? 30}-year deep-dive: extracts every ${d.vilnius_month_anomaly?.month_name || Object.values(d.vilnius_months || {})[0]?.month_name || ""} 1–N daily slice for ${d.vilnius_month_anomaly?.city || "Vilnius"}, computes year-by-year temperature anomaly and z-score, generates a longitudinal trend chart.`,
       steps: [
         "fetch_vilnius_march",
         "analyze_anomalies",

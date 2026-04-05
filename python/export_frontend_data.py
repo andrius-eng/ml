@@ -371,6 +371,7 @@ def main() -> None:
     dashboard = {
         "generated_at": date.today().isoformat(),
         "vilnius_month_anomaly": {
+            "city": "Vilnius",
             "month_name": month_name,
             "window": month_summary["window"],
             "baseline": {
@@ -434,6 +435,7 @@ def main() -> None:
             m_sorted = m_annual.sort_values("year")
             m_latest = m_sorted.iloc[-1]
             vilnius_months[slug] = {
+                "city": "Vilnius",
                 "month_name": calendar.month_name[m_num],
                 "window": m_summary["window"],
                 "baseline": {

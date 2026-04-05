@@ -35,16 +35,19 @@
       <section class="card" id="march-section">
         <div class="section-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
           <div>
-            <h2>Vilnius — <span id="month-label">March</span> Temperature Anomaly (30 years)</h2>
+            <h2><span id="city-label">Vilnius</span> — <span id="month-label">March</span> Temperature Anomaly (<span id="years-label">30</span> years)</h2>
             <p class="section-desc">
-              Daily mean temperature vs. 30-year baseline,
+              Daily mean temperature vs. <span id="years-label-desc">30</span>-year baseline,
               <span id="month-label-desc">March</span>
               1–<span id="cutoff-day">16</span> each year.
               Red&nbsp;= warmer than baseline · Blue&nbsp;= cooler ·
               <strong>Outlined bar</strong>&nbsp;= current year.
             </p>
           </div>
-          <select id="month-select" class="beam-select" aria-label="Select month" style="display:none;flex-shrink:0;margin-top:0.25rem"></select>
+          <div style="display:flex;gap:0.5rem;flex-shrink:0;margin-top:0.25rem;align-items:center;">
+            <select id="city-select" class="beam-select" aria-label="Select city" style="display:none"></select>
+            <select id="month-select" class="beam-select" aria-label="Select month" style="display:none"></select>
+          </div>
         </div>
         <div class="chart-wrap">
           <canvas id="marchChart"></canvas>
@@ -159,8 +162,8 @@
           <div class="rag-chips" id="rag-chips">
             <button class="rag-chip" type="button">What will the temperature be tomorrow?</button>
             <button class="rag-chip" type="button">Is Lithuania currently warmer or colder than normal?</button>
-            <button class="rag-chip" type="button">How unusual is this March in Vilnius?</button>
-            <button class="rag-chip" type="button">What was the warmest March on record?</button>
+            <button class="rag-chip" id="rag-chip-month-city" type="button">How unusual is this March in Vilnius?</button>
+            <button class="rag-chip" id="rag-chip-warmest" type="button">What was the warmest March on record?</button>
           </div>
           <form class="rag-form" id="rag-form" autocomplete="off">
             <input
