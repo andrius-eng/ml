@@ -103,15 +103,21 @@ function renderClimateStress(d) {
       wmItems.push({
         label: "YTD Sunshine",
         value: wm.sunshine_h.toFixed(1) + " h",
-        sub: wm.trend_direction === 1 ? "warming trend" : wm.trend_direction === -1 ? "cooling trend" : "",
+        sub:
+          wm.trend_direction === 1
+            ? "warming trend"
+            : wm.trend_direction === -1
+              ? "cooling trend"
+              : "",
       });
     if (wm.snowfall_cm != null)
       wmItems.push({
         label: "YTD Snowfall",
         value: wm.snowfall_cm.toFixed(1) + " cm",
-        sub: wm.snowfall_deviation_cm != null
-          ? `${sign(wm.snowfall_deviation_cm)}${wm.snowfall_deviation_cm.toFixed(1)} cm vs baseline`
-          : "",
+        sub:
+          wm.snowfall_deviation_cm != null
+            ? `${sign(wm.snowfall_deviation_cm)}${wm.snowfall_deviation_cm.toFixed(1)} cm vs baseline`
+            : "",
       });
     if (wm.wind_kmh != null)
       wmItems.push({
@@ -413,7 +419,9 @@ function renderMarchChart(d, monthSlug) {
         select.appendChild(opt);
       });
       select.style.display = "";
-      select.addEventListener("change", () => renderMarchChart(data, select.value));
+      select.addEventListener("change", () =>
+        renderMarchChart(data, select.value),
+      );
     }
     const defaultSlug = d.vilnius_month_anomaly
       ? d.vilnius_month_anomaly.month_name.toLowerCase()
@@ -624,7 +632,10 @@ function renderMLMetrics(d) {
   if (ml.residual_mean != null)
     items.push({
       label: "Residual Bias",
-      value: (ml.residual_mean >= 0 ? "+" : "") + ml.residual_mean.toFixed(3) + " °C",
+      value:
+        (ml.residual_mean >= 0 ? "+" : "") +
+        ml.residual_mean.toFixed(3) +
+        " °C",
       sub: "Mean of (actual − predicted)",
       highlight: Math.abs(ml.residual_mean) > 0.5,
     });
@@ -812,87 +823,100 @@ function renderModelHistory(d) {
   const rmseData = history.map((r) => r.rmse);
 
   if (mlHistoryChartInstance) mlHistoryChartInstance.destroy();
-  mlHistoryChartInstance = new Chart(document.getElementById("mlHistoryChart"), {
-    type: "line",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: "R² (test)",
-          data: r2Data,
-          borderColor: "rgba(99,202,183,0.9)",
-          backgroundColor: "rgba(99,202,183,0.15)",
-          tension: 0.3,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          yAxisID: "yR2",
-          fill: false,
-        },
-        {
-          label: "RMSE (test, °C)",
-          data: rmseData,
-          borderColor: "rgba(255,160,80,0.9)",
-          backgroundColor: "rgba(255,160,80,0.15)",
-          tension: 0.3,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          yAxisID: "yRmse",
-          fill: false,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: "index", intersect: false },
-      plugins: {
-        title: {
-          display: true,
-          text: "Model Performance Across Training Runs (MLflow)",
-          color: "#f7f7f7",
-        },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => {
-              const r = history[ctx.dataIndex];
-              if (ctx.datasetIndex === 0) {
-                const bias = r.residual_mean != null ? `  bias ${(r.residual_mean >= 0 ? "+" : "") + r.residual_mean.toFixed(3)}` : "";
-                return `R²: ${r.r2.toFixed(4)}  (run ${r.run_id})${bias}`;
-              }
-              const spread = r.residual_std != null ? `  σ ${r.residual_std.toFixed(3)}` : "";
-              return `RMSE: ${r.rmse.toFixed(4)} °C  MAE: ${r.mae.toFixed(4)} °C${spread}`;
+  mlHistoryChartInstance = new Chart(
+    document.getElementById("mlHistoryChart"),
+    {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          {
+            label: "R² (test)",
+            data: r2Data,
+            borderColor: "rgba(99,202,183,0.9)",
+            backgroundColor: "rgba(99,202,183,0.15)",
+            tension: 0.3,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            yAxisID: "yR2",
+            fill: false,
+          },
+          {
+            label: "RMSE (test, °C)",
+            data: rmseData,
+            borderColor: "rgba(255,160,80,0.9)",
+            backgroundColor: "rgba(255,160,80,0.15)",
+            tension: 0.3,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            yAxisID: "yRmse",
+            fill: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          title: {
+            display: true,
+            text: "Model Performance Across Training Runs (MLflow)",
+            color: "#f7f7f7",
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const r = history[ctx.dataIndex];
+                if (ctx.datasetIndex === 0) {
+                  const bias =
+                    r.residual_mean != null
+                      ? `  bias ${(r.residual_mean >= 0 ? "+" : "") + r.residual_mean.toFixed(3)}`
+                      : "";
+                  return `R²: ${r.r2.toFixed(4)}  (run ${r.run_id})${bias}`;
+                }
+                const spread =
+                  r.residual_std != null
+                    ? `  σ ${r.residual_std.toFixed(3)}`
+                    : "";
+                return `RMSE: ${r.rmse.toFixed(4)} °C  MAE: ${r.mae.toFixed(4)} °C${spread}`;
+              },
             },
           },
+          legend: {
+            labels: { color: "rgba(255,255,255,0.75)" },
+          },
         },
-        legend: {
-          labels: { color: "rgba(255,255,255,0.75)" },
-        },
-      },
-      scales: {
-        x: {
-          ticks: { color: "rgba(255,255,255,0.6)", maxRotation: 45 },
-          grid: { color: "rgba(255,255,255,0.06)" },
-        },
-        yR2: {
-          type: "linear",
-          position: "left",
-          min: Math.min(-0.5, Math.min(...r2Data) - 0.05),
-          max: 1.0,
-          title: { display: true, text: "R²", color: "rgba(99,202,183,0.8)" },
-          ticks: { color: "rgba(99,202,183,0.8)" },
-          grid: { color: "rgba(255,255,255,0.06)" },
-        },
-        yRmse: {
-          type: "linear",
-          position: "right",
-          min: 0,
-          title: { display: true, text: "RMSE (°C)", color: "rgba(255,160,80,0.8)" },
-          ticks: { color: "rgba(255,160,80,0.8)" },
-          grid: { drawOnChartArea: false },
+        scales: {
+          x: {
+            ticks: { color: "rgba(255,255,255,0.6)", maxRotation: 45 },
+            grid: { color: "rgba(255,255,255,0.06)" },
+          },
+          yR2: {
+            type: "linear",
+            position: "left",
+            min: Math.min(-0.5, Math.min(...r2Data) - 0.05),
+            max: 1.0,
+            title: { display: true, text: "R²", color: "rgba(99,202,183,0.8)" },
+            ticks: { color: "rgba(99,202,183,0.8)" },
+            grid: { color: "rgba(255,255,255,0.06)" },
+          },
+          yRmse: {
+            type: "linear",
+            position: "right",
+            min: 0,
+            title: {
+              display: true,
+              text: "RMSE (°C)",
+              color: "rgba(255,160,80,0.8)",
+            },
+            ticks: { color: "rgba(255,160,80,0.8)" },
+            grid: { drawOnChartArea: false },
+          },
         },
       },
     },
-  });
+  );
 }
 
 function renderRagDemo(d) {
