@@ -193,8 +193,16 @@ spec:
         - name: sync-dags
           image: ghcr.io/andrius-eng/ml-airflow-custom:placeholder
           imagePullPolicy: IfNotPresent
-          # Copy baked-in DAGs from image into the PVC (image dags hidden by PVC mount at /opt/airflow)
-          command: ["sh", "-c", "mkdir -p /mnt/airflow/dags && cp -rn /opt/airflow/dags/. /mnt/airflow/dags/ 2>/dev/null || true"]
+          # Sync baked-in DAGs from image into the PVC, overwriting stale files so code changes deploy on every rollout
+          command: ["sh", "-c", "mkdir -p /mnt/airflow/dags && cp -rf /opt/airflow/dags/. /mnt/airflow/dags/"]
+          volumeMounts:
+            - name: airflow-data
+              mountPath: /mnt/airflow
+        - name: sync-python
+          image: ghcr.io/andrius-eng/ml-airflow-custom:placeholder
+          imagePullPolicy: IfNotPresent
+          # Sync baked-in python scripts from image into the PVC so pipeline code changes deploy on every rollout
+          command: ["sh", "-c", "mkdir -p /mnt/airflow/project/python && cp -rf /opt/airflow/project/python/. /mnt/airflow/project/python/"]
           volumeMounts:
             - name: airflow-data
               mountPath: /mnt/airflow
@@ -274,7 +282,16 @@ spec:
         - name: sync-dags
           image: ghcr.io/andrius-eng/ml-airflow-custom:placeholder
           imagePullPolicy: IfNotPresent
-          command: ["sh", "-c", "mkdir -p /mnt/airflow/dags && cp -rn /opt/airflow/dags/. /mnt/airflow/dags/ 2>/dev/null || true"]
+          # Sync baked-in DAGs from image into the PVC, overwriting stale files so code changes deploy on every rollout
+          command: ["sh", "-c", "mkdir -p /mnt/airflow/dags && cp -rf /opt/airflow/dags/. /mnt/airflow/dags/"]
+          volumeMounts:
+            - name: airflow-data
+              mountPath: /mnt/airflow
+        - name: sync-python
+          image: ghcr.io/andrius-eng/ml-airflow-custom:placeholder
+          imagePullPolicy: IfNotPresent
+          # Sync baked-in python scripts from image into the PVC so pipeline code changes deploy on every rollout
+          command: ["sh", "-c", "mkdir -p /mnt/airflow/project/python && cp -rf /opt/airflow/project/python/. /mnt/airflow/project/python/"]
           volumeMounts:
             - name: airflow-data
               mountPath: /mnt/airflow
