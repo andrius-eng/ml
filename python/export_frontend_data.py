@@ -107,11 +107,12 @@ def _build_vilnius_summary_from_annual(
     }
 
 
-def _derive_vilnius_month_from_raw(
+def _derive_city_month_from_raw(
     raw_weather_path: Path,
-    *,
+    city: str,
     month: int,
-    window_years: int = 30,
+    *,
+    window_years: int = 87,
 ) -> tuple[dict, pd.DataFrame]:
     raw = pd.read_csv(raw_weather_path)
     if "time" not in raw.columns:
@@ -128,13 +129,13 @@ def _derive_vilnius_month_from_raw(
     prepared["time"] = pd.to_datetime(prepared["time"], errors="coerce")
     prepared[temp_column] = pd.to_numeric(prepared[temp_column], errors="coerce")
     if "city" in prepared.columns:
-        prepared = prepared[prepared["city"].astype(str).str.casefold() == "vilnius"]
+        prepared = prepared[prepared["city"].astype(str).str.casefold() == city.casefold()]
 
     prepared = prepared.dropna(subset=["time", temp_column])
     prepared = prepared[prepared["time"].dt.month == month].copy()
     if prepared.empty:
         raise FileNotFoundError(
-            f"No Vilnius month={month} rows were found in {raw_weather_path}"
+            f"No {city} month={month} rows were found in {raw_weather_path}"
         )
 
     latest_observation = prepared["time"].max()
@@ -150,7 +151,7 @@ def _derive_vilnius_month_from_raw(
     )
     if annual.empty:
         raise FileNotFoundError(
-            f"Unable to derive Vilnius month={month} annual aggregates from {raw_weather_path}"
+            f"Unable to derive {city} month={month} annual aggregates from {raw_weather_path}"
         )
 
     latest_year = int(annual["year"].max())
@@ -164,6 +165,58 @@ def _derive_vilnius_month_from_raw(
         cutoff_day=cutoff_day,
         execution_date=latest_observation.date(),
     ), annual
+
+
+def _derive_vilnius_month_from_raw(
+    raw_weather_path: Path,
+    *,
+    month: int,
+    window_years: int = 87,
+) -> tuple[dict, pd.DataFrame]:
+    return _derive_city_month_from_raw(raw_weather_path, "Vilnius", month, window_years=window_years)
+
+
+def _build_city_months_from_raw(raw_path: Path, window_years: int = 87) -> dict:
+    """Derive per-city per-month anomaly data for all Lithuanian cities."""
+    from weather_common import LITHUANIA_PROXY_CITIES
+
+    if not raw_path.exists():
+        return {}
+
+    city_months: dict = {}
+    for city_name in LITHUANIA_PROXY_CITIES:
+        city_slug = city_name.lower()
+        month_data: dict = {}
+        for month_num in range(1, 13):
+            month_slug = calendar.month_name[month_num].lower()
+            try:
+                m_summary, m_annual = _derive_city_month_from_raw(
+                    raw_path, city_name, month_num, window_years=window_years
+                )
+                if len(m_annual) < 2:
+                    continue
+                m_latest = m_annual.sort_values("year").iloc[-1]
+                month_data[month_slug] = {
+                    "city": city_name,
+                    "month_name": calendar.month_name[month_num],
+                    "window": m_summary["window"],
+                    "baseline": {
+                        "mean_temp_c": round(m_summary["baseline"]["mean_temp_c"], 3),
+                        "std_temp_c": round(m_summary["baseline"]["std_temp_c"], 3),
+                    },
+                    "latest_year": {
+                        "year": int(m_latest["year"]),
+                        "mean_temp_c": round(float(m_latest["mean_temp_c"]), 2),
+                        "anomaly_c": round(float(m_latest["anomaly_c"]), 2),
+                        "zscore": round(float(m_latest["zscore"]), 2),
+                    },
+                    "annual": m_annual[["year", "mean_temp_c", "anomaly_c", "zscore"]].round(3).to_dict(orient="records"),
+                }
+            except Exception as _e:
+                pass  # Partial data for this city/month is acceptable
+        if month_data:
+            city_months[city_slug] = month_data
+    return city_months
 
 
 def _load_vilnius_month_payload(output_dir: Path, month: int) -> tuple[dict, pd.DataFrame]:
@@ -180,7 +233,7 @@ def _load_vilnius_month_payload(output_dir: Path, month: int) -> tuple[dict, pd.
         return _build_vilnius_summary_from_annual(annual, month=month), annual
 
     if raw_weather_csv.exists():
-        return _derive_vilnius_month_from_raw(raw_weather_csv, month=month)
+        return _derive_city_month_from_raw(raw_weather_csv, "Vilnius", month)
 
     raise FileNotFoundError(
         f"Missing Vilnius monthly outputs under {month_dir} and no fallback raw weather CSV was found at {raw_weather_csv}"
@@ -422,7 +475,7 @@ def main() -> None:
         "heating_degree_days": hdd,
     }
 
-    # Collect all available Vilnius monthly anomaly datasets for the month picker
+    # Collect all available Vilnius monthly anomaly datasets for the month picker (backward compat)
     vilnius_months: dict = {}
     month_name_to_num = {name.lower(): i for i, name in enumerate(calendar.month_name) if name}
     for month_dir in sorted(out.glob("vilnius_*/")):
@@ -454,6 +507,12 @@ def main() -> None:
             print(f"WARNING: could not load vilnius_{slug}: {_e}")
     if vilnius_months:
         dashboard["vilnius_months"] = vilnius_months
+
+    # Build per-city per-month anomaly data for all Lithuanian cities
+    raw_weather_csv = out / "weather" / "raw_daily_weather.csv"
+    city_months = _build_city_months_from_raw(raw_weather_csv)
+    if city_months:
+        dashboard["city_months"] = city_months
 
     dest = Path(args.frontend_data)
     dest.parent.mkdir(parents=True, exist_ok=True)

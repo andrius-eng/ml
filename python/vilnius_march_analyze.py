@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from weather_common import ensure_parent
+from weather_common import ensure_parent, LITHUANIA_PROXY_CITIES
 
 
 def render_report(summary: dict, annual: pd.DataFrame) -> str:
@@ -118,8 +118,6 @@ def main() -> None:
     # stats. Mirrors the weather DAG: PortableRunner → Flink, fallback to Direct.
     import beam_analysis
 
-    VILNIUS_COORDS = (54.6872, 25.2797)
-
     beam_output_dir = str(Path(raw_input).parent / "_beam_tmp")
 
     portable_args = [
@@ -136,7 +134,7 @@ def main() -> None:
             start_date=f"{start_year}-01-01",
             end_date=execution_date.isoformat(),
             output_dir=beam_output_dir,
-            cities={"Vilnius": VILNIUS_COORDS},
+            cities=LITHUANIA_PROXY_CITIES,
             input_csv=raw_input,
             fetch_missing_cities=False,
             runner="PortableRunner",
@@ -151,7 +149,7 @@ def main() -> None:
             start_date=f"{start_year}-01-01",
             end_date=execution_date.isoformat(),
             output_dir=beam_output_dir,
-            cities={"Vilnius": VILNIUS_COORDS},
+            cities=LITHUANIA_PROXY_CITIES,
             input_csv=raw_input,
             fetch_missing_cities=False,
             runner="DirectRunner",
@@ -159,6 +157,11 @@ def main() -> None:
 
     beam_csv = Path(beam_output_dir) / "monthly_anomaly_matrix.csv"
     beam_df = pd.read_csv(beam_csv)
+
+    # Save all-city monthly anomaly matrix alongside primary output
+    city_anomaly_path = Path(annual_output).parent / "city_monthly_anomalies.csv"
+    ensure_parent(str(city_anomaly_path))
+    beam_df[beam_df["month"] == args.month].to_csv(str(city_anomaly_path), index=False)
 
     # Filter to the target month, applying the cutoff-day constraint for the
     # current execution year (Beam already filtered via CalendarMonthWindowFn,

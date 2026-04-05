@@ -34,6 +34,8 @@ def aggregate_to_country(df: pd.DataFrame) -> pd.DataFrame:
         c
         for c in [
             'temperature_2m_mean',
+            'temperature_2m_min',
+            'temperature_2m_max',
             'precipitation_sum',
             'snowfall_sum',
             'sunshine_duration',
@@ -77,8 +79,10 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
         df['et0_norm'] = (df['et0_fao_evapotranspiration'] / 10.0).astype(np.float32)
         feature_cols.append('et0_norm')
 
-    out = df[['year', *feature_cols, 'temperature_2m_mean']].rename(columns={'temperature_2m_mean': 'y'})
-    return out.dropna().reset_index(drop=True)
+    target_cols_in = [c for c in ('temperature_2m_mean', 'temperature_2m_min', 'temperature_2m_max') if c in df.columns]
+    rename_map = {'temperature_2m_mean': 'y', 'temperature_2m_min': 'y_min', 'temperature_2m_max': 'y_max'}
+    out = df[['year', *feature_cols, *target_cols_in]].rename(columns=rename_map)
+    return out.dropna(subset=['y']).reset_index(drop=True)
 
 
 def main() -> None:

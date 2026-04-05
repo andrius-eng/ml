@@ -39,7 +39,7 @@ from weather_common import LITHUANIA_PROXY_CITIES, ensure_parent, fetch_daily_we
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch historical daily weather data")
-    parser.add_argument("--start-date", type=str, default="1991-01-01")
+    parser.add_argument("--start-date", type=str, default="1940-01-01")
     parser.add_argument("--end-date", type=str, default=date.today().isoformat())
     parser.add_argument(
         "--output",

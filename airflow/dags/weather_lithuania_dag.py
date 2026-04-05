@@ -235,7 +235,7 @@ def fetch_weather_data(**context):
     def _do(**ctx):
         logger = logging.getLogger(__name__)
         execution_date = ctx.get("ds", datetime.now().strftime("%Y-%m-%d"))
-        min_years_required = 30
+        min_years_required = 80
         force_full_fetch = False
 
         if RAW_WEATHER_PATH.exists():

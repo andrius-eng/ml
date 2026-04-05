@@ -62,7 +62,10 @@ def evaluate(
     y_true = df['y'].to_numpy(dtype=np.float32)
 
     with torch.no_grad():
-        y_pred = model(torch.from_numpy(X)).numpy().reshape(-1)
+        raw_pred = model(torch.from_numpy(X)).numpy()
+
+    # raw_pred may be (N,1) or (N,3); always evaluate on mean (first output)
+    y_pred = raw_pred[:, 0] if raw_pred.ndim == 2 else raw_pred.reshape(-1)
 
     residuals = y_true - y_pred
 
@@ -77,15 +80,19 @@ def evaluate(
 
     if predictions_path:
         os.makedirs(os.path.dirname(predictions_path) or '.', exist_ok=True)
+        has_range = raw_pred.ndim == 2 and raw_pred.shape[1] >= 3
+        fieldnames = ['y_true', 'y_pred', 'residual']
+        if has_range:
+            fieldnames += ['y_min_pred', 'y_max_pred']
         with open(predictions_path, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['y_true', 'y_pred', 'residual'])
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            for yt, yp, r in zip(y_true, y_pred, residuals):
-                writer.writerow({
-                    'y_true': float(yt),
-                    'y_pred': float(yp),
-                    'residual': float(r),
-                })
+            for i, (yt, yp, r) in enumerate(zip(y_true, y_pred, residuals)):
+                row = {'y_true': float(yt), 'y_pred': float(yp), 'residual': float(r)}
+                if has_range:
+                    row['y_min_pred'] = round(float(raw_pred[i, 1]), 2)
+                    row['y_max_pred'] = round(float(raw_pred[i, 2]), 2)
+                writer.writerow(row)
 
     if summary_path:
         os.makedirs(os.path.dirname(summary_path) or '.', exist_ok=True)

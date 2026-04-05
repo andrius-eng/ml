@@ -67,8 +67,11 @@ def load_climate_feature_spec(base_path: Path) -> ClimateFeatureSpec:
     return ClimateFeatureSpec(columns=columns, defaults=defaults)
 
 
-def instantiate_climate_model(feature_spec: ClimateFeatureSpec, dropout: float = 0.1) -> ClimateModel:
-    return ClimateModel(input_dim=feature_spec.input_dim, dropout=dropout)
+def instantiate_climate_model(feature_spec: ClimateFeatureSpec, dropout: float = 0.1, output_dim: int = 3) -> ClimateModel:
+    return ClimateModel(input_dim=feature_spec.input_dim, output_dim=output_dim, dropout=dropout)
+
+
+_NON_FEATURE_COLS: frozenset[str] = frozenset({"year", "y", "y_min", "y_max"})
 
 
 def resolve_feature_spec_from_frame(
@@ -78,7 +81,7 @@ def resolve_feature_spec_from_frame(
     target_column: str = "y",
 ) -> ClimateFeatureSpec:
     loaded_spec = load_climate_feature_spec(base_path)
-    frame_columns = [column for column in frame.columns if column != target_column]
+    frame_columns = [column for column in frame.columns if column not in _NON_FEATURE_COLS]
     if loaded_spec.columns and all(column in frame.columns for column in loaded_spec.columns):
         columns = loaded_spec.columns
     else:

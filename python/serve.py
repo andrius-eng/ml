@@ -110,6 +110,8 @@ class PredictionResponse(BaseModel):
 class ForecastDay(BaseModel):
     date: str
     temperature_c: float
+    temp_low: float | None = None
+    temp_high: float | None = None
 
 
 class ForecastResponse(BaseModel):
@@ -271,9 +273,19 @@ def _estimate_temperature_for_date(target_date: date) -> dict | None:
         x = build_input_tensor_for_date(target_date, get_feature_spec())
         try:
             with torch.no_grad():
-                temperature_c = float(model(x).item())
+                raw_out = model(x).squeeze().tolist()
+            if isinstance(raw_out, list) and len(raw_out) >= 3:
+                temperature_c = float(raw_out[0])
+                temp_low = round(float(raw_out[1]), 1)
+                temp_high = round(float(raw_out[2]), 1)
+            else:
+                temperature_c = float(raw_out) if not isinstance(raw_out, list) else float(raw_out[0])
+                temp_low = None
+                temp_high = None
             return {
                 'temperature_c': temperature_c,
+                'temp_low': temp_low,
+                'temp_high': temp_high,
                 'mode': 'model',
                 'source': f'models:/{MODEL_REGISTRY_NAME}@{MODEL_ALIAS}' if _model_version != 0 else 'climate/climate_model.pth',
             }
@@ -537,7 +549,19 @@ def forecast(
         temp = float(estimate['temperature_c'])
         if _prometheus_available:
             PREDICTION_TEMPERATURE.observe(temp)
-        results.append(ForecastDay(date=d.isoformat(), temperature_c=round(temp, 2)))
+        temp_low = estimate.get('temp_low')
+        temp_high = estimate.get('temp_high')
+        if temp_low is None or temp_high is None:
+            daily_range = _estimate_daily_range_for_date(d)
+            if daily_range:
+                temp_low = temp_low if temp_low is not None else daily_range['typical_low']
+                temp_high = temp_high if temp_high is not None else daily_range['typical_high']
+        results.append(ForecastDay(
+            date=d.isoformat(),
+            temperature_c=round(temp, 2),
+            temp_low=temp_low,
+            temp_high=temp_high,
+        ))
 
     return ForecastResponse(
         start_date=start_date.isoformat(),
@@ -560,7 +584,19 @@ def forecast_tomorrow():
     if _prometheus_available:
         PREDICTION_TEMPERATURE.observe(temp)
         FORECAST_COUNT.inc()
-    day = ForecastDay(date=tomorrow.isoformat(), temperature_c=round(temp, 2))
+    temp_low = estimate.get('temp_low')
+    temp_high = estimate.get('temp_high')
+    if temp_low is None or temp_high is None:
+        daily_range = _estimate_daily_range_for_date(tomorrow)
+        if daily_range:
+            temp_low = temp_low if temp_low is not None else daily_range['typical_low']
+            temp_high = temp_high if temp_high is not None else daily_range['typical_high']
+    day = ForecastDay(
+        date=tomorrow.isoformat(),
+        temperature_c=round(temp, 2),
+        temp_low=temp_low,
+        temp_high=temp_high,
+    )
     return ForecastResponse(
         start_date=tomorrow.isoformat(),
         end_date=tomorrow.isoformat(),

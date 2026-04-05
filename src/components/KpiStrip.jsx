@@ -3,7 +3,17 @@ import { sign, zLabel } from "../utils";
 
 export function KpiStrip({ data }) {
   if (!data) return null;
-  const m = data.vilnius_month_anomaly;
+
+  // Prefer city_months (all cities); fall back to vilnius_month_anomaly
+  let m = data.vilnius_month_anomaly;
+  if (data.city_months) {
+    const citySlug = "vilnius";
+    const cityData = data.city_months[citySlug] || data.city_months[Object.keys(data.city_months)[0]];
+    if (cityData) {
+      const marchData = cityData["march"] || cityData[Object.keys(cityData)[0]];
+      if (marchData) m = marchData;
+    }
+  }
   const w = data.lithuania_weather;
 
   const items = [

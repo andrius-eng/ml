@@ -80,12 +80,14 @@ def train(
     feature_spec = resolve_feature_spec_from_frame(Path(model_path).parent, df)
     feature_cols = feature_spec.columns
     X = df[feature_cols].to_numpy(dtype=np.float32)
-    y = df['y'].to_numpy(dtype=np.float32).reshape(-1, 1)
+    target_cols = ['y'] + [c for c in ('y_min', 'y_max') if c in df.columns]
+    output_dim = len(target_cols)
+    y = df[target_cols].to_numpy(dtype=np.float32).reshape(-1, output_dim)
 
     X_t = torch.from_numpy(X)
     y_t = torch.from_numpy(y)
 
-    model = instantiate_climate_model(feature_spec, dropout=0.1)
+    model = instantiate_climate_model(feature_spec, dropout=0.1, output_dim=output_dim)
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=lr * 0.01)
     criterion = nn.MSELoss()
