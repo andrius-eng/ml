@@ -13,10 +13,10 @@ resources:
 
 images:
   - name: ghcr.io/andrius-eng/ml-airflow-custom
-    newTag: 5ebd7e98c0be1139c556f9eec69b744143b975a8
+    newTag: be2fba7fe66f33aa936b152d98c5b14fa0334084
   - name: ghcr.io/andrius-eng/ml-ml-pipeline
-    newTag: 5ebd7e98c0be1139c556f9eec69b744143b975a8
+    newTag: be2fba7fe66f33aa936b152d98c5b14fa0334084
   - name: ghcr.io/andrius-eng/ml-frontend
-    newTag: 5ebd7e98c0be1139c556f9eec69b744143b975a8
+    newTag: be2fba7fe66f33aa936b152d98c5b14fa0334084
   - name: ghcr.io/andrius-eng/ml-ws-server
-    newTag: 5ebd7e98c0be1139c556f9eec69b744143b975a8
+    newTag: be2fba7fe66f33aa936b152d98c5b14fa0334084
