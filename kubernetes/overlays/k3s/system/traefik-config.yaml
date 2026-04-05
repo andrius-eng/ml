@@ -8,6 +8,5 @@ metadata:
   namespace: kube-system
 spec:
   valuesContent: |-
-    providers:
-      kubernetesGateway:
-        enabled: true
+    additionalArguments:
+      - "--providers.kubernetesgateway"

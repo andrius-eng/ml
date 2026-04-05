@@ -5,7 +5,6 @@ namespace: ml-stack
 
 resources:
   - ../../../networking
-  - gatewayclass.yaml
 
 patches:
   - path: gateway-patch.yaml
