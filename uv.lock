@@ -746,7 +746,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.100.0" },
     { name = "matplotlib", specifier = ">=3.8.0" },
     { name = "mlflow-skinny", specifier = ">=2.5.0" },
-    { name = "numpy", specifier = "<2" },
+    { name = "numpy", specifier = "<3" },
     { name = "pandas", specifier = ">=2.0.0" },
     { name = "qdrant-client", specifier = ">=1.9.0" },
     { name = "torch", specifier = "==2.11.0" },

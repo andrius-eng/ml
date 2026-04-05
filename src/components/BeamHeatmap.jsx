@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { anomalyColor, MONTH_LABELS } from '../utils';
+import { useState, useMemo } from "react";
+import { anomalyColor, MONTH_LABELS } from "../utils";
 
 function HeatmapTable({ city, info }) {
   const months = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
@@ -24,11 +24,11 @@ function HeatmapTable({ city, info }) {
                 const entry = yearData[String(m)];
                 const anomaly = entry ? entry.anomaly : null;
                 const zPart =
-                  entry && entry.z != null ? ` (z=${entry.z.toFixed(2)})` : '';
+                  entry && entry.z != null ? ` (z=${entry.z.toFixed(2)})` : "";
                 const label =
                   anomaly != null
-                    ? `${city} ${MONTH_LABELS[m - 1]} ${yr}: ${anomaly >= 0 ? '+' : ''}${anomaly.toFixed(2)} \u00b0C${zPart}`
-                    : '';
+                    ? `${city} ${MONTH_LABELS[m - 1]} ${yr}: ${anomaly >= 0 ? "+" : ""}${anomaly.toFixed(2)} \u00b0C${zPart}`
+                    : "";
                 return (
                   <td
                     key={m}
@@ -37,8 +37,8 @@ function HeatmapTable({ city, info }) {
                     title={label}
                   >
                     {anomaly != null
-                      ? (anomaly >= 0 ? '+' : '') + anomaly.toFixed(1)
-                      : '\u2013'}
+                      ? (anomaly >= 0 ? "+" : "") + anomaly.toFixed(1)
+                      : "\u2013"}
                   </td>
                 );
               })}
@@ -69,9 +69,10 @@ export function BeamHeatmap({ data }) {
         <div>
           <h2>Regional Monthly Anomalies &mdash; Apache Beam</h2>
           <p className="section-desc">
-            Month-by-month temperature anomaly (&deg;C vs 1991&ndash;2020 WMO baseline) for
-            Lithuanian and neighbouring cities. Computed by an Apache Beam
-            pipeline. Select a city to view its year &times; month heatmap.
+            Month-by-month temperature anomaly (&deg;C vs 1991&ndash;2020 WMO
+            baseline) for Lithuanian and neighbouring cities. Computed by an
+            Apache Beam pipeline. Select a city to view its year &times; month
+            heatmap.
           </p>
         </div>
       </div>

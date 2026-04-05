@@ -1,20 +1,22 @@
-import { useEffect, useRef } from 'react';
-import { Chart } from 'chart.js';
+import { useEffect, useRef } from "react";
+import { Chart } from "chart.js";
 
 function barColor(zArr) {
-  return zArr.map((z) => (z >= 0 ? 'rgba(239,68,68,0.7)' : 'rgba(59,130,246,0.7)'));
+  return zArr.map((z) =>
+    z >= 0 ? "rgba(239,68,68,0.7)" : "rgba(59,130,246,0.7)",
+  );
 }
 
 function baseScaleOpts(label) {
   return {
     x: {
-      grid: { color: 'rgba(255,255,255,0.06)' },
-      ticks: { color: 'rgba(255,255,255,0.6)' },
+      grid: { color: "rgba(255,255,255,0.06)" },
+      ticks: { color: "rgba(255,255,255,0.6)" },
     },
     y: {
-      grid: { color: 'rgba(255,255,255,0.08)' },
-      ticks: { color: 'rgba(255,255,255,0.6)' },
-      title: { display: true, text: label, color: 'rgba(255,255,255,0.45)' },
+      grid: { color: "rgba(255,255,255,0.08)" },
+      ticks: { color: "rgba(255,255,255,0.6)" },
+      title: { display: true, text: label, color: "rgba(255,255,255,0.45)" },
     },
   };
 }
@@ -27,7 +29,7 @@ function CityBarChart({ canvasRef, title, labels, data: chartData }) {
     if (chartRef.current) chartRef.current.destroy();
 
     chartRef.current = new Chart(canvasRef.current, {
-      type: 'bar',
+      type: "bar",
       data: {
         labels,
         datasets: [
@@ -44,9 +46,9 @@ function CityBarChart({ canvasRef, title, labels, data: chartData }) {
         maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
-          title: { display: true, text: title, color: '#f7f7f7' },
+          title: { display: true, text: title, color: "#f7f7f7" },
         },
-        scales: baseScaleOpts('z-score vs 1991\u20132020'),
+        scales: baseScaleOpts("z-score vs 1991\u20132020"),
       },
     });
 
@@ -79,14 +81,13 @@ export function CityComparisonCharts({ data }) {
         <div>
           <h2>Lithuania YTD &mdash; City Anomaly Comparison</h2>
           <p className="section-desc">
-            How far each city&rsquo;s temperature and precipitation deviate from the
-            long-term normal this year, expressed as z-scores vs. the 1991&ndash;2025
-            climatology, period{' '}
-            <span>{w.period}</span>.
-            A z-score of 0 is perfectly average; &plusmn;1 covers ~68% of historical years;
-            beyond &plusmn;2 is statistically rare.
-            Use this chart to quickly spot which cities are driving a national
-            anomaly signal &mdash; or diverging from the rest of the country.
+            How far each city&rsquo;s temperature and precipitation deviate from
+            the long-term normal this year, expressed as z-scores vs. the
+            1991&ndash;2025 climatology, period <span>{w.period}</span>. A
+            z-score of 0 is perfectly average; &plusmn;1 covers ~68% of
+            historical years; beyond &plusmn;2 is statistically rare. Use this
+            chart to quickly spot which cities are driving a national anomaly
+            signal &mdash; or diverging from the rest of the country.
           </p>
         </div>
       </div>
