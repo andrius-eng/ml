@@ -66,7 +66,7 @@ def project_python_command(*args: str) -> str:
 with DAG(
     dag_id=f"vilnius_{MONTH_SLUG}_anomaly",
     default_args=DEFAULT_ARGS,
-    description=f"Compute 30-year {calendar.month_name[MONTH]} temperature anomalies for Vilnius; feeds RAG context, LLM SFT, and frontend dashboard",
+    description=f"Compute 85-year {calendar.month_name[MONTH]} temperature anomalies for Vilnius (ERA5 back to 1940, fixed 1991–2025 baseline); feeds RAG context, LLM SFT, and frontend dashboard",
     schedule="0 7 * * *",
     start_date=datetime(2025, 1, 1),
     catchup=False,
@@ -90,7 +90,7 @@ with DAG(
         bash_command=(
             "set -euo pipefail\n"
             f'test -f "{ANALYZE_SCRIPT}"\n'
-            f'{project_python_command(str(ANALYZE_SCRIPT), "--month", str(MONTH), "--raw-input", str(RAW_PATH), "--annual-output", str(ANNUAL_PATH), "--summary-output", str(SUMMARY_PATH), "--report-output", str(REPORT_PATH), "--execution-date", EXECUTION_DATE, "--window-years", "30")}'
+            f'{project_python_command(str(ANALYZE_SCRIPT), "--month", str(MONTH), "--raw-input", str(RAW_PATH), "--annual-output", str(ANNUAL_PATH), "--summary-output", str(SUMMARY_PATH), "--report-output", str(REPORT_PATH), "--execution-date", EXECUTION_DATE, "--window-years", "85")}'  
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
         append_env=True,
@@ -114,7 +114,7 @@ with DAG(
         bash_command=(
             "set -euo pipefail\n"
             f'test -f "{QUALITY_GATE_SCRIPT}"\n'
-            f'{project_python_command(str(QUALITY_GATE_SCRIPT), "--annual-input", str(ANNUAL_PATH), "--summary-input", str(SUMMARY_PATH), "--expected-years", "30", "--min-days", "10", "--max-abs-z", "4.0")}'
+            f'{project_python_command(str(QUALITY_GATE_SCRIPT), "--annual-input", str(ANNUAL_PATH), "--summary-input", str(SUMMARY_PATH), "--expected-years", "85", "--min-days", "10", "--max-abs-z", "4.0")}'
         ),
         env={"ML_PROJECT_ROOT": str(PROJECT_ROOT), "TRAIN_PYTHON_BIN": PYTHON_BIN},
         append_env=True,

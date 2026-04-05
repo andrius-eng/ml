@@ -39,7 +39,7 @@ def _load_existing(output: str) -> pd.DataFrame | None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fetch Vilnius daily temperatures for monthly anomaly analysis")
     parser.add_argument("--execution-date", type=str, default=date.today().isoformat())
-    parser.add_argument("--window-years", type=int, default=30)
+    parser.add_argument("--window-years", type=int, default=85)
     parser.add_argument("--month", type=int, default=3, help="Calendar month number (1-12, default: 3 for March)")
     parser.add_argument("--output", type=str, default=None, help="CSV output path (default derived from --month)")
     args = parser.parse_args()

@@ -61,7 +61,7 @@
             <h2>Lithuania YTD — City Anomaly Comparison</h2>
             <p class="section-desc">
               How far each city's temperature and precipitation deviate from the
-              long-term normal this year, expressed as z-scores vs. the 1991–2025
+              long-term normal this year, expressed as z-scores vs. the 1991–2020
               climatology, period <span id="ytd-period"></span>.
               A z-score of 0 is perfectly average; ±1 covers ~68% of historical years;
               beyond ±2 is statistically rare.
@@ -104,7 +104,7 @@
           <div>
             <h2>Regional Monthly Anomalies — Apache Beam</h2>
             <p class="section-desc">
-              Month-by-month temperature anomaly (°C vs 1991–2025 baseline) for
+              Month-by-month temperature anomaly (°C vs 1991–2020 WMO baseline) for
               Lithuanian and neighbouring cities. Computed by an Apache Beam
               pipeline. Select a city to view its year × month heatmap.
             </p>
@@ -166,8 +166,8 @@
           <div class="rag-chips" id="rag-chips">
             <button class="rag-chip" type="button">What will the temperature be tomorrow?</button>
             <button class="rag-chip" type="button">Is Lithuania currently warmer or colder than normal?</button>
-            <button class="rag-chip" id="rag-chip-month-city" type="button">How unusual is this March in Vilnius?</button>
-            <button class="rag-chip" id="rag-chip-warmest" type="button">What was the warmest March on record?</button>
+            <button class="rag-chip" id="rag-chip-month-city" type="button"></button>
+            <button class="rag-chip" id="rag-chip-warmest" type="button"></button>
           </div>
           <form class="rag-form" id="rag-form" autocomplete="off">
             <input
@@ -186,9 +186,9 @@
       <section class="card" id="pipeline-section">
         <h2>Pipeline Architecture</h2>
         <p class="section-desc">
-          Three Airflow DAGs, each following a
-          fetch&nbsp;→&nbsp;analyze&nbsp;→&nbsp;plot&nbsp;→&nbsp;quality-gate
-          pattern.
+          Four Airflow DAGs: daily weather anomaly, per-city monthly deep-dive,
+          weekly model retrain, and a manual LoRA fine-tune. Each follows a
+          fetch&nbsp;→&nbsp;analyze&nbsp;→&nbsp;plot&nbsp;→&nbsp;quality-gate pattern.
         </p>
         <div class="pipeline-grid" id="pipeline-grid"></div>
       </section>

@@ -81,7 +81,7 @@ instead of returning zeros for the current year.
 
 ### Vilnius March anomaly pipeline
 
-- vilnius_march_fetch.py: fetch 30-year March daily temperatures for Vilnius
+- vilnius_march_fetch.py: fetch up to 85 years (ERA5 back to 1940) of daily temperatures for Vilnius
 - vilnius_march_analyze.py: compute year-by-year anomaly and z-score vs baseline
 - vilnius_march_plot.py: render March anomaly bar chart
 - vilnius_march_quality_gate.py: validate year count and z-score bounds

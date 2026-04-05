@@ -272,7 +272,7 @@ def fetch_weather_data(**context):
         mlflow.set_tag('cache_action', 'miss_or_refresh')
         logger.info("Fetching fresh weather data...")
         fetch_args = [
-            "--start-date", "1991-01-01",
+            "--start-date", "1940-01-01",
             "--end-date", execution_date,
             "--output", str(RAW_WEATHER_PATH),
             "--min-years-required", str(min_years_required),

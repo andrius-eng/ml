@@ -106,7 +106,7 @@ flowchart LR
   EURO["Eurostat HDD API"]
 
   subgraph Ingest
-    FETCH["weather_fetch.py\n30-year guard + backfill"]
+    FETCH["weather_fetch.py\nERA5 backfill to 1940"]
     VFETCH["vilnius_march_fetch.py"]
     EFETCH["eurostat_fetch.py"]
   end
@@ -230,8 +230,8 @@ Airflow UI lets you pick any month via the `month` param):
 
 1. **Checks** that the raw weather CSV from `lithuania_weather_anomaly` is
    already on disk (it waits if not). No second API call needed.
-2. **Analyses** just Vilnius, just the chosen month, across 30 years — builds
-   a year-by-year table of mean temperature, anomaly, and z-score.
+2. **Analyses** just Vilnius, just the chosen month, across up to 85 years (ERA5 back to 1940) — builds
+   a year-by-year table of mean temperature, anomaly, and z-score vs the fixed 1991–2020 baseline.
 3. **Plots** the classic red/blue bar chart shown at the top of the dashboard.
 4. **Quality-gates** that enough years have data and the latest year's value
    is plausible.

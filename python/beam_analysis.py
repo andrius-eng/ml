@@ -2,7 +2,11 @@
 
 Fetches daily weather for an extended set of cities (Lithuanian + neighbouring
 capitals), then uses Beam transforms to compute month-by-month temperature
-anomalies per city per year, relative to the 1991-2020 baseline climatology.
+anomalies per city per year, relative to the fixed WMO 1991–2020 baseline climatology.
+
+Data window can extend back to ERA5 start (1940); the baseline is always
+computed from the 1991–2020 period so pre-baseline years (1940–1990) show
+anomaly relative to the modern climate-normal.
 
 Output: monthly_anomaly_matrix.csv  (city × year × month anomaly grid)
 """
@@ -27,7 +31,7 @@ from apache_beam.transforms.window import GlobalWindows, IntervalWindow, WindowF
 from weather_common import REGION_CITIES, fetch_daily_weather
 
 BASELINE_START = 1991
-BASELINE_END = 2025
+BASELINE_END = 2020
 
 
 # ── DoFns & CombineFns ──────────────────────────────────────────────────────
