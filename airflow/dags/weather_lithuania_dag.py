@@ -31,18 +31,19 @@ def _mlflow_create_dag_run(**context):
     import socket
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment(MLFLOW_EXPERIMENT)
+    ds = context.get('ds') or datetime.utcnow().strftime('%Y-%m-%d')
     with mlflow.start_run(
-        run_name=f"weather-pipeline-{context['ds']}",
+        run_name=f"weather-pipeline-{ds}",
         tags={
             'dag_id': 'lithuania_weather_anomaly',
             'dag_run_id': context.get('run_id', ''),
-            'execution_date': context['ds'],
+            'execution_date': ds,
             'hostname': socket.gethostname(),
             'type': 'dag_run',
         },
     ) as run:
-        mlflow.log_param('execution_date', context['ds'])
-        mlflow.log_param('analysis_year', str(context['ds'])[:4])
+        mlflow.log_param('execution_date', ds)
+        mlflow.log_param('analysis_year', ds[:4])
     context['task_instance'].xcom_push(key='mlflow_parent_run_id', value=run.info.run_id)
 
 

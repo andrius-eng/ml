@@ -63,18 +63,19 @@ def _mlflow_create_dag_run(**context):
     import mlflow, socket
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     mlflow.set_experiment(MLFLOW_EXPERIMENT)
+    ds = context.get('ds') or datetime.utcnow().strftime('%Y-%m-%d')
     with mlflow.start_run(
-        run_name=f"vilnius-{MONTH_SLUG}-pipeline-{context['ds']}",
+        run_name=f"vilnius-{MONTH_SLUG}-pipeline-{ds}",
         tags={
             'dag_id': f'vilnius_{MONTH_SLUG}_anomaly',
             'dag_run_id': context.get('run_id', ''),
-            'execution_date': context['ds'],
+            'execution_date': ds,
             'hostname': socket.gethostname(),
             'month': MONTH_SLUG,
             'type': 'dag_run',
         },
     ) as run:
-        mlflow.log_param('execution_date', context['ds'])
+        mlflow.log_param('execution_date', ds)
         mlflow.log_param('month', MONTH_SLUG)
         mlflow.log_param('month_num', MONTH)
     context['task_instance'].xcom_push(key='mlflow_parent_run_id', value=run.info.run_id)
