@@ -35,11 +35,11 @@
       <section class="card" id="march-section">
         <div class="section-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
           <div>
-            <h2><span id="city-label">Vilnius</span> — <span id="month-label">March</span> Temperature Anomaly (<span id="years-label">30</span> years)</h2>
+            <h2><span id="city-label"></span> — <span id="month-label"></span> Temperature Anomaly (<span id="years-label"></span> years)</h2>
             <p class="section-desc">
-              Daily mean temperature vs. <span id="years-label-desc">30</span>-year baseline,
-              <span id="month-label-desc">March</span>
-              1–<span id="cutoff-day">16</span> each year.
+              Daily mean temperature vs. <span id="years-label-desc"></span>-year baseline,
+              <span id="month-label-desc"></span>
+              1–<span id="cutoff-day"></span> each year.
               Red&nbsp;= warmer than baseline · Blue&nbsp;= cooler ·
               <strong>Outlined bar</strong>&nbsp;= current year.
             </p>
@@ -60,9 +60,13 @@
           <div>
             <h2>Lithuania YTD — City Anomaly Comparison</h2>
             <p class="section-desc">
-              Year-to-date z-scores vs. 1991–2025 climatology, period
-              <span id="ytd-period"></span>.
-              A z-score of −1.5 means ~15th percentile of historical years.
+              How far each city's temperature and precipitation deviate from the
+              long-term normal this year, expressed as z-scores vs. the 1991–2025
+              climatology, period <span id="ytd-period"></span>.
+              A z-score of 0 is perfectly average; ±1 covers ~68% of historical years;
+              beyond ±2 is statistically rare.
+              Use this chart to quickly spot which cities are driving a national
+              anomaly signal — or diverging from the rest of the country.
             </p>
           </div>
         </div>

@@ -6,7 +6,7 @@ PyTorch training, Qdrant-backed retrieval, and a live dashboard.
 ## Prerequisites
 
 - Python 3.11+ managed by [uv](https://docs.astral.sh/uv/)
-- Node.js 18+ and npm
+- Node.js 20+ and npm
 - Docker and Docker Compose (for the full stack)
 - kubectl (optional — for Kubernetes deployment)
 
@@ -391,7 +391,7 @@ npm run dev
 Open http://localhost:5173. You will see:
 
 - KPI cards for current Lithuanian temperature and precipitation anomalies
-- A 30-year Vilnius March anomaly bar chart
+- A per-city, per-month temperature anomaly bar chart (city and month driven by pipeline data)
 - City-level z-score comparisons
 - ML model regression metrics
 - Vector RAG Briefings assembled from pipeline artifacts
@@ -1027,12 +1027,12 @@ exhaustion on a single TaskManager. To scale:
 - Tune `taskmanager.network.memory.fraction` and `taskmanager.numberOfTaskSlots`
   in `docker-compose.full.yml` `FLINK_PROPERTIES` to avoid buffer exhaustion.
 
-### 8. Vilnius March forecast: extend to April–May
+### 8. Monthly anomaly DAG: multi-city support
 
-`vilnius_march_temperature_anomalies` only covers March. The same
-`fetch → analyze → quality_gate → beam` pattern can be replicated for April and
-May with a single parameterized DAG using Airflow's `@dag(params={"month": 3})`
-and a `month` parameter, reducing duplication to one DAG file.
+The `vilnius_march_anomaly` DAG is parameterized by month but always analyzes Vilnius.
+Extend `export_frontend_data.py` to populate a `city_months` key with data for all
+five Lithuanian cities so the city-select dropdown in the dashboard becomes functional.
+The frontend already reads `city_months` when present — no JS changes required.
 
 ## Troubleshooting
 
