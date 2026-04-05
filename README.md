@@ -485,6 +485,7 @@ separate ArgoCD Application (app-of-apps rooted at `kubernetes/apps/`).
 ```
 kubernetes/
 ├── apps/                    # ArgoCD Application definitions (app-of-apps)
+│   ├── argocd-crds-app.yaml
 │   ├── ml-infra-app.yaml
 │   ├── ml-serving-app.yaml
 │   ├── ml-monitoring-app.yaml
