@@ -1,0 +1,60 @@
+# Static NFS PVs — k3s overlay only.
+# NFS server: desktop-nnutaj7 (Tailscale IP 100.95.8.71)
+# To change: update server IP and path below.
+# For EKS: replace with EFS-backed PVs (see overlays/eks/infra/).
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-airflow-data-nfs
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: "100.95.8.71"
+    path: "/data/k8s-nfs/airflow-data"
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-ml-output-nfs
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: "100.95.8.71"
+    path: "/data/k8s-nfs/ml-output"
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-dashboard-data-nfs
+spec:
+  capacity:
+    storage: 512Mi
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: "100.95.8.71"
+    path: "/data/k8s-nfs/dashboard-data"
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-mlflow-artifacts-nfs
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes: [ReadWriteMany]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: "100.95.8.71"
+    path: "/data/k8s-nfs/mlflow-artifacts"

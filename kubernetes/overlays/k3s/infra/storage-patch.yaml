@@ -1,0 +1,80 @@
+# k3s storage class + NFS static bindings — strategic merge patches.
+# RWX volumes: bound to static NFS PVs defined in nfs-pvs.yaml.
+# RWO volumes: dynamically provisioned via k3s-hostpath (local-path).
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: airflow-data
+  namespace: ml-stack
+spec:
+  volumeName: pv-airflow-data-nfs
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ml-output
+  namespace: ml-stack
+spec:
+  volumeName: pv-ml-output-nfs
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dashboard-data
+  namespace: ml-stack
+spec:
+  volumeName: pv-dashboard-data-nfs
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-artifacts
+  namespace: ml-stack
+spec:
+  volumeName: pv-mlflow-artifacts-nfs
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: ml-stack
+spec:
+  storageClassName: k3s-hostpath
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-data
+  namespace: ml-stack
+spec:
+  storageClassName: k3s-hostpath
+  volumeName: pv-mlflow-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: beam-artifacts
+  namespace: ml-stack
+spec:
+  storageClassName: k3s-hostpath
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flink-job-archives
+  namespace: ml-stack
+spec:
+  storageClassName: k3s-hostpath
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-data
+  namespace: ml-stack
+spec:
+  storageClassName: k3s-hostpath

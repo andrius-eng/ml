@@ -4,6 +4,8 @@ kind: Kustomization
 namespace: ml-stack
 
 resources:
-  - services.yaml
-  - tailscale-tls.yaml
-  - gateway.yaml
+  - ../../../networking
+  - gatewayclass.yaml
+
+patches:
+  - path: gateway-patch.yaml

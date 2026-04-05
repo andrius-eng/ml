@@ -1,0 +1,113 @@
+# EKS Gateway patch — ALB controller + Route53 hostnames.
+# Replace placeholder hostnames with your actual Route53 / custom domain.
+# The ALB GatewayClass provisions an AWS ALB per Gateway.
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: ml-stack-gateway
+  namespace: ml-stack
+  annotations:
+    # Replace with your ACM certificate ARN for TLS termination.
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:REGION:ACCOUNT:certificate/CERT_ID"
+spec:
+  gatewayClassName: aws-application-load-balancer
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      hostname: "ml-stack.YOUR_DOMAIN"
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: https
+      port: 443
+      protocol: HTTPS
+      hostname: "ml-stack.YOUR_DOMAIN"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: tls-secret
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: http-any
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: All
+---
+# HTTPRoute hostname overrides — set to your EKS domain.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ws-server
+  namespace: ml-stack
+spec:
+  hostnames:
+    - "ml-stack.YOUR_DOMAIN"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: airflow
+  namespace: ml-stack
+spec:
+  hostnames:
+    - "ml-stack.YOUR_DOMAIN"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: flink-history-canonical
+  namespace: ml-stack
+spec:
+  hostnames:
+    - "ml-stack.YOUR_DOMAIN"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: flink-history
+  namespace: ml-stack
+spec:
+  hostnames:
+    - "ml-stack.YOUR_DOMAIN"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: flink-canonical
+  namespace: ml-stack
+spec:
+  hostnames:
+    - "ml-stack.YOUR_DOMAIN"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: flink
+  namespace: ml-stack
+spec:
+  hostnames:
+    - "ml-stack.YOUR_DOMAIN"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mlflow-canonical
+  namespace: ml-stack
+spec:
+  hostnames:
+    - "ml-stack.YOUR_DOMAIN"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mlflow
+  namespace: ml-stack
+spec:
+  hostnames:
+    - "ml-stack.YOUR_DOMAIN"

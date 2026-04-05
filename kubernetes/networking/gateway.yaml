@@ -1,52 +1,20 @@
-# Gateway API resources — replaces Ingress.
-# Requires Traefik 3.x with kubernetesGateway provider enabled.
-# See kubernetes/scripts/setup-gateway.sh for prerequisites.
-#
-# NOTE: GatewayClass is cluster-scoped and lives in gatewayclass.yaml
-# to avoid kustomize injecting a namespace on it.
+# Gateway API resources — base (provider-agnostic).
+# GatewayClass and provider-specific listeners/hostnames live in overlays:
+#   kubernetes/overlays/k3s/networking/  — Traefik + Tailscale
+#   kubernetes/overlays/eks/networking/  — AWS ALB
 ---
-# Gateway — HTTP entry point.
-# Port 8000 matches Traefik's internal 'web' entrypoint
-# (k3s service maps external :80 → container :8000).
-# Port 8443 matches Traefik's internal 'websecure' entrypoint
-# (k3s service maps external :443 → container :8443).
+# Gateway — single catch-all HTTP listener on standard port 80.
+# Overlays replace gatewayClassName and listeners for their provider.
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: ml-stack-gateway
   namespace: ml-stack
 spec:
-  gatewayClassName: traefik
+  gatewayClassName: default
   listeners:
-    - name: http
-      port: 8000
-      protocol: HTTP
-      hostname: ml-stack.local
-      allowedRoutes:
-        namespaces:
-          from: All
-    - name: http-tailscale
-      port: 8000
-      protocol: HTTP
-      hostname: "desktop-nnutaj7.tail6964b3.ts.net"
-      allowedRoutes:
-        namespaces:
-          from: All
-    - name: https-tailscale
-      port: 8443
-      protocol: HTTPS
-      hostname: "desktop-nnutaj7.tail6964b3.ts.net"
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - kind: Secret
-            name: tailscale-tls
-      allowedRoutes:
-        namespaces:
-          from: All
-    # Catch-all: accepts any Host (raw IPs, short MagicDNS name, etc.)
     - name: http-any
-      port: 8000
+      port: 80
       protocol: HTTP
       allowedRoutes:
         namespaces:
@@ -79,9 +47,6 @@ metadata:
 spec:
   parentRefs:
     - name: ml-stack-gateway
-  hostnames:
-    - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:
@@ -130,9 +95,6 @@ metadata:
 spec:
   parentRefs:
     - name: ml-stack-gateway
-  hostnames:
-    - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:
@@ -151,9 +113,6 @@ metadata:
 spec:
   parentRefs:
     - name: ml-stack-gateway
-  hostnames:
-    - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:
@@ -176,9 +135,6 @@ metadata:
 spec:
   parentRefs:
     - name: ml-stack-gateway
-  hostnames:
-    - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:
@@ -203,9 +159,6 @@ metadata:
 spec:
   parentRefs:
     - name: ml-stack-gateway
-  hostnames:
-    - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:
@@ -228,9 +181,6 @@ metadata:
 spec:
   parentRefs:
     - name: ml-stack-gateway
-  hostnames:
-    - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:
@@ -313,9 +263,6 @@ metadata:
 spec:
   parentRefs:
     - name: ml-stack-gateway
-  hostnames:
-    - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:
@@ -338,9 +285,6 @@ metadata:
 spec:
   parentRefs:
     - name: ml-stack-gateway
-  hostnames:
-    - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
   rules:
     - matches:
         - path:

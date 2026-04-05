@@ -27,7 +27,7 @@ spec:
           image: postgres:16-alpine
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
         - name: db-upgrade
-          image: ghcr.io/andrius-eng/ml-airflow-custom:latest
+          image: ghcr.io/andrius-eng/ml-airflow-custom:placeholder
           imagePullPolicy: IfNotPresent
           command: ["airflow", "db", "migrate"]
           envFrom:
@@ -42,7 +42,7 @@ spec:
               mountPath: /opt/airflow/project/python/output
       containers:
         - name: airflow-init
-          image: ghcr.io/andrius-eng/ml-airflow-custom:latest
+          image: ghcr.io/andrius-eng/ml-airflow-custom:placeholder
           imagePullPolicy: IfNotPresent
           command:
             - /bin/bash
@@ -116,7 +116,7 @@ spec:
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
       containers:
         - name: webserver
-          image: ghcr.io/andrius-eng/ml-airflow-custom:latest
+          image: ghcr.io/andrius-eng/ml-airflow-custom:placeholder
           imagePullPolicy: IfNotPresent
           command: ["airflow", "api-server", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]
           ports:
@@ -191,7 +191,7 @@ spec:
           image: postgres:16-alpine
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
         - name: sync-dags
-          image: ghcr.io/andrius-eng/ml-airflow-custom:latest
+          image: ghcr.io/andrius-eng/ml-airflow-custom:placeholder
           imagePullPolicy: IfNotPresent
           # Copy baked-in DAGs from image into the PVC (image dags hidden by PVC mount at /opt/airflow)
           command: ["sh", "-c", "mkdir -p /mnt/airflow/dags && cp -rn /opt/airflow/dags/. /mnt/airflow/dags/ 2>/dev/null || true"]
@@ -200,7 +200,7 @@ spec:
               mountPath: /mnt/airflow
       containers:
         - name: scheduler
-          image: ghcr.io/andrius-eng/ml-airflow-custom:latest
+          image: ghcr.io/andrius-eng/ml-airflow-custom:placeholder
           imagePullPolicy: IfNotPresent
           command: ["airflow", "scheduler"]
           envFrom:
@@ -277,7 +277,7 @@ spec:
           image: postgres:16-alpine
           command: ["sh", "-c", "until pg_isready -h postgres -U airflow; do sleep 2; done"]
         - name: sync-dags
-          image: ghcr.io/andrius-eng/ml-airflow-custom:latest
+          image: ghcr.io/andrius-eng/ml-airflow-custom:placeholder
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "mkdir -p /mnt/airflow/dags && cp -rn /opt/airflow/dags/. /mnt/airflow/dags/ 2>/dev/null || true"]
           volumeMounts:
@@ -285,7 +285,7 @@ spec:
               mountPath: /mnt/airflow
       containers:
         - name: dag-processor
-          image: ghcr.io/andrius-eng/ml-airflow-custom:latest
+          image: ghcr.io/andrius-eng/ml-airflow-custom:placeholder
           imagePullPolicy: IfNotPresent
           command: ["airflow", "dag-processor"]
           envFrom:

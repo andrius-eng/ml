@@ -26,7 +26,7 @@ spec:
       terminationGracePeriodSeconds: 0
       initContainers:
         - name: pull-airflow-custom
-          image: ghcr.io/andrius-eng/ml-airflow-custom:latest
+          image: ghcr.io/andrius-eng/ml-airflow-custom:placeholder
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "echo airflow image ready"]
       containers:
@@ -68,15 +68,15 @@ spec:
       terminationGracePeriodSeconds: 0
       initContainers:
         - name: pull-ml-pipeline
-          image: ghcr.io/andrius-eng/ml-ml-pipeline:latest
+          image: ghcr.io/andrius-eng/ml-ml-pipeline:placeholder
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "echo ml pipeline image ready"]
         - name: pull-ws-server
-          image: ghcr.io/andrius-eng/ml-ws-server:latest
+          image: ghcr.io/andrius-eng/ml-ws-server:placeholder
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "echo ws-server image ready"]
         - name: pull-frontend
-          image: ghcr.io/andrius-eng/ml-frontend:latest
+          image: ghcr.io/andrius-eng/ml-frontend:placeholder
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "echo frontend image ready"]
       containers:

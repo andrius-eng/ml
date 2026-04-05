@@ -1,0 +1,12 @@
+# Top-level k3s overlay — for manual full-cluster apply.
+# ArgoCD uses the per-group sub-overlays; this is for break-glass / bootstrap.
+#   kubectl apply -k kubernetes/overlays/k3s
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - infra
+  - data
+  - ml
+  - networking
+  - monitoring

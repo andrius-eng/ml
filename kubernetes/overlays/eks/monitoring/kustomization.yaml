@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: ml-stack
 
 resources:
-  - services.yaml
-  - tailscale-tls.yaml
-  - gateway.yaml
+  - ../../../monitoring
+
+patches:
+  - path: storage-patch.yaml

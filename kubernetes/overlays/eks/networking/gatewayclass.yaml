@@ -1,0 +1,9 @@
+# EKS GatewayClass — requires AWS Load Balancer Controller v2.7+.
+# Install: helm install aws-load-balancer-controller eks/aws-load-balancer-controller
+# See: https://kubernetes-sigs.github.io/aws-load-balancer-controller/
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: aws-application-load-balancer
+spec:
+  controllerName: gateway.k8s.aws/alb

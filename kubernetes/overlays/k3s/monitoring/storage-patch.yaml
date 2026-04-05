@@ -1,0 +1,17 @@
+# k3s storage class patches for monitoring PVCs.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: ml-stack
+spec:
+  storageClassName: k3s-hostpath
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  namespace: ml-stack
+spec:
+  storageClassName: k3s-hostpath

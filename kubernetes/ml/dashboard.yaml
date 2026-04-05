@@ -37,7 +37,7 @@ spec:
           command: ["sh", "-c", "until nc -z mlflow 5000; do echo waiting for mlflow; sleep 5; done"]
       containers:
         - name: ml-server
-          image: ghcr.io/andrius-eng/ml-ml-pipeline:latest
+          image: ghcr.io/andrius-eng/ml-ml-pipeline:placeholder
           imagePullPolicy: IfNotPresent
           command: ["sh", "-c", "cd /project/python && python -m uvicorn serve:app --host 0.0.0.0 --port 8000"]
           ports:
@@ -111,7 +111,7 @@ spec:
         - name: ghcr-secret
       containers:
         - name: ws-server
-          image: ghcr.io/andrius-eng/ml-ws-server:latest
+          image: ghcr.io/andrius-eng/ml-ws-server:placeholder
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
@@ -184,7 +184,7 @@ spec:
         - name: ghcr-secret
       containers:
         - name: frontend
-          image: ghcr.io/andrius-eng/ml-frontend:latest
+          image: ghcr.io/andrius-eng/ml-frontend:placeholder
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80

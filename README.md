@@ -486,16 +486,25 @@ separate ArgoCD Application (app-of-apps rooted at `kubernetes/apps/`).
 kubernetes/
 ├── apps/                    # ArgoCD Application definitions (app-of-apps)
 │   ├── argocd-crds-app.yaml
-│   ├── ml-infra-app.yaml
-│   ├── ml-serving-app.yaml
-│   ├── ml-monitoring-app.yaml
-│   ├── ml-networking-app.yaml
-│   ├── ml-data-app.yaml
+│   ├── ml-infra-app.yaml       → kubernetes/overlays/k3s/infra
+│   ├── ml-serving-app.yaml     → kubernetes/overlays/k3s/ml
+│   ├── ml-monitoring-app.yaml  → kubernetes/overlays/k3s/monitoring
+│   ├── ml-networking-app.yaml  → kubernetes/overlays/k3s/networking
+│   ├── ml-data-app.yaml        → kubernetes/overlays/k3s/data
 │   └── sealed-secrets-app.yaml
-├── infra/                   # postgres, PVCs, configmaps, namespace
-├── ml/                      # airflow, mlflow, ml-server, ws-server, frontend, flink, ollama
-├── monitoring/              # prometheus, grafana, node-exporter, vector, kube-state-metrics
-├── networking/              # Gateway API routes, services, Tailscale TLS
+├── overlays/
+│   ├── k3s/                 # Current hardware: k3s + NFS + Traefik + Tailscale
+│   │   ├── infra/           # NFS PVs, k3s-hostpath storage class patches
+│   │   ├── data/
+│   │   ├── ml/
+│   │   ├── networking/      # Traefik GatewayClass, Tailscale listeners
+│   │   └── monitoring/      # k3s-hostpath storage class patches
+│   └── eks/                 # EKS: EBS gp3, EFS, ALB Gateway (stubs)
+│       └── ...              # Set hostnames + storage class before applying
+├── infra/                   # Base: postgres, PVCs (no SC), configmaps, namespace
+├── ml/                      # Base: airflow, mlflow, ml-server, ws-server, frontend
+├── monitoring/              # Base: prometheus, grafana, node-exporter, vector
+├── networking/              # Base: Gateway API routes (catch-all), services, Tailscale TLS
 ├── sealed-secrets/          # sealed-secrets controller + HelmChartConfig node placement
 ├── argocd/                  # ArgoCD node-placement patches
 └── argocd-app.yaml          # bootstrap: apply this once to seed all child apps
@@ -541,8 +550,9 @@ Apply:
 
 ```bash
 kubectl apply -n argocd -f kubernetes/argocd-app.yaml   # seed ArgoCD app-of-apps
-# ArgoCD will sync all child apps; or apply manually:
-kubectl apply -k kubernetes
+# ArgoCD syncs all child apps from overlays/k3s; or apply manually:
+bash scripts/apply-cluster.sh        # auto-detects ArgoCD; falls back to kubectl apply -k
+bash scripts/apply-cluster.sh --manual  # force manual kustomize path
 ```
 
 Trusted Tailscale HTTPS:
@@ -567,6 +577,8 @@ and creates child Applications for each group (`ml-infra`, `ml-serving`,
 - With ArgoCD auto-sync enabled, treat git as the source of truth: commit and
   push manifest changes, then let ArgoCD reconcile them. Reserve direct
   `kubectl apply/patch` for one-time bootstrap or emergency break-glass work.
+  Use `bash scripts/apply-cluster.sh` for the manual fallback — it uses
+  `kubectl apply -k kubernetes/overlays/k3s/<group>` in dependency order.
 - Keep app-of-apps manifests free of empty/default-only source fields such as
   `kustomize: {}` and `directory.recurse: false`; ArgoCD normalizes them away
   on the live Application objects, which leaves the parent app permanently

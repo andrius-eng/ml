@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/andrius-eng/ml.git
     targetRevision: main
-    path: kubernetes/networking
+    path: kubernetes/overlays/k3s/networking
   destination:
     server: https://kubernetes.default.svc
     namespace: ml-stack

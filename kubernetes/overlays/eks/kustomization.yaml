@@ -1,0 +1,12 @@
+# Top-level EKS overlay — for manual full-cluster apply.
+# Prerequisites: set correct hostnames and storage class patches in sub-overlays.
+#   kubectl apply -k kubernetes/overlays/eks
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - infra
+  - data
+  - ml
+  - networking
+  - monitoring

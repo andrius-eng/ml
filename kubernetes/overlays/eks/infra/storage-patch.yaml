@@ -1,0 +1,79 @@
+# EKS storage class patches.
+# Prerequisites:
+#   - aws-ebs-csi-driver installed (for RWO gp3 volumes)
+#   - aws-efs-csi-driver installed with StorageClass named "efs-sc" (for RWX volumes)
+# Replace <EFS_VOLUME_HANDLE_*> with the actual EFS filesystem ID + access point ARN.
+---
+# RWX volumes — EFS CSI dynamic provisioning.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: airflow-data
+  namespace: ml-stack
+spec:
+  storageClassName: efs-sc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ml-output
+  namespace: ml-stack
+spec:
+  storageClassName: efs-sc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dashboard-data
+  namespace: ml-stack
+spec:
+  storageClassName: efs-sc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-artifacts
+  namespace: ml-stack
+spec:
+  storageClassName: efs-sc
+---
+# RWO volumes — EBS gp3 dynamic provisioning.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: ml-stack
+spec:
+  storageClassName: gp3
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-data
+  namespace: ml-stack
+spec:
+  storageClassName: gp3
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: beam-artifacts
+  namespace: ml-stack
+spec:
+  storageClassName: gp3
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: flink-job-archives
+  namespace: ml-stack
+spec:
+  storageClassName: gp3
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-data
+  namespace: ml-stack
+spec:
+  storageClassName: gp3
