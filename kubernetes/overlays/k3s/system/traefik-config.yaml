@@ -1,0 +1,13 @@
+# Enable Traefik Gateway API provider.
+# k3s's built-in Helm controller picks this up from kube-system
+# and reconciles the Traefik deployment with the new values.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    providers:
+      kubernetesGateway:
+        enabled: true
