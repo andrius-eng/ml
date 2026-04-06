@@ -9,4 +9,4 @@ resources:
 
 images:
   - name: ghcr.io/andrius-eng/ml-airflow-custom
-    newTag: b7c8e2f5488a6e0603e892ed3c8f61f458bcc792
+    newTag: 1f113db64711a8daee4756ec7a85668b1e884458
