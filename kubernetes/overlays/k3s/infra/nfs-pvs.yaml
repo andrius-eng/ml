@@ -1,6 +1,6 @@
 # Static NFS PVs — k3s overlay only.
-# NFS server: desktop-nnutaj7 (Tailscale IP 100.95.8.71)
-# To change: update server IP and path below.
+# NFS server: desktop-nnutaj7-1.tail6964b3.ts.net (Tailscale MagicDNS)
+# To change: update server hostname and path below.
 # For EKS: replace with EFS-backed PVs (see overlays/eks/infra/).
 ---
 apiVersion: v1
@@ -14,7 +14,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: "100.95.8.71"
+    server: "desktop-nnutaj7-1.tail6964b3.ts.net"
     path: "/data/k8s-nfs/airflow-data"
 ---
 apiVersion: v1
@@ -28,7 +28,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: "100.95.8.71"
+    server: "desktop-nnutaj7-1.tail6964b3.ts.net"
     path: "/data/k8s-nfs/ml-output"
 ---
 apiVersion: v1
@@ -42,7 +42,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: "100.95.8.71"
+    server: "desktop-nnutaj7-1.tail6964b3.ts.net"
     path: "/data/k8s-nfs/dashboard-data"
 ---
 apiVersion: v1
@@ -56,7 +56,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: "100.95.8.71"
+    server: "desktop-nnutaj7-1.tail6964b3.ts.net"
     path: "/data/k8s-nfs/mlflow-artifacts"
 ---
 apiVersion: v1
@@ -70,7 +70,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: "100.95.8.71"
+    server: "desktop-nnutaj7-1.tail6964b3.ts.net"
     path: "/data/k8s-nfs/postgres-data"
 ---
 apiVersion: v1
@@ -84,7 +84,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: "100.95.8.71"
+    server: "desktop-nnutaj7-1.tail6964b3.ts.net"
     path: "/data/k8s-nfs/beam-artifacts"
 ---
 apiVersion: v1
@@ -98,7 +98,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: "100.95.8.71"
+    server: "desktop-nnutaj7-1.tail6964b3.ts.net"
     path: "/data/k8s-nfs/flink-job-archives"
 ---
 apiVersion: v1
@@ -112,7 +112,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: "100.95.8.71"
+    server: "desktop-nnutaj7-1.tail6964b3.ts.net"
     path: "/data/k8s-nfs/ollama-data"
 ---
 apiVersion: v1
@@ -126,7 +126,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: "100.95.8.71"
+    server: "desktop-nnutaj7-1.tail6964b3.ts.net"
     path: "/data/k8s-nfs/prometheus-data"
 ---
 apiVersion: v1
@@ -140,5 +140,5 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: "100.95.8.71"
+    server: "desktop-nnutaj7-1.tail6964b3.ts.net"
     path: "/data/k8s-nfs/grafana-data"
