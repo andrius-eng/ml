@@ -75,6 +75,72 @@ graph TB
     ML --> FE
 ```
 
+## Running on WSL2 — Known Issues
+
+### VHDX disk grows unboundedly (k3s image accumulation)
+
+Each CI push builds new images. k3s caches every pulled image layer on disk; old layers are never GC'd automatically. After several weeks the WSL VHDX can exceed 200 GB even though actual live data is closer to 60–70 GB.
+
+**Immediate fix** — remove all images not currently used by a running container:
+```bash
+sudo k3s crictl rmi --prune
+```
+Then compact the VHDX from Windows PowerShell (requires WSL to be shut down first):
+```powershell
+wsl --shutdown
+$vhdx = "C:\Users\<you>\AppData\Local\wsl\{<distro-guid>}\ext4.vhdx"
+$script = "select vdisk file=`"$vhdx`"`nattach vdisk readonly`ncompact vdisk`ndetach vdisk`nexit"
+$script | diskpart
+```
+
+**Long-term prevention** (already configured in this repo):
+- `diskSize=120GB` in `~/.wslconfig` — hard cap on VHDX growth; WSL 2.4+ supported.
+- `kubernetes/infra/image-prune.yaml` — a `CronJob` in `kube-system` that runs `k3s crictl rmi --prune` + `fstrim` nightly at 03:00.
+- `/etc/rancher/k3s/config.yaml` — kubelet args `image-gc-high-threshold=75` and `image-gc-low-threshold=60` so k3s GC kicks in before the disk is full.
+- `/etc/cron.daily/fstrim-wsl` — daily `fstrim` so WSL releases freed blocks back to the VHDX sparse file.
+
+### WSL crashes and `Wsl/Service/CreateInstance/E_UNEXPECTED`
+
+Symptom: any WSL command returns `Catastrophic failure / Wsl/Service/CreateInstance/E_UNEXPECTED`.
+
+This usually means the WSL service VM died — typically after a `wsl --shutdown` while k3s was still running and holding file-system locks.
+
+```powershell
+# Full recovery sequence:
+wsl --shutdown          # kills any stuck VMs
+Start-Sleep -Seconds 5
+wsl                     # restarts cleanly
+```
+
+If the distro still won't start, restart the LxssManager Windows service:
+```powershell
+Restart-Service LxssManager -Force
+```
+
+### Airflow DAG/python files not updating on pod rollout
+
+Symptom: code changes are committed and images are rebuilt by CI, but Airflow workers still run old logic.
+
+Root cause: the first deployment copies DAGs and python scripts to the `airflow-data` PVC. If the init container uses `cp -rn` (no-clobber), every subsequent rollout silently skips files that already exist.
+
+Fix (already applied in `kubernetes/data/airflow.yaml`):
+- `sync-dags` init container uses `cp -rf` to overwrite on every rollout.
+- A `sync-python` init container (`cp -rf /opt/airflow/project/python/. /mnt/airflow/project/python/`) runs in both scheduler and dag-processor.
+
+### Airflow 3 manual triggers: `KeyError: 'ds'`
+
+Symptom: manually triggered DAG runs fail immediately with `KeyError: 'ds'` in the `create_mlflow_run` task.
+
+Root cause: Airflow 3 does not populate `context['ds']` when `logical_date` is `None` (manual runs without an explicit date). Use `context.get('ds') or datetime.utcnow().strftime('%Y-%m-%d')` — already patched in all three DAGs.
+
+### `kubectl` commands hanging in WSL terminals
+
+Symptom: standard `kubectl get pods` or `wsl -- command` never return output in a terminal that previously had WSL crash.
+
+Cause: the zombie WSL session is still attached to the terminal. Open a fresh PowerShell window and re-run. If using VS Code integrated terminal, open a new terminal tab rather than reusing the one that was active during the crash.
+
+---
+
 ## Memory-Constrained Kubernetes
 
 The cluster runs on WSL2; total available RAM is 6 GB shared across all nodes.
@@ -610,11 +676,13 @@ and creates child Applications for each group (`ml-infra`, `ml-serving`,
 - All RWX PVCs use `storageClassName: standard` on minikube (hostPath). Swap
   `nfs-client` in `overlays/production/pvc-patch.yaml` for your RWX class.
 - Services are exposed via Gateway API. Trusted HTTPS is served on the Tailscale
-  MagicDNS hostname `https://desktop-nnutaj7.tail6964b3.ts.net`, while
+  MagicDNS hostname `https://desktop-nnutaj7-1.tail6964b3.ts.net`, while
   `ml-stack.local` remains available as the local plain-HTTP alias.
+  For MLflow-specific local observation, `ml-flow.local` is also supported.
 - Any host-restricted subpath routes such as `/airflow`, `/flink`,
-  `/flink-history`, and `/mlflow` must list both `ml-stack.local` and the
-  Tailscale hostname in their `HTTPRoute.spec.hostnames`. If they only match
+  `/flink-history`, and `/mlflow` must list `ml-stack.local`, the Tailscale
+  hostname, and (for MLflow routes) `ml-flow.local` in
+  `HTTPRoute.spec.hostnames`. If they only match
   `ml-stack.local`, requests on the Tailscale HTTPS host fall through to the
   catch-all frontend route.
 
@@ -639,7 +707,7 @@ Prerequisites:
 After the bootstrap job finishes, use the trusted public certificate at:
 
 ```text
-https://desktop-nnutaj7.tail6964b3.ts.net/
+https://desktop-nnutaj7-1.tail6964b3.ts.net/
 ```
 
 You do not need to import a custom CA for that hostname.

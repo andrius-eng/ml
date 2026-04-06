@@ -1,0 +1,74 @@
+# Nightly k3s image pruner — prevents unbounded VHDX growth
+# Runs as a DaemonSet-style CronJob on every node using the host crictl socket.
+# Removes all images not currently referenced by a running or stopped container.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: image-pruner
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: image-pruner
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: image-pruner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: image-pruner
+subjects:
+  - kind: ServiceAccount
+    name: image-pruner
+    namespace: kube-system
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: image-pruner
+  namespace: kube-system
+spec:
+  # Run at 03:00 every night
+  schedule: "0 3 * * *"
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: image-pruner
+          hostPID: true
+          restartPolicy: OnFailure
+          tolerations:
+            - operator: Exists
+          containers:
+            - name: pruner
+              image: docker.io/library/alpine:3.18
+              command:
+                - sh
+                - -c
+                - |
+                  # Prune unused images via the host containerd socket
+                  nsenter -t 1 -m -u -i -n -p -- \
+                    /usr/local/bin/k3s crictl rmi --prune
+                  echo "Image prune complete"
+                  # Also run fstrim so WSL reclaims freed blocks from VHDX
+                  nsenter -t 1 -m -- fstrim -v / 2>/dev/null || true
+                  echo "fstrim complete"
+              securityContext:
+                privileged: true
+              volumeMounts:
+                - name: host-root
+                  mountPath: /host
+                  readOnly: true
+          volumes:
+            - name: host-root
+              hostPath:
+                path: /

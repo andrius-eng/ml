@@ -20,14 +20,21 @@ spec:
     - name: http-tailscale
       port: 8000
       protocol: HTTP
-      hostname: "desktop-nnutaj7.tail6964b3.ts.net"
+      hostname: "desktop-nnutaj7-1.tail6964b3.ts.net"
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: http-mlflow-local
+      port: 8000
+      protocol: HTTP
+      hostname: ml-flow.local
       allowedRoutes:
         namespaces:
           from: All
     - name: https-tailscale
       port: 8443
       protocol: HTTPS
-      hostname: "desktop-nnutaj7.tail6964b3.ts.net"
+      hostname: "desktop-nnutaj7-1.tail6964b3.ts.net"
       tls:
         mode: Terminate
         certificateRefs:
@@ -52,7 +59,7 @@ metadata:
 spec:
   hostnames:
     - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
+    - desktop-nnutaj7-1.tail6964b3.ts.net
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -62,7 +69,7 @@ metadata:
 spec:
   hostnames:
     - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
+    - desktop-nnutaj7-1.tail6964b3.ts.net
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -72,7 +79,7 @@ metadata:
 spec:
   hostnames:
     - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
+    - desktop-nnutaj7-1.tail6964b3.ts.net
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -82,7 +89,7 @@ metadata:
 spec:
   hostnames:
     - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
+    - desktop-nnutaj7-1.tail6964b3.ts.net
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -92,7 +99,7 @@ metadata:
 spec:
   hostnames:
     - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
+    - desktop-nnutaj7-1.tail6964b3.ts.net
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -102,7 +109,7 @@ metadata:
 spec:
   hostnames:
     - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
+    - desktop-nnutaj7-1.tail6964b3.ts.net
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -112,7 +119,8 @@ metadata:
 spec:
   hostnames:
     - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
+    - ml-flow.local
+    - desktop-nnutaj7-1.tail6964b3.ts.net
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -122,7 +130,8 @@ metadata:
 spec:
   hostnames:
     - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
+    - ml-flow.local
+    - desktop-nnutaj7-1.tail6964b3.ts.net
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -132,7 +141,7 @@ metadata:
 spec:
   hostnames:
     - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
+    - desktop-nnutaj7-1.tail6964b3.ts.net
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -142,7 +151,7 @@ metadata:
 spec:
   hostnames:
     - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
+    - desktop-nnutaj7-1.tail6964b3.ts.net
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -152,7 +161,7 @@ metadata:
 spec:
   hostnames:
     - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
+    - desktop-nnutaj7-1.tail6964b3.ts.net
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -162,7 +171,7 @@ metadata:
 spec:
   hostnames:
     - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
+    - desktop-nnutaj7-1.tail6964b3.ts.net
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -172,7 +181,7 @@ metadata:
 spec:
   hostnames:
     - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
+    - desktop-nnutaj7-1.tail6964b3.ts.net
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -182,4 +191,4 @@ metadata:
 spec:
   hostnames:
     - ml-stack.local
-    - desktop-nnutaj7.tail6964b3.ts.net
+    - desktop-nnutaj7-1.tail6964b3.ts.net

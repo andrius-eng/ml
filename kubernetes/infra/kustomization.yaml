@@ -10,6 +10,7 @@ resources:
   - pvcs.yaml
   - postgres.yaml
   - rollout-guard.yaml
+  - image-prune.yaml
 
 images:
   - name: ghcr.io/andrius-eng/ml-airflow-custom
