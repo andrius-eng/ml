@@ -1,4 +1,4 @@
-# EKS storage class patches for monitoring PVCs (gp3 EBS).
+# EKS storage class patches for monitoring PVCs (shared RWX EFS).
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -6,7 +6,7 @@ metadata:
   name: prometheus-data
   namespace: ml-stack
 spec:
-  storageClassName: gp3
+  storageClassName: efs-sc
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -14,4 +14,4 @@ metadata:
   name: grafana-data
   namespace: ml-stack
 spec:
-  storageClassName: gp3
+  storageClassName: efs-sc

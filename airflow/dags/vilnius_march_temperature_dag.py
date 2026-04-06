@@ -1,4 +1,4 @@
-"""Airflow DAG for Vilnius monthly temperature anomalies over the last 87 years.
+"""Airflow DAG for Vilnius monthly temperature anomalies over the last 90 years.
 
 Set VILNIUS_ANALYSIS_MONTH env var (1-12) to analyze a different month.
 Default is 3 (March).
@@ -170,7 +170,7 @@ def analyze_vilnius_month(**context):
                 "--annual-output", str(ANNUAL_PATH),
                 "--summary-output", str(SUMMARY_PATH),
                 "--report-output", str(REPORT_PATH),
-                "--window-years", "87",
+                "--window-years", "90",
                 "--require-flink",
             ],
             logging.getLogger(__name__),
@@ -226,7 +226,7 @@ def validate_vilnius_month(**context):
             [
                 "--annual-input", str(ANNUAL_PATH),
                 "--summary-input", str(SUMMARY_PATH),
-                "--expected-years", "87",
+                "--expected-years", "90",
                 "--min-days", "10",
                 "--max-abs-z", "4.0",
             ],
@@ -268,7 +268,7 @@ def refresh_rag_context(**context):
 with DAG(
     dag_id=f"vilnius_{MONTH_SLUG}_anomaly",
     default_args=DEFAULT_ARGS,
-    description=f"Compute 87-year {calendar.month_name[MONTH]} temperature anomalies for all Lithuanian cities (ERA5 back to 1940, fixed 1991–2025 baseline); feeds RAG context, LLM SFT, and frontend dashboard",
+    description=f"Compute 90-year {calendar.month_name[MONTH]} temperature anomalies for all Lithuanian cities (ERA5 back to 1940, fixed 1991–2025 baseline); feeds RAG context, LLM SFT, and frontend dashboard",
     schedule="0 7 * * *",
     start_date=datetime(2025, 1, 1),
     catchup=False,

@@ -66,8 +66,19 @@ spec:
       labels:
         app: flink-taskmanager
     spec:
-      nodeSelector:
-        workload-role: compute
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 90
+              preference:
+                matchExpressions:
+                  - key: workload-role
+                    operator: In
+                    values: ["compute"]
       containers:
         - name: taskmanager
           image: flink:1.20.1-scala_2.12-java11
@@ -86,10 +97,10 @@ spec:
           resources:
             requests:
               cpu: 120m
-              memory: 512Mi
+              memory: 384Mi
             limits:
               cpu: 500m
-              memory: 1100Mi
+              memory: 900Mi
         - name: beam-worker-pool
           image: apache/beam_python3.12_sdk:2.71.0
           args: ["--worker_pool"]
@@ -99,10 +110,10 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 256Mi
+              memory: 192Mi
             limits:
               cpu: 300m
-              memory: 768Mi
+              memory: 512Mi
       volumes:
         - name: beam-artifacts
           persistentVolumeClaim:

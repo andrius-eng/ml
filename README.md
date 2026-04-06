@@ -565,7 +565,7 @@ kubernetes/
 │   │   ├── ml/
 │   │   ├── networking/      # Traefik GatewayClass, Tailscale listeners
 │   │   └── monitoring/      # Prometheus/Grafana PVC binding patches
-│   └── eks/                 # EKS: EBS gp3, EFS, ALB Gateway (stubs)
+│   └── eks/                 # EKS: shared RWX storage + ALB Gateway (stubs)
 │       └── ...              # Set hostnames + storage class before applying
 ├── infra/                   # Base: postgres, PVCs (no SC), configmaps, namespace
 ├── ml/                      # Base: airflow, mlflow, ml-server, ws-server, frontend
@@ -650,7 +650,7 @@ and creates child Applications for each group (`ml-infra`, `ml-serving`,
   on the live Application objects, which leaves the parent app permanently
   `OutOfSync` even after successful syncs.
 - Singleton infra Deployments pinned to the single `workload-role=infra` node,
-  plus Prometheus on its `ReadWriteOnce` TSDB PVC, use `Recreate` so rollouts do
+  plus Prometheus TSDB on shared storage, use `Recreate` so rollouts do
   not overlap old and new pods. That avoids scheduler deadlock from doubled
   memory requests and prevents Prometheus from crashing on the TSDB lock file.
 - ArgoCD also runs tiny `PreSync` image-prepull DaemonSets on the `infra` and
@@ -673,8 +673,9 @@ and creates child Applications for each group (`ml-infra`, `ml-serving`,
 - MLflow and Flink are exposed on stripped subpaths. Keep canonical entry URLs
   at `/mlflow/` and `/flink/` or redirect bare `/mlflow` and `/flink` to the
   trailing-slash forms so their relative asset and API URLs resolve correctly.
-- On k3s, storage is NFS-only:
-  all stateful PVCs (RWX and RWO) are explicitly bound to static NFS PVs in
+- On k3s, storage is NFS-only and fully multi-node compatible:
+  all stateful PVCs use shared RWX semantics and are explicitly bound to static
+  NFS PVs in
   `kubernetes/overlays/k3s/infra/nfs-pvs.yaml` through overlay patches in
   `kubernetes/overlays/k3s/infra/storage-patch.yaml` and
   `kubernetes/overlays/k3s/monitoring/storage-patch.yaml`.

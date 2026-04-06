@@ -66,7 +66,7 @@ metadata:
 spec:
   capacity:
     storage: 5Gi
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
@@ -80,7 +80,7 @@ metadata:
 spec:
   capacity:
     storage: 2Gi
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
@@ -94,7 +94,7 @@ metadata:
 spec:
   capacity:
     storage: 2Gi
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
@@ -108,7 +108,7 @@ metadata:
 spec:
   capacity:
     storage: 20Gi
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
@@ -122,7 +122,7 @@ metadata:
 spec:
   capacity:
     storage: 5Gi
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
@@ -136,7 +136,7 @@ metadata:
 spec:
   capacity:
     storage: 1Gi
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:

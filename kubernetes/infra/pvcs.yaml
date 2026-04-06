@@ -43,7 +43,7 @@ metadata:
   name: postgres-data
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
   resources:
     requests:
       storage: 5Gi
@@ -65,7 +65,7 @@ metadata:
   name: beam-artifacts
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
   resources:
     requests:
       storage: 2Gi
@@ -76,7 +76,7 @@ metadata:
   name: flink-job-archives
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
   resources:
     requests:
       storage: 2Gi
@@ -87,7 +87,7 @@ metadata:
   name: ollama-data
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
   resources:
     requests:
       storage: 20Gi

@@ -396,7 +396,7 @@ metadata:
   name: prometheus-data
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
   resources:
     requests:
       storage: 5Gi
@@ -557,7 +557,7 @@ metadata:
   name: grafana-data
   namespace: ml-stack
 spec:
-  accessModes: [ReadWriteOnce]
+  accessModes: [ReadWriteMany]
   resources:
     requests:
       storage: 1Gi

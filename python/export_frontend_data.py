@@ -112,7 +112,7 @@ def _derive_city_month_from_raw(
     city: str,
     month: int,
     *,
-    window_years: int = 87,
+    window_years: int = 90,
 ) -> tuple[dict, pd.DataFrame]:
     raw = pd.read_csv(raw_weather_path)
     if "time" not in raw.columns:
@@ -171,12 +171,12 @@ def _derive_vilnius_month_from_raw(
     raw_weather_path: Path,
     *,
     month: int,
-    window_years: int = 87,
+    window_years: int = 90,
 ) -> tuple[dict, pd.DataFrame]:
     return _derive_city_month_from_raw(raw_weather_path, "Vilnius", month, window_years=window_years)
 
 
-def _build_city_months_from_raw(raw_path: Path, window_years: int = 87) -> dict:
+def _build_city_months_from_raw(raw_path: Path, window_years: int = 90) -> dict:
     """Derive per-city per-month anomaly data for all Lithuanian cities."""
     from weather_common import LITHUANIA_PROXY_CITIES
 

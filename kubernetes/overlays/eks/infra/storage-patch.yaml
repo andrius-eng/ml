@@ -1,10 +1,9 @@
 # EKS storage class patches.
 # Prerequisites:
-#   - aws-ebs-csi-driver installed (for RWO gp3 volumes)
-#   - aws-efs-csi-driver installed with StorageClass named "efs-sc" (for RWX volumes)
-# Replace <EFS_VOLUME_HANDLE_*> with the actual EFS filesystem ID + access point ARN.
+#   - aws-efs-csi-driver installed with StorageClass named "efs-sc"
+# All PVCs use shared RWX provisioning so workloads can reschedule across nodes
+# without storage-mode lock-in.
 ---
-# RWX volumes — EFS CSI dynamic provisioning.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -37,14 +36,13 @@ metadata:
 spec:
   storageClassName: efs-sc
 ---
-# RWO volumes — EBS gp3 dynamic provisioning.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgres-data
   namespace: ml-stack
 spec:
-  storageClassName: gp3
+  storageClassName: efs-sc
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -52,7 +50,7 @@ metadata:
   name: beam-artifacts
   namespace: ml-stack
 spec:
-  storageClassName: gp3
+  storageClassName: efs-sc
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -60,7 +58,7 @@ metadata:
   name: flink-job-archives
   namespace: ml-stack
 spec:
-  storageClassName: gp3
+  storageClassName: efs-sc
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -68,4 +66,4 @@ metadata:
   name: ollama-data
   namespace: ml-stack
 spec:
-  storageClassName: gp3
+  storageClassName: efs-sc

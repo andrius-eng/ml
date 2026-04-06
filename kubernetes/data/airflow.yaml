@@ -13,8 +13,19 @@ spec:
   backoffLimit: 3
   template:
     spec:
-      nodeSelector:
-        workload-role: compute
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 90
+              preference:
+                matchExpressions:
+                  - key: workload-role
+                    operator: In
+                    values: ["compute"]
       securityContext:
         runAsUser: 50000
         runAsGroup: 500
@@ -142,10 +153,10 @@ spec:
           resources:
             requests:
               cpu: 200m
-              memory: 1Gi
+              memory: 512Mi
             limits:
               cpu: 750m
-              memory: 2Gi
+              memory: 1Gi
       volumes:
         - name: airflow-data
           persistentVolumeClaim:
@@ -171,8 +182,19 @@ spec:
       labels:
         app: airflow-scheduler
     spec:
-      nodeSelector:
-        workload-role: compute
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 90
+              preference:
+                matchExpressions:
+                  - key: workload-role
+                    operator: In
+                    values: ["compute"]
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
@@ -229,10 +251,10 @@ spec:
           resources:
             requests:
               cpu: 300m
-              memory: 1Gi
+              memory: 512Mi
             limits:
               cpu: 1500m
-              memory: 3Gi
+              memory: 2Gi
       volumes:
         - name: airflow-data
           persistentVolumeClaim:
@@ -263,12 +285,17 @@ spec:
     spec:
       affinity:
         nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 90
+              preference:
+                matchExpressions:
                   - key: workload-role
                     operator: In
                     values: ["compute"]
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
       securityContext:
         runAsUser: 50000
         runAsGroup: 500
@@ -315,10 +342,10 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 512Mi
+              memory: 256Mi
             limits:
               cpu: 500m
-              memory: 1Gi
+              memory: 768Mi
       volumes:
         - name: airflow-data
           persistentVolumeClaim:
