@@ -678,6 +678,15 @@ and creates child Applications for each group (`ml-infra`, `ml-serving`,
   `kubernetes/overlays/k3s/infra/nfs-pvs.yaml` through overlay patches in
   `kubernetes/overlays/k3s/infra/storage-patch.yaml` and
   `kubernetes/overlays/k3s/monitoring/storage-patch.yaml`.
+
+### Why this design is intentional
+
+1. Explicit `PVC -> PV` binding removes storage-class ambiguity and prevents accidental fallback to node-local storage.
+2. One unused claim (`mlflow-data`) was removed, which reduces object count and operational noise without changing runtime behavior.
+3. Keeping all k3s stateful paths on NFS makes node replacement and 3-node scheduling predictable, because data locality is no longer tied to a single node disk.
+4. Monitoring state (Prometheus/Grafana) now follows the same storage contract as the rest of the stack, which simplifies backup and disaster-recovery procedures.
+5. The NFS bootstrap no longer installs an extra dynamic provisioner chart, which reduces supply-chain surface area and lowers CVE churn from an additional controller.
+
 - Services are exposed via Gateway API. Trusted HTTPS is served on the Tailscale
   MagicDNS hostname `https://desktop-nnutaj7-1.tail6964b3.ts.net`, while
   `ml-stack.local` remains available as the local plain-HTTP alias.
@@ -1013,6 +1022,18 @@ GitHub Actions workflows:
   - airflow and ml-pipeline Docker builds now fail fast if required runtime modules such as `apache_beam`, `mlflow`, or `torch` are missing from the image, and the Airflow check runs against the same `/home/airflow/.local` interpreter used at runtime
   - images are expected to remain private in GHCR; local pulls require auth
 
+WSL-first CI triage flow (fast path):
+
+1. `gh run list --limit 10`
+2. `gh run view <run-id> --log-failed`
+3. `gh run view <run-id> --jobs`
+4. `gh run rerun <run-id> --failed` (after fixing root cause)
+
+Interpretation tips:
+
+1. `Docker Images` success + `CI` failure usually means app/tests or stack-smoke failure, not registry auth/buildx setup.
+2. `CI` failure with a clean local `uv sync && pytest` usually points to integration steps (Docker stack smoke, runtime service readiness, or Kubernetes manifest drift), not unit-test regressions.
+
 ## Notes
 
 - pyproject.toml plus uv.lock are the dependency source of truth.
@@ -1163,9 +1184,9 @@ Moving from a local Docker Compose setup to a resource-constrained Kubernetes en
 5. **Dag Processor Log Permission Drift:** The dedicated `airflow-dag-processor` deployment was missing the `fix-permissions` init container used by the scheduler and webserver, so it crash-looped with `PermissionError` on `/opt/airflow/logs/dag_processor/...`.
   *Fix:* Add the same log-directory bootstrap/chmod step to the dag-processor init containers so it can create parse logs on the shared PVC.
 6. **Airflow DAG NFS Ownership Drift:** The shared `airflow-data` export was mounted correctly, but ownership still drifted between `50000:500`, `500:500`, and `*:0` whenever the host-side export and the pod runtime identity were not aligned.
-  *Fix:* Provision the NFS export as `50000:500` in `kubernetes/scripts/setup-nfs-storage.sh` and run all Airflow pods as `50000:500` in `kubernetes/airflow.yaml`.
+  *Fix:* Provision the NFS export as `50000:500` in `kubernetes/scripts/setup-nfs-storage.sh` and run all Airflow pods as `50000:500` in `kubernetes/data/airflow.yaml`.
 7. **Beam worker pool OOM during Flink execution:** The Flink TaskManager pod stayed healthy, but the `beam-worker-pool` sidecar was OOMKilled at 256Mi. That caused PortableRunner gRPC cancellations and a fallback to DirectRunner.
-  *Fix:* Raised the Beam worker pool bounds in `kubernetes/flink-beam.yaml` to `256Mi` request / `768Mi` limit and added a DAG check that fails if the run falls back to DirectRunner.
+  *Fix:* Raised the Beam worker pool bounds in `kubernetes/data/flink-beam.yaml` to `256Mi` request / `768Mi` limit and added a DAG check that fails if the run falls back to DirectRunner.
 
 **Next Steps / Operations Checklist:**
 - [x] Standardize Flink worker endpoint on shared loopback (`localhost:50000`).

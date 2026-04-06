@@ -3,11 +3,13 @@ kind: Application
 metadata:
   name: ml-system
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
 spec:
   project: default
   source:
     repoURL: https://github.com/andrius-eng/ml.git
-    targetRevision: HEAD
+    targetRevision: main
     path: kubernetes/overlays/k3s/system
   destination:
     server: https://kubernetes.default.svc
