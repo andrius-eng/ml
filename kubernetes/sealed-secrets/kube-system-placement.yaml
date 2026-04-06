@@ -9,12 +9,9 @@
 #                   are both configured there to avoid resource ownership conflicts.
 #   metrics-server – cluster-level metrics API; lives next to the API server
 #
-# coredns and local-path-provisioner are k3s built-in add-ons (not Helm);
-# patch those manually after node recovery:
+# coredns is a k3s built-in add-on (not Helm);
+# patch it manually after node recovery:
 #   kubectl patch deployment coredns -n kube-system \
-#     --type=json -p='[{"op":"add","path":"/spec/template/spec/nodeSelector",
-#     "value":{"workload-role":"infra"}}]'
-#   kubectl patch deployment local-path-provisioner -n kube-system \
 #     --type=json -p='[{"op":"add","path":"/spec/template/spec/nodeSelector",
 #     "value":{"workload-role":"infra"}}]'
 ---

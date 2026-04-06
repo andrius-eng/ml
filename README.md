@@ -560,11 +560,11 @@ kubernetes/
 │   └── sealed-secrets-app.yaml
 ├── overlays/
 │   ├── k3s/                 # Current hardware: k3s + NFS + Traefik + Tailscale
-│   │   ├── infra/           # NFS PVs, k3s-hostpath storage class patches
+│   │   ├── infra/           # static NFS PVs + PVC binding patches
 │   │   ├── data/
 │   │   ├── ml/
 │   │   ├── networking/      # Traefik GatewayClass, Tailscale listeners
-│   │   └── monitoring/      # k3s-hostpath storage class patches
+│   │   └── monitoring/      # Prometheus/Grafana PVC binding patches
 │   └── eks/                 # EKS: EBS gp3, EFS, ALB Gateway (stubs)
 │       └── ...              # Set hostnames + storage class before applying
 ├── infra/                   # Base: postgres, PVCs (no SC), configmaps, namespace
@@ -673,8 +673,11 @@ and creates child Applications for each group (`ml-infra`, `ml-serving`,
 - MLflow and Flink are exposed on stripped subpaths. Keep canonical entry URLs
   at `/mlflow/` and `/flink/` or redirect bare `/mlflow` and `/flink` to the
   trailing-slash forms so their relative asset and API URLs resolve correctly.
-- All RWX PVCs use `storageClassName: standard` on minikube (hostPath). Swap
-  `nfs-client` in `overlays/production/pvc-patch.yaml` for your RWX class.
+- On k3s, storage is NFS-only:
+  all stateful PVCs (RWX and RWO) are explicitly bound to static NFS PVs in
+  `kubernetes/overlays/k3s/infra/nfs-pvs.yaml` through overlay patches in
+  `kubernetes/overlays/k3s/infra/storage-patch.yaml` and
+  `kubernetes/overlays/k3s/monitoring/storage-patch.yaml`.
 - Services are exposed via Gateway API. Trusted HTTPS is served on the Tailscale
   MagicDNS hostname `https://desktop-nnutaj7-1.tail6964b3.ts.net`, while
   `ml-stack.local` remains available as the local plain-HTTP alias.

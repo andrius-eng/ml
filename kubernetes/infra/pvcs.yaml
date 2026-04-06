@@ -1,7 +1,7 @@
 # PersistentVolumeClaims — base (provider-agnostic).
 # No storageClassName: cluster default StorageClass is used.
 # Overlays add storageClassName, static PVs, and volumeName bindings:
-#   kubernetes/overlays/k3s/infra/  — k3s local-path + NFS
+#   kubernetes/overlays/k3s/infra/  — static NFS PV bindings
 #   kubernetes/overlays/eks/infra/  — EBS gp3 + EFS
 ---
 apiVersion: v1
@@ -41,17 +41,6 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgres-data
-  namespace: ml-stack
-spec:
-  accessModes: [ReadWriteOnce]
-  resources:
-    requests:
-      storage: 5Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: mlflow-data
   namespace: ml-stack
 spec:
   accessModes: [ReadWriteOnce]
