@@ -9,8 +9,8 @@ resources:
 
 images:
   - name: ghcr.io/andrius-eng/ml-ml-pipeline
-    newTag: 5e22795aba75ac3587aac89acca62098969d1099
+    newTag: 531760d4769dab9305032adb94c1946725b3585c
   - name: ghcr.io/andrius-eng/ml-frontend
-    newTag: 5e22795aba75ac3587aac89acca62098969d1099
+    newTag: 531760d4769dab9305032adb94c1946725b3585c
   - name: ghcr.io/andrius-eng/ml-ws-server
-    newTag: 5e22795aba75ac3587aac89acca62098969d1099
+    newTag: 531760d4769dab9305032adb94c1946725b3585c
